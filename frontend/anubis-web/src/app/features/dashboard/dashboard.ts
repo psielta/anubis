@@ -18,8 +18,8 @@ export class Dashboard implements OnInit {
   protected readonly bookCount = signal<number | null>(null);
 
   ngOnInit() {
-    this.library.list().subscribe({
-      next: (books) => this.bookCount.set(books.length),
+    this.library.list({ pageSize: 1 }).subscribe({
+      next: (page) => this.bookCount.set(page.total),
       error: () => this.bookCount.set(null),
     });
   }

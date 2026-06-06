@@ -7,5 +7,15 @@ export interface Book {
   file_size: number;
   original_filename: string;
   has_cover: boolean;
+  last_page: number | null;
+  page_count: number | null;
+  collection_ids: number[];
   created_at: string;
+}
+
+export interface BookPage {
+  items: Book[];
+  total: number;
+  page: number;
+  page_size: number;
 }

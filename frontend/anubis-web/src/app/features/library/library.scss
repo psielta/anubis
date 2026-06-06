@@ -319,6 +319,19 @@ mat-progress-bar {
   color: var(--anubis-ink-soft);
 }
 
+.book-progress {
+  height: 4px;
+  margin-top: 0.5rem;
+  background: rgba(143, 115, 48, 0.18);
+  overflow: hidden;
+}
+
+.book-progress__fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--anubis-gold-deep), var(--anubis-gold));
+}
+
 .book-actions {
   display: flex;
   flex-direction: column;
@@ -406,4 +419,171 @@ mat-progress-bar {
   .read-link {
     transition: none;
   }
+}
+
+// --- Toolbar: search + result count ----------------------------------------
+.lib-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.search-field {
+  flex: 1;
+  max-width: 440px;
+
+  mat-icon {
+    color: var(--anubis-gold-deep);
+  }
+}
+
+.result-count {
+  font-size: 0.85rem;
+  color: var(--anubis-ink-soft);
+  white-space: nowrap;
+}
+
+// --- Collection filter chips -----------------------------------------------
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.7rem;
+  font: inherit;
+  font-size: 0.82rem;
+  color: var(--anubis-ink);
+  background: var(--anubis-surface);
+  border: 1px solid var(--anubis-line);
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease,
+    border-color 0.15s ease;
+
+  &:hover {
+    border-color: var(--anubis-gold-deep);
+  }
+
+  &.active {
+    color: var(--anubis-gold-bright);
+    background: var(--anubis-obsidian);
+    border-color: var(--anubis-obsidian);
+  }
+}
+
+.chip-count {
+  font-size: 0.72rem;
+  color: var(--anubis-gold-deep);
+}
+
+.chip.active .chip-count {
+  color: var(--anubis-gold-bright);
+}
+
+// Collection chip = a container with a filter label and rename/delete icons.
+.chip-collection {
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+
+.chip-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.45rem 0.35rem 0.7rem;
+  font: inherit;
+  font-size: 0.82rem;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.chip-icon {
+  display: inline-grid;
+  place-items: center;
+  align-self: stretch;
+  width: 24px;
+  padding: 0;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+  opacity: 0.5;
+  transition: opacity 0.15s ease, color 0.15s ease;
+
+  mat-icon {
+    font-size: 15px;
+    width: 15px;
+    height: 15px;
+  }
+
+  &:hover {
+    opacity: 1;
+  }
+}
+
+.chip-icon--danger:hover {
+  color: var(--anubis-danger);
+}
+
+.chip-add {
+  color: var(--anubis-gold-deep);
+  border-style: dashed;
+
+  mat-icon {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+  }
+}
+
+.chip-input {
+  width: 168px;
+  padding: 0.4rem 0.6rem;
+  font: inherit;
+  font-size: 0.82rem;
+  color: var(--anubis-ink);
+  background: var(--anubis-surface);
+  border: 1px solid var(--anubis-gold-deep);
+  outline: none;
+}
+
+// --- Collection tags on a book card ----------------------------------------
+.book-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.45rem;
+}
+
+.book-tag {
+  padding: 0.1rem 0.45rem;
+  font-size: 0.68rem;
+  color: var(--anubis-gold-deep);
+  background: rgba(200, 162, 76, 0.1);
+  border: 1px solid rgba(200, 162, 76, 0.4);
+}
+
+.coll-menu-empty {
+  display: block;
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+  color: var(--anubis-ink-soft);
+}
+
+mat-paginator {
+  margin-top: 1rem;
+  background: transparent;
+  --mat-paginator-container-background-color: transparent;
 }
