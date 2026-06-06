@@ -53,13 +53,14 @@ Implemented:
 - Alembic migrations for the users table and refresh-token hash.
 - Backend tests covering auth, refresh, logout and duplicate registration.
 - Angular route guard, auth interceptor and refresh flow.
-- Book import: PDF upload to MinIO with owner-scoped library API and UI.
+- Book import: PDF upload (up to 250 MB) to MinIO with owner-scoped library API and UI.
 - Book covers: manual image upload plus automatic PDF first-page extraction.
-- In-app PDF reader (continuous scroll, zoom, page count).
+- In-app PDF reader (continuous scroll, zoom, table of contents from the PDF outline).
+- Reading progress: resumes where you left off, with progress bars in the library.
+- Collections: organise books into collections, with search and pagination in the library.
 
 Not implemented yet:
 
-- Library shelves/collections.
 - Highlights, annotations and notes.
 - AI ingestion, embeddings, chat or summarization workflows.
 - Production deployment containers for backend/frontend.
