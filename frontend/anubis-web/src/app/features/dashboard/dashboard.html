@@ -1,0 +1,12 @@
+<mat-card>
+  <mat-card-header>
+    <mat-card-title>Dashboard</mat-card-title>
+    <mat-card-subtitle>Welcome to Anubis</mat-card-subtitle>
+  </mat-card-header>
+  <mat-card-content>
+    @if (user(); as u) {
+      <p>Hello, {{ u.full_name || u.email }}.</p>
+      <p>Role: {{ u.role }}</p>
+    }
+  </mat-card-content>
+</mat-card>

@@ -1,0 +1,11 @@
+.env
+**/.env
+backend/.venv/
+__pycache__/
+frontend/**/node_modules/
+frontend/**/dist/
+.angular/
+cookies.txt
+mcps/
+terminals/
+.playwright-mcp/
