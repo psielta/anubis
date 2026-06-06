@@ -130,3 +130,11 @@ a {
   background: var(--anubis-gold-deep);
   background-clip: padding-box;
 }
+
+// PDF reader table-of-contents menu (rendered in a CDK overlay, styled globally).
+.toc-menu .toc-page {
+  margin-inline-start: 0.6rem;
+  color: var(--anubis-gold-deep);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}

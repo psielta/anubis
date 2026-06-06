@@ -5,6 +5,26 @@
     </a>
     <span class="reader-title">{{ book()?.title ?? 'Reader' }}</span>
     <span class="reader-controls">
+      @if (toc().length) {
+        <button mat-icon-button [matMenuTriggerFor]="tocMenu" aria-label="Table of contents">
+          <mat-icon>list</mat-icon>
+        </button>
+        <mat-menu #tocMenu="matMenu" class="toc-menu">
+          @for (item of toc(); track $index) {
+            <button
+              mat-menu-item
+              [disabled]="!item.page"
+              (click)="item.page && goToPage(item.page)"
+              [style.padding-inline-start.px]="16 + item.depth * 14"
+            >
+              <span class="toc-title">{{ item.title }}</span>
+              @if (item.page) {
+                <span class="toc-page">{{ item.page }}</span>
+              }
+            </button>
+          }
+        </mat-menu>
+      }
       <button
         mat-icon-button
         (click)="zoom(-10)"

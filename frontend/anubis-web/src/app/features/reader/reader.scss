@@ -66,16 +66,18 @@
 .reader-stage {
   position: relative;
   flex: 1;
-  overflow: auto;
+  min-height: 0;
 }
 
 .reader-viewport {
+  height: 100%;
+  overflow: auto;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 1rem;
   padding: 1.5rem 1rem 3rem;
-  min-height: 100%;
 }
 
 // Pages are created imperatively (no Angular scoping attribute), so pierce
