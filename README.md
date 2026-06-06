@@ -11,7 +11,7 @@ approved bootstrap plan:
 - Angular 21 frontend with Angular Material and standalone/lazy-loaded routes
 - JWT authentication with short-lived access tokens and rotated httpOnly refresh
   cookies
-- Docker Compose PostgreSQL for local development
+- Docker Compose PostgreSQL and MinIO for local development
 - Backend quality gates and auth tests
 
 The next product iterations should turn this foundation into a user-facing
@@ -53,10 +53,10 @@ Implemented:
 - Alembic migrations for the users table and refresh-token hash.
 - Backend tests covering auth, refresh, logout and duplicate registration.
 - Angular route guard, auth interceptor and refresh flow.
+- Book import: PDF/EPUB upload to MinIO with owner-scoped library API and UI.
 
 Not implemented yet:
 
-- Book upload/import.
 - Library shelves/collections.
 - Reader interface.
 - Highlights, annotations and notes.
@@ -76,6 +76,7 @@ Backend:
 - PyJWT
 - Passlib/bcrypt
 - pytest, ruff, mypy
+- aioboto3 (MinIO / S3)
 
 Frontend:
 
@@ -125,13 +126,13 @@ anubis/
 
 ## Local Setup
 
-### 1. Database
+### 1. Database and object storage
 
 From the repository root:
 
 ```powershell
 Copy-Item .env.example .env
-docker compose up -d db
+docker compose up -d db minio minio-init
 docker compose ps
 ```
 
@@ -139,11 +140,22 @@ The local Postgres port is configured through `POSTGRES_PORT` in `.env`.
 This workspace currently uses `5433` to avoid conflicts with local PostgreSQL
 installations.
 
+MinIO serves S3-compatible object storage for uploaded books:
+
+- S3 API: `http://localhost:9000` (override with `MINIO_API_PORT`)
+- Console: `http://localhost:9001` (override with `MINIO_CONSOLE_PORT`)
+- Bucket: `anubis-library` (created privately by `minio-init`)
+
+Set `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` in the root `.env`. The backend
+reads matching credentials from `backend/.env` as `S3_ACCESS_KEY` /
+`S3_SECRET_KEY`.
+
 ### 2. Backend
 
 ```powershell
 cd backend
 Copy-Item .env.example .env
+# Ensure S3_ACCESS_KEY / S3_SECRET_KEY match MINIO_ROOT_USER / MINIO_ROOT_PASSWORD
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
@@ -222,10 +234,10 @@ Future hardening:
 
 Suggested next milestones:
 
-1. Library domain model: books, authors, files, shelves and ownership.
-2. User library UI: book grid/list, search, filters and status.
-3. Book import: upload EPUB/PDF and extract metadata.
-4. Reader shell: table of contents, progress and responsive reading layout.
+1. Library shelves/collections and reading status.
+2. Reader shell: table of contents, progress and responsive reading layout.
+3. Automatic metadata extraction on import.
+4. Highlights, notes and bookmarks.
 5. Study tools: highlights, notes and bookmarks.
 6. AI study assistant: passage Q&A, summaries and flashcard generation.
 7. Reading analytics: streaks, progress and study history.

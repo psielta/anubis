@@ -1,0 +1,35 @@
+.library-page {
+  display: grid;
+  gap: 1.5rem;
+  max-width: 720px;
+}
+
+.import-card,
+.list-card {
+  width: 100%;
+}
+
+.full-width {
+  width: 100%;
+}
+
+.file-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.file-name {
+  color: rgba(0, 0, 0, 0.6);
+  font-size: 0.875rem;
+}
+
+.error {
+  color: #b00020;
+  margin: 0 0 1rem;
+}
+
+.empty {
+  color: rgba(0, 0, 0, 0.6);
+}

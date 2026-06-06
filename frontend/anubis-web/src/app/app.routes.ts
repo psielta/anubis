@@ -21,6 +21,10 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/dashboard/dashboard').then((m) => m.Dashboard),
       },
+      {
+        path: 'library',
+        loadComponent: () => import('./features/library/library').then((m) => m.Library),
+      },
     ],
   },
   { path: '**', redirectTo: '' },

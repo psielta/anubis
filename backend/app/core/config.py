@@ -19,6 +19,13 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     BACKEND_CORS_ORIGINS: list[str] = ["http://localhost:4200"]
 
+    S3_ENDPOINT_URL: str = "http://localhost:9000"
+    S3_ACCESS_KEY: str
+    S3_SECRET_KEY: str
+    S3_BUCKET: str = "anubis-library"
+    S3_REGION: str = "us-east-1"
+    MAX_UPLOAD_SIZE_MB: int = 50
+
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     @classmethod
     def _split_cors(cls, v: object) -> object:

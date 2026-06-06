@@ -1,0 +1,102 @@
+<div class="library-page">
+  <mat-card class="import-card">
+    <mat-card-header>
+      <mat-card-title>Import a book</mat-card-title>
+      <mat-card-subtitle>Upload a PDF or EPUB to your private library</mat-card-subtitle>
+    </mat-card-header>
+
+    <mat-card-content>
+      @if (error()) {
+        <p class="error">{{ error() }}</p>
+      }
+
+      <form [formGroup]="form" (ngSubmit)="import()">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Title</mat-label>
+          <input matInput formControlName="title" />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Author</mat-label>
+          <input matInput formControlName="author" />
+        </mat-form-field>
+
+        <div class="file-row">
+          <input
+            #fileInput
+            type="file"
+            accept=".pdf,.epub"
+            hidden
+            (change)="onFileSelected($event)"
+          />
+          <button
+            mat-stroked-button
+            type="button"
+            (click)="fileInput.click()"
+            [disabled]="uploading()"
+          >
+            Choose file
+          </button>
+          <span class="file-name">
+            {{ selectedFile()?.name ?? 'No file selected' }}
+          </span>
+        </div>
+
+        @if (uploading()) {
+          <mat-progress-bar mode="determinate" [value]="progress()" />
+        }
+
+        <button
+          mat-flat-button
+          color="primary"
+          type="submit"
+          [disabled]="uploading() || form.invalid || !selectedFile()"
+        >
+          {{ uploading() ? 'Importing…' : 'Import' }}
+        </button>
+      </form>
+    </mat-card-content>
+  </mat-card>
+
+  <mat-card class="list-card">
+    <mat-card-header>
+      <mat-card-title>Your library</mat-card-title>
+    </mat-card-header>
+
+    <mat-card-content>
+      @if (loading()) {
+        <p>Loading books…</p>
+      } @else if (books().length === 0) {
+        <p class="empty">No books yet. Import your first title above.</p>
+      } @else {
+        <mat-nav-list>
+          @for (book of books(); track book.id) {
+            <mat-list-item>
+              <mat-icon matListItemIcon>menu_book</mat-icon>
+              <span matListItemTitle>{{ book.title }}</span>
+              <span matListItemLine>
+                {{ book.author ?? 'Unknown author' }} · {{ book.file_format | uppercase }}
+              </span>
+              <button
+                mat-icon-button
+                matListItemMeta
+                aria-label="Download"
+                (click)="download(book)"
+              >
+                <mat-icon>download</mat-icon>
+              </button>
+              <button
+                mat-icon-button
+                matListItemMeta
+                aria-label="Delete"
+                (click)="remove(book)"
+              >
+                <mat-icon>delete</mat-icon>
+              </button>
+            </mat-list-item>
+          }
+        </mat-nav-list>
+      }
+    </mat-card-content>
+  </mat-card>
+</div>
