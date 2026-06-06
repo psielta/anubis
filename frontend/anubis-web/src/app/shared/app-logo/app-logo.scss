@@ -15,8 +15,13 @@
 .logo__mark {
   display: block;
   flex-shrink: 0;
-  object-fit: contain;
-  object-position: center;
+  // Paint the jackal in the inherited text color so it adapts to its
+  // surface (gold on the obsidian sidebar/auth, ink on light bars). An
+  // <img> can't do this: its `fill="currentColor"` resolves to black in
+  // the image's own context, which vanishes on dark backgrounds.
+  background-color: currentColor;
+  -webkit-mask: url('/assets/anubis.svg') center / contain no-repeat;
+  mask: url('/assets/anubis.svg') center / contain no-repeat;
 }
 
 .logo__label {
