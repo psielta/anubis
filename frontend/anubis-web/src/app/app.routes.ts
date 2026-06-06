@@ -11,6 +11,11 @@ export const routes: Routes = [
     loadComponent: () => import('./features/auth/register/register').then((m) => m.Register),
   },
   {
+    path: 'read/:id',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/reader/reader').then((m) => m.Reader),
+  },
+  {
     path: '',
     loadComponent: () => import('./layout/admin-layout/admin-layout').then((m) => m.AdminLayout),
     canActivate: [authGuard],

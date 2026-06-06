@@ -1,0 +1,43 @@
+<div class="reader">
+  <header class="reader-bar">
+    <a class="reader-back" routerLink="/library" aria-label="Back to library">
+      <mat-icon>arrow_back</mat-icon>
+    </a>
+    <span class="reader-title">{{ book()?.title ?? 'Reader' }}</span>
+    <span class="reader-controls">
+      <button
+        mat-icon-button
+        (click)="zoom(-10)"
+        [disabled]="loading() || !!error()"
+        aria-label="Zoom out"
+      >
+        <mat-icon>remove</mat-icon>
+      </button>
+      <span class="reader-readout">{{ zoomPct() }}%</span>
+      <button
+        mat-icon-button
+        (click)="zoom(10)"
+        [disabled]="loading() || !!error()"
+        aria-label="Zoom in"
+      >
+        <mat-icon>add</mat-icon>
+      </button>
+      @if (pageCount()) {
+        <span class="reader-readout reader-pages">{{ currentPage() }} / {{ pageCount() }}</span>
+      }
+    </span>
+  </header>
+
+  <div class="reader-stage">
+    @if (error()) {
+      <div class="reader-message">
+        <mat-icon>error_outline</mat-icon>
+        <p>{{ error() }}</p>
+        <a routerLink="/library" class="reader-link">Back to library</a>
+      </div>
+    } @else if (loading()) {
+      <div class="reader-message">Opening the book…</div>
+    }
+    <div #viewport class="reader-viewport"></div>
+  </div>
+</div>

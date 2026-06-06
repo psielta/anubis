@@ -1,0 +1,115 @@
+:host {
+  display: block;
+}
+
+.reader {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: #26262d;
+  color: var(--anubis-canvas);
+}
+
+// --- Top bar ---------------------------------------------------------------
+.reader-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  height: 56px;
+  flex-shrink: 0;
+  padding-inline: 0.5rem 1rem;
+  background: linear-gradient(180deg, #16161f, #101017);
+  border-block-end: 1px solid rgba(200, 162, 76, 0.22);
+}
+
+.reader-back {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  color: var(--anubis-gold-bright);
+}
+
+.reader-title {
+  flex: 1;
+  min-width: 0;
+  font-family: 'Cinzel', serif;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #f3e7c6;
+}
+
+.reader-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: #d8cdb2;
+}
+
+.reader-readout {
+  font-size: 0.85rem;
+  min-width: 3.5ch;
+  text-align: center;
+}
+
+.reader-pages {
+  margin-inline-start: 0.5rem;
+  padding-inline-start: 0.75rem;
+  border-inline-start: 1px solid rgba(200, 162, 76, 0.25);
+  color: var(--anubis-gold-bright);
+}
+
+// --- Stage -----------------------------------------------------------------
+.reader-stage {
+  position: relative;
+  flex: 1;
+  overflow: auto;
+}
+
+.reader-viewport {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.5rem 1rem 3rem;
+  min-height: 100%;
+}
+
+// Pages are created imperatively (no Angular scoping attribute), so pierce
+// encapsulation to style them.
+.reader-viewport ::ng-deep .pdf-page {
+  position: relative;
+  background: #fff;
+  box-shadow: 0 12px 32px -14px rgba(0, 0, 0, 0.7);
+}
+
+.reader-viewport ::ng-deep .pdf-page canvas {
+  display: block;
+}
+
+.reader-message {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  text-align: center;
+  color: rgba(236, 226, 198, 0.82);
+
+  mat-icon {
+    font-size: 40px;
+    width: 40px;
+    height: 40px;
+    color: var(--anubis-gold);
+  }
+}
+
+.reader-link {
+  color: var(--anubis-gold-bright);
+  font-weight: 600;
+}
