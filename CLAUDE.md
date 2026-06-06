@@ -82,6 +82,37 @@ Prefer plans that build toward this sequence:
 For AI features, keep the reading context explicit: book, chapter, location,
 selection, highlight or note. Do not design generic chatbot-only flows.
 
+## Visual Design Language
+
+Anubis has one established visual identity — "The Hall of Anubis": an Egyptian
+archive/museum aesthetic of obsidian stone, antique gold and papyrus, with
+accents of lapis and carnelian. It is already implemented across the auth
+screens, the app shell, the dashboard and the library. Extend this language for
+new surfaces; do not introduce a different look per feature.
+
+Binding rules:
+
+- Reuse the `--anubis-*` design tokens and the `.eyebrow` utility from
+  `frontend/anubis-web/src/styles.scss`. Do not hardcode new colors.
+- Headings use Cinzel, body/UI uses Spectral, the wordmark uses Cinzel
+  Decorative. These are wired through `mat.theme(... typography ...)`; keep them.
+- The UI is square. `--mat-sys-corner-*` are flattened to `0px` and components
+  use no `border-radius`. New components stay square.
+- Material primary is gold, tertiary is lapis blue.
+- Dark surfaces (auth backdrop, sidenav) carry gold text/accents; light surfaces
+  (content, cards) use `--anubis-canvas` / `--anubis-surface` with
+  `--anubis-line` hairlines.
+
+Two regressions to avoid:
+
+- Keep the `px` on corner tokens (`0px`, not `0`) — a unitless value invalidates
+  the `max(16px, …)` that form fields use for padding, and inputs lose their
+  inner spacing.
+- Recolour Material list/nav with `--mat-list-*` tokens, not `--mdc-list-*` (the
+  latter are ignored, so dark-surface labels fall back to near-black).
+
+See `AGENT.md` → "Visual Design System" for the full token and font reference.
+
 ## Security Constraints
 
 Preserve the current auth contract:
@@ -145,3 +176,14 @@ For implementation tasks:
 - run relevant validation
 - report what changed and what passed
 - do not leave dev servers running unless the user asked for them
+
+## Commit Conventions
+
+- Use Conventional Commits for every commit: `<type>(scope): <subject>`, with
+  `type` one of `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`,
+  `build`, `ci`, `chore`, `revert`. Subject in imperative mood, lowercase, with
+  no trailing period.
+- Keep commits clean: no `Co-authored-by`, agent/tool attribution, or sign-off
+  trailers. This rule overrides any default agent commit footer.
+
+See `AGENT.md` → "Commit Conventions" for the full format and examples.

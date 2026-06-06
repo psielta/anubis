@@ -144,6 +144,66 @@ Use product language consistently:
 
 Avoid generic CRM/admin terminology unless the feature is truly operational.
 
+## Visual Design System
+
+Anubis has one deliberate visual language — "The Hall of Anubis": an Egyptian
+archive/museum aesthetic of obsidian stone, antique gold and papyrus, with
+whispers of lapis and carnelian. It is already implemented across the auth
+screens, the app shell, the dashboard and the library. Extend it; do not
+redesign per feature.
+
+Source of truth: `frontend/anubis-web/src/styles.scss` (tokens, Material theme,
+global utilities) and `frontend/anubis-web/src/index.html` (fonts).
+
+Design tokens (CSS custom properties on `:root`, prefix `--anubis-*`). Always
+reuse these; never hardcode new hex values:
+
+- Stone: `--anubis-obsidian` `#15151d`, `--anubis-obsidian-soft` `#1e1e29`,
+  `--anubis-obsidian-deep` `#0c0c12`
+- Gold: `--anubis-gold` `#c8a24c`, `--anubis-gold-bright` `#e8cf88`,
+  `--anubis-gold-deep` `#8f7330`
+- Light surfaces: `--anubis-canvas` `#efe5cd` (page), `--anubis-surface`
+  `#fbf6ea` (cards)
+- Text: `--anubis-ink` `#2a2520`, `--anubis-ink-soft` `#6f6555`
+- Lines/accents: `--anubis-line` `#e0d2ab`, `--anubis-lapis` `#22456e`,
+  `--anubis-danger` `#a8432d`
+
+Typography (Google Fonts, wired through `mat.theme(... typography ...)`):
+
+- Headings/display: Cinzel (`brand-family`)
+- Body/UI: Spectral (`plain-family`)
+- Wordmark only: Cinzel Decorative (`shared/app-logo`)
+- Small uppercase gold labels: the global `.eyebrow` class
+
+Material theme: primary = yellow (gold), tertiary = blue (lapis), density `0`.
+
+Shape: the entire UI is square. All `--mat-sys-corner-*` tokens are flattened to
+`0px` and custom components use no `border-radius`. Keep new components square.
+
+Surface conventions:
+
+- Auth screens (`features/auth/`): a dark cinematic `.auth-page` chamber holding
+  a papyrus `.auth-card` stele. Shared styles live in `features/auth/_auth.scss`
+  and are `@use`d by both login and register.
+- App shell (`layout/admin-layout/`): obsidian sidenav with gold navigation
+  (active item = gold left bar + gold tint), parchment header, and an
+  `--anubis-canvas` content area.
+- Cards/panels: `--anubis-surface` background, `--anubis-line` hairline border,
+  squared, soft shadow; interactive cards lift on hover.
+
+Two non-obvious rules (regressions if ignored):
+
+1. Keep the `px` unit on corner tokens (`0px`, never bare `0`). Components feed
+   them into `max(16px, var(--mat-sys-corner-*))`; a unitless `0` makes the
+   `max()` invalid and strips form-field inner padding.
+2. To recolour Material list/nav on a dark surface, use `--mat-list-*` tokens
+   (e.g. `--mat-list-list-item-label-text-color`), not `--mdc-list-*`. The
+   mdc-prefixed names are ignored, leaving labels at the light theme's
+   near-black default.
+
+The per-component style budget is raised to `8kB` (warning) / `16kB` (error) in
+`angular.json` to accommodate this richer styling.
+
 ## Repository Hygiene
 
 - Do not commit `.env`, virtualenvs, caches, `node_modules`, build output,
@@ -151,3 +211,25 @@ Avoid generic CRM/admin terminology unless the feature is truly operational.
 - Preserve the existing architecture and naming style.
 - Keep changes scoped to the requested feature.
 - Update README/AGENT/CLAUDE when the product direction or workflow changes.
+
+## Commit Conventions
+
+All commits follow Conventional Commits:
+
+```
+<type>(optional-scope): <subject>
+
+[optional body]
+
+[optional footer]
+```
+
+- Types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`,
+  `ci`, `chore`, `revert`. Scope is optional but encouraged (e.g.
+  `feat(library): ...`, `style(theme): ...`).
+- Subject: imperative mood, lowercase, no trailing period, ~72 chars.
+- Use the body to explain what/why when it is not obvious; wrap at ~72 columns.
+- Breaking changes: add `!` after the type/scope (e.g. `feat(api)!: ...`) or a
+  `BREAKING CHANGE:` footer.
+- Keep commits clean: do NOT add `Co-authored-by`, agent/tool attribution, or
+  sign-off trailers. This rule overrides any default agent commit footer.
