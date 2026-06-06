@@ -5,6 +5,15 @@
     </a>
     <span class="reader-title">{{ book()?.title ?? 'Reader' }}</span>
     <span class="reader-controls">
+      <button
+        mat-icon-button
+        class="ai-toggle"
+        [class.active]="panelOpen()"
+        (click)="togglePanel()"
+        aria-label="Study assistant"
+      >
+        <mat-icon>auto_awesome</mat-icon>
+      </button>
       @if (toc().length) {
         <button mat-icon-button [matMenuTriggerFor]="tocMenu" aria-label="Table of contents">
           <mat-icon>list</mat-icon>
@@ -58,6 +67,136 @@
     } @else if (loading()) {
       <div class="reader-message">Opening the book…</div>
     }
-    <div #viewport class="reader-viewport"></div>
+    <div
+      #viewport
+      class="reader-viewport"
+      (mouseup)="captureSelection()"
+      (scroll)="hideSelectionButton()"
+    ></div>
   </div>
+
+  @if (selectionText()) {
+    <button
+      class="sel-ask"
+      [style.top.px]="selButtonTop()"
+      [style.left.px]="selButtonLeft()"
+      (click)="askSelection()"
+    >
+      <mat-icon>auto_awesome</mat-icon> Ask about this
+    </button>
+  }
+
+  @if (panelOpen()) {
+    <aside class="ai-panel">
+      <header class="ai-head">
+        <span class="ai-title"><mat-icon>auto_awesome</mat-icon> Study assistant</span>
+        <span class="ai-spacer"></span>
+        @if (messages().length) {
+          <button mat-icon-button (click)="clearHistory()" aria-label="Clear history">
+            <mat-icon>delete_sweep</mat-icon>
+          </button>
+        }
+        <button mat-icon-button (click)="togglePanel()" aria-label="Close">
+          <mat-icon>close</mat-icon>
+        </button>
+      </header>
+
+      <div class="ai-scope">
+        <button
+          class="scope-chip"
+          [class.active]="aiScope() === 'book'"
+          (click)="aiScope.set('book')"
+        >
+          Whole book
+        </button>
+        <button
+          class="scope-chip"
+          [class.active]="aiScope() === 'chapter'"
+          [disabled]="!chapterRange()"
+          (click)="aiScope.set('chapter')"
+        >
+          This chapter
+        </button>
+      </div>
+
+      <div class="ai-thread">
+        @if (!messages().length && !aiBusy()) {
+          <p class="ai-empty">
+            Ask a question, or generate a summary or flashcards — grounded in this PDF.
+          </p>
+        }
+        @for (m of messages(); track m.id) {
+          @if (m.role === 'user') {
+            <div class="ai-msg ai-user"><p>{{ m.content }}</p></div>
+          } @else {
+            <div class="ai-msg ai-assistant">
+              @if (m.kind !== 'chat') {
+                <span class="ai-scope-label">{{ m.kind }} · {{ m.scope }}</span>
+              }
+              <markdown class="ai-markdown" [data]="m.content" />
+            </div>
+          }
+        }
+
+        @if (pendingQuestion()) {
+          <div class="ai-msg ai-user"><p>{{ pendingQuestion() }}</p></div>
+        }
+        @if (aiBusy()) {
+          <div class="ai-msg ai-assistant">
+            @if (thinking()) {
+              <details class="ai-thinking" open>
+                <summary>Thinking…</summary>
+                <pre>{{ thinking() }}</pre>
+              </details>
+            }
+            @if (streamingAnswer()) {
+              <markdown class="ai-markdown" [data]="streamingAnswer()" />
+            } @else if (!thinking()) {
+              <p class="ai-working">Working…</p>
+            }
+          </div>
+        }
+      </div>
+
+      @if (aiError()) {
+        <p class="ai-error">{{ aiError() }}</p>
+      }
+
+      <div class="ai-actions">
+        <button class="ai-action" (click)="send('summary')" [disabled]="aiBusy()">
+          <mat-icon>summarize</mat-icon> Summarize
+        </button>
+        <button class="ai-action" (click)="send('flashcards')" [disabled]="aiBusy()">
+          <mat-icon>style</mat-icon> Flashcards
+        </button>
+      </div>
+
+      @if (pendingSelection()) {
+        <div class="ai-selection-chip">
+          <mat-icon>format_quote</mat-icon>
+          <span class="ai-selection-text">{{ pendingSelection() }}</span>
+          <button
+            type="button"
+            class="ai-selection-clear"
+            (click)="clearPendingSelection()"
+            aria-label="Clear selection"
+          >
+            <mat-icon>close</mat-icon>
+          </button>
+        </div>
+      }
+
+      <form class="ai-ask" (submit)="$event.preventDefault(); send('chat', q)">
+        <input
+          #q
+          class="ai-input"
+          placeholder="Ask about this book…"
+          [disabled]="aiBusy()"
+        />
+        <button class="ai-send" type="submit" [disabled]="aiBusy()" aria-label="Ask">
+          <mat-icon>send</mat-icon>
+        </button>
+      </form>
+    </aside>
+  }
 </div>

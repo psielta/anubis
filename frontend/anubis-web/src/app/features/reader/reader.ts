@@ -11,10 +11,18 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
+import { MarkdownComponent } from 'ngx-markdown';
 import * as pdfjsLib from 'pdfjs-dist';
-import type { PDFDocumentProxy, PDFDocumentLoadingTask } from 'pdfjs-dist';
+import type {
+  PDFDocumentProxy,
+  PDFDocumentLoadingTask,
+  PDFPageProxy,
+  PageViewport,
+} from 'pdfjs-dist';
 import { LibraryService } from '../../core/services/library';
+import { StudyService } from '../../core/services/study';
 import { Book } from '../../core/models/book.model';
+import { StudyKind, StudyMessage, StudyRequest } from '../../core/models/study.model';
 
 // Resolve the pdf.js worker through the bundler (Angular's esbuild builder
 // emits it as an asset and rewrites this URL).
@@ -39,13 +47,14 @@ const SAVE_DEBOUNCE_MS = 1200;
 
 @Component({
   selector: 'app-reader',
-  imports: [RouterLink, MatButtonModule, MatIconModule, MatMenuModule],
+  imports: [RouterLink, MatButtonModule, MatIconModule, MatMenuModule, MarkdownComponent],
   templateUrl: './reader.html',
   styleUrl: './reader.scss',
 })
 export class Reader implements OnInit, OnDestroy {
   private route = inject(ActivatedRoute);
   private library = inject(LibraryService);
+  private study = inject(StudyService);
 
   private viewport = viewChild<ElementRef<HTMLDivElement>>('viewport');
 
@@ -56,6 +65,22 @@ export class Reader implements OnInit, OnDestroy {
   protected readonly currentPage = signal(1);
   protected readonly zoomPct = signal(100);
   protected readonly toc = signal<TocItem[]>([]);
+
+  // AI study assistant
+  protected readonly panelOpen = signal(false);
+  protected readonly aiScope = signal<'book' | 'chapter'>('book');
+  protected readonly messages = signal<StudyMessage[]>([]);
+  protected readonly thinking = signal('');
+  protected readonly streamingAnswer = signal('');
+  protected readonly pendingQuestion = signal<string | null>(null);
+  protected readonly aiBusy = signal(false);
+  protected readonly aiError = signal<string | null>(null);
+  protected readonly selectionText = signal('');
+  protected readonly selButtonTop = signal(0);
+  protected readonly selButtonLeft = signal(0);
+  protected readonly pendingSelection = signal<string | null>(null);
+  private historyLoaded = false;
+  private aiController: AbortController | null = null;
 
   private bookId = 0;
   private data: ArrayBuffer | null = null;
@@ -103,6 +128,7 @@ export class Reader implements OnInit, OnDestroy {
   ngOnDestroy() {
     if (this.saveTimer) clearTimeout(this.saveTimer);
     this.flushProgress();
+    this.aiController?.abort();
     this.observer?.disconnect();
     this.loadingTask?.destroy();
   }
@@ -274,8 +300,33 @@ export class Reader implements OnInit, OnDestroy {
 
     try {
       await page.render({ canvas, canvasContext: ctx, viewport: hi }).promise;
+      await this.renderTextLayer(page, canvas, viewport);
     } catch {
       entry.rendered = false;
+    }
+  }
+
+  /** Transparent, selectable text layer over the page canvas (enables selection). */
+  private async renderTextLayer(
+    page: PDFPageProxy,
+    canvas: HTMLCanvasElement,
+    viewport: PageViewport,
+  ) {
+    const wrap = canvas.parentElement;
+    if (!wrap || wrap.querySelector('.textLayer')) return;
+    const layer = document.createElement('div');
+    layer.className = 'textLayer';
+    pdfjsLib.setLayerDimensions(layer, viewport);
+    layer.style.setProperty('--scale-factor', String(viewport.scale));
+    wrap.appendChild(layer);
+    try {
+      await new pdfjsLib.TextLayer({
+        textContentSource: page.streamTextContent(),
+        container: layer,
+        viewport,
+      }).render();
+    } catch {
+      layer.remove();
     }
   }
 
@@ -303,5 +354,161 @@ export class Reader implements OnInit, OnDestroy {
     if (!this.canSave || !this.bookId || !total || page === this.lastSavedPage) return;
     this.lastSavedPage = page;
     this.library.saveProgress(this.bookId, page, total).subscribe({ error: () => {} });
+  }
+
+  // --- AI study assistant --------------------------------------------------
+  togglePanel() {
+    const open = !this.panelOpen();
+    this.panelOpen.set(open);
+    if (open && !this.historyLoaded) this.loadHistory();
+  }
+
+  captureSelection() {
+    const selection = window.getSelection();
+    const text = selection?.toString().trim() ?? '';
+    if (!text || !selection || selection.rangeCount === 0) {
+      this.selectionText.set('');
+      return;
+    }
+    const rect = selection.getRangeAt(0).getBoundingClientRect();
+    if (!rect.width && !rect.height) {
+      this.selectionText.set('');
+      return;
+    }
+    this.selectionText.set(text);
+    this.selButtonTop.set(Math.max(8, rect.bottom + 6));
+    this.selButtonLeft.set(Math.max(8, Math.min(rect.left, window.innerWidth - 190)));
+  }
+
+  hideSelectionButton() {
+    if (this.selectionText()) this.selectionText.set('');
+  }
+
+  askSelection() {
+    const text = this.selectionText();
+    if (!text) return;
+    this.pendingSelection.set(text);
+    this.selectionText.set('');
+    window.getSelection()?.removeAllRanges();
+    if (!this.panelOpen()) {
+      this.panelOpen.set(true);
+      if (!this.historyLoaded) this.loadHistory();
+    }
+  }
+
+  clearPendingSelection() {
+    this.pendingSelection.set(null);
+  }
+
+  private loadHistory() {
+    this.study.history(this.bookId).subscribe({
+      next: (messages) => {
+        this.messages.set(messages);
+        this.historyLoaded = true;
+      },
+      error: () => {},
+    });
+  }
+
+  /** Page span of the current chapter, derived from the PDF outline. */
+  chapterRange(): { from: number; to: number } | null {
+    const entries = this.toc().filter((t) => t.page != null);
+    if (!entries.length) return null;
+    const page = this.currentPage();
+    let from = entries[0].page as number;
+    for (const e of entries) {
+      const p = e.page as number;
+      if (p <= page && p >= from) from = p;
+    }
+    const later = entries
+      .map((e) => e.page as number)
+      .filter((p) => p > from)
+      .sort((a, b) => a - b);
+    const to = later.length ? later[0] - 1 : this.pageCount();
+    return { from, to: Math.max(from, to) };
+  }
+
+  send(kind: StudyKind, input?: HTMLInputElement) {
+    if (this.aiBusy()) return;
+    const selection = kind === 'chat' ? this.pendingSelection() : null;
+    let question: string | undefined;
+    if (kind === 'chat') {
+      question = input?.value.trim() || undefined;
+      if (!question && !selection) return;
+    }
+
+    const body: StudyRequest = { kind, scope: this.aiScope() };
+    if (selection) {
+      body.selection = selection;
+      // Ground a selection in its surrounding chapter when the TOC allows it.
+      const range = this.chapterRange();
+      if (range) {
+        body.scope = 'chapter';
+        body.page_from = range.from;
+        body.page_to = range.to;
+      }
+    } else if (body.scope === 'chapter') {
+      const range = this.chapterRange();
+      if (range) {
+        body.page_from = range.from;
+        body.page_to = range.to;
+      } else {
+        body.scope = 'book';
+      }
+    }
+    if (question) body.question = question;
+
+    let display: string | null = null;
+    if (kind === 'chat') {
+      const quote = selection
+        ? `“${selection.slice(0, 120)}${selection.length > 120 ? '…' : ''}” `
+        : '';
+      display = (quote + (question ?? '')).trim() || null;
+    }
+
+    this.aiError.set(null);
+    this.thinking.set('');
+    this.streamingAnswer.set('');
+    this.pendingQuestion.set(display);
+    this.pendingSelection.set(null);
+    this.aiBusy.set(true);
+    if (input) input.value = '';
+
+    this.aiController?.abort();
+    this.aiController = new AbortController();
+
+    void this.study.ask(
+      this.bookId,
+      body,
+      {
+        onThinking: (t) => this.thinking.update((v) => v + t),
+        onDelta: (t) => this.streamingAnswer.update((v) => v + t),
+        onDone: () => {
+          this.study.history(this.bookId).subscribe({
+            next: (messages) => {
+              this.messages.set(messages);
+              this.streamingAnswer.set('');
+              this.thinking.set('');
+              this.pendingQuestion.set(null);
+              this.aiBusy.set(false);
+            },
+            error: () => this.aiBusy.set(false),
+          });
+        },
+        onError: (message) => {
+          this.aiError.set(message);
+          this.aiBusy.set(false);
+          this.pendingQuestion.set(null);
+        },
+      },
+      this.aiController.signal,
+    );
+  }
+
+  clearHistory() {
+    this.study.clear(this.bookId).subscribe({
+      next: () => this.messages.set([]),
+      error: () => {},
+    });
   }
 }
