@@ -6,5 +6,6 @@ export interface Book {
   content_type: string;
   file_size: number;
   original_filename: string;
+  has_cover: boolean;
   created_at: string;
 }
