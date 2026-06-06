@@ -7,7 +7,8 @@ RUN addgroup --system anubis && adduser --system --ingroup anubis anubis
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY alembic.ini alembic/ ./
+COPY alembic.ini .
+COPY alembic/ ./alembic/
 COPY app/ ./app/
 
 RUN chown -R anubis:anubis /app
