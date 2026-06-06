@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     S3_BUCKET: str = "anubis-library"
     S3_REGION: str = "us-east-1"
     MAX_UPLOAD_SIZE_MB: int = 50
+    MAX_COVER_SIZE_MB: int = 5
 
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     @classmethod

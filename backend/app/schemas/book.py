@@ -13,4 +13,5 @@ class BookRead(BaseModel):
     content_type: str
     file_size: int
     original_filename: str
+    has_cover: bool
     created_at: datetime

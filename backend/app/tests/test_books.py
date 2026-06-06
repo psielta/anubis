@@ -1,6 +1,4 @@
-import io
 import uuid
-import zipfile
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -13,6 +11,7 @@ from app.services.storage import StorageService
 API = "/api/v1"
 PASSWORD = "Passw0rd!"
 FAKE_PDF = b"%PDF-1.4\n% fake pdf content\n"
+FAKE_PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 24
 
 
 def _email() -> str:
@@ -41,21 +40,6 @@ async def _token(client, email: str | None = None) -> tuple[str, str]:
 
 def _auth_headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
-
-
-def _make_epub() -> bytes:
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w") as zf:
-        zf.writestr("mimetype", "application/epub+zip")
-        zf.writestr("META-INF/container.xml", "<container/>")
-    return buf.getvalue()
-
-
-def _make_fake_zip() -> bytes:
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w") as zf:
-        zf.writestr("readme.txt", "not an epub")
-    return buf.getvalue()
 
 
 async def _mock_stream(key: str):
@@ -162,39 +146,13 @@ async def test_import_valid_pdf_returns_201(client):
 
 
 @pytest.mark.asyncio
-async def test_import_valid_epub_returns_201(client):
+async def test_import_epub_now_rejected(client):
     _, token = await _token(client)
-    epub = _make_epub()
     response = await client.post(
         f"{API}/books",
         headers=_auth_headers(token),
         data={"title": "EPUB Book"},
-        files={"file": ("book.epub", epub, "application/epub+zip")},
-    )
-    assert response.status_code == 201
-    assert response.json()["file_format"] == "epub"
-
-
-@pytest.mark.asyncio
-async def test_import_epub_declared_as_pdf_returns_415(client):
-    _, token = await _token(client)
-    response = await client.post(
-        f"{API}/books",
-        headers=_auth_headers(token),
-        data={"title": "MIME mismatch"},
-        files={"file": ("book.epub", _make_epub(), "application/pdf")},
-    )
-    assert response.status_code == 415
-
-
-@pytest.mark.asyncio
-async def test_import_fake_epub_zip_returns_415(client):
-    _, token = await _token(client)
-    response = await client.post(
-        f"{API}/books",
-        headers=_auth_headers(token),
-        data={"title": "Fake EPUB"},
-        files={"file": ("book.epub", _make_fake_zip(), "application/epub+zip")},
+        files={"file": ("book.epub", b"PK\x03\x04 epub", "application/epub+zip")},
     )
     assert response.status_code == 415
 
@@ -258,3 +216,115 @@ async def test_delete_book_returns_204_and_deletes_storage(client):
 
     listing = await client.get(f"{API}/books", headers=_auth_headers(token))
     assert listing.json() == []
+
+
+@pytest.mark.asyncio
+async def test_import_without_cover_reports_no_cover(client):
+    _, token = await _token(client)
+    response = await _upload_pdf(client, token)
+    assert response.status_code == 201
+    assert response.json()["has_cover"] is False
+    storage_module.storage.upload.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_import_with_manual_cover_sets_cover(client):
+    _, token = await _token(client)
+    response = await client.post(
+        f"{API}/books",
+        headers=_auth_headers(token),
+        data={"title": "With Cover"},
+        files={
+            "file": ("book.pdf", FAKE_PDF, "application/pdf"),
+            "cover": ("cover.png", FAKE_PNG, "image/png"),
+        },
+    )
+    assert response.status_code == 201
+    assert response.json()["has_cover"] is True
+    # book file + cover image
+    assert storage_module.storage.upload.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_set_and_get_cover(client):
+    _, token = await _token(client)
+    book_id = (await _upload_pdf(client, token)).json()["id"]
+
+    set_resp = await client.post(
+        f"{API}/books/{book_id}/cover",
+        headers=_auth_headers(token),
+        files={"cover": ("cover.png", FAKE_PNG, "image/png")},
+    )
+    assert set_resp.status_code == 200
+    assert set_resp.json()["has_cover"] is True
+
+    get_resp = await client.get(
+        f"{API}/books/{book_id}/cover", headers=_auth_headers(token)
+    )
+    assert get_resp.status_code == 200
+    assert get_resp.headers["content-type"].startswith("image/png")
+
+
+@pytest.mark.asyncio
+async def test_set_cover_rejects_non_image(client):
+    _, token = await _token(client)
+    book_id = (await _upload_pdf(client, token)).json()["id"]
+
+    response = await client.post(
+        f"{API}/books/{book_id}/cover",
+        headers=_auth_headers(token),
+        files={"cover": ("note.txt", b"not an image", "text/plain")},
+    )
+    assert response.status_code == 415
+    assert (await client.get(f"{API}/books/{book_id}", headers=_auth_headers(token))).json()[
+        "has_cover"
+    ] is False
+
+
+@pytest.mark.asyncio
+async def test_get_cover_404_when_absent(client):
+    _, token = await _token(client)
+    book_id = (await _upload_pdf(client, token)).json()["id"]
+    response = await client.get(
+        f"{API}/books/{book_id}/cover", headers=_auth_headers(token)
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_cover_clears_it(client):
+    _, token = await _token(client)
+    book_id = (await _upload_pdf(client, token)).json()["id"]
+    await client.post(
+        f"{API}/books/{book_id}/cover",
+        headers=_auth_headers(token),
+        files={"cover": ("cover.png", FAKE_PNG, "image/png")},
+    )
+
+    delete_resp = await client.delete(
+        f"{API}/books/{book_id}/cover", headers=_auth_headers(token)
+    )
+    assert delete_resp.status_code == 204
+    storage_module.storage.delete.assert_awaited()
+
+    book = await client.get(f"{API}/books/{book_id}", headers=_auth_headers(token))
+    assert book.json()["has_cover"] is False
+
+
+@pytest.mark.asyncio
+async def test_cover_isolated_per_user(client):
+    _, token1 = await _token(client)
+    book_id = (await _upload_pdf(client, token1)).json()["id"]
+    await client.post(
+        f"{API}/books/{book_id}/cover",
+        headers=_auth_headers(token1),
+        files={"cover": ("cover.png", FAKE_PNG, "image/png")},
+    )
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as other:
+        _, token2 = await _token(other)
+        resp = await other.get(
+            f"{API}/books/{book_id}/cover", headers=_auth_headers(token2)
+        )
+        assert resp.status_code == 404

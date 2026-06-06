@@ -17,6 +17,9 @@ async def create(
     file_size: int,
     original_filename: str,
     object_key: str,
+    cover_object_key: str | None = None,
+    cover_content_type: str | None = None,
+    cover_file_size: int | None = None,
 ) -> Book:
     book = Book(
         user_id=user_id,
@@ -27,8 +30,36 @@ async def create(
         file_size=file_size,
         original_filename=original_filename,
         object_key=object_key,
+        cover_object_key=cover_object_key,
+        cover_content_type=cover_content_type,
+        cover_file_size=cover_file_size,
     )
     db.add(book)
+    await db.commit()
+    await db.refresh(book)
+    return book
+
+
+async def set_cover(
+    db: AsyncSession,
+    book: Book,
+    *,
+    object_key: str,
+    content_type: str,
+    file_size: int,
+) -> Book:
+    book.cover_object_key = object_key
+    book.cover_content_type = content_type
+    book.cover_file_size = file_size
+    await db.commit()
+    await db.refresh(book)
+    return book
+
+
+async def clear_cover(db: AsyncSession, book: Book) -> Book:
+    book.cover_object_key = None
+    book.cover_content_type = None
+    book.cover_file_size = None
     await db.commit()
     await db.refresh(book)
     return book
