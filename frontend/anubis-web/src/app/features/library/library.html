@@ -1,14 +1,18 @@
-<div class="library-page">
-  <mat-card class="import-card">
-    <mat-card-header>
-      <mat-card-title>Import a book</mat-card-title>
-      <mat-card-subtitle>Upload a PDF or EPUB to your private library</mat-card-subtitle>
-    </mat-card-header>
+<section class="library">
+  <header class="lib-head">
+    <p class="eyebrow">Your collection</p>
+    <h1 class="lib-title">The Library</h1>
+  </header>
 
-    <mat-card-content>
-      @if (error()) {
-        <p class="error">{{ error() }}</p>
-      }
+  @if (error()) {
+    <p class="error">{{ error() }}</p>
+  }
+
+  <div class="lib-layout">
+    <!-- Import panel -->
+    <mat-card class="import-card">
+      <h2 class="panel-title">Import a book</h2>
+      <p class="panel-sub">Upload a PDF or EPUB into your private archive.</p>
 
       <form [formGroup]="form" (ngSubmit)="import()">
         <mat-form-field appearance="outline" class="full-width">
@@ -21,26 +25,26 @@
           <input matInput formControlName="author" />
         </mat-form-field>
 
-        <div class="file-row">
-          <input
-            #fileInput
-            type="file"
-            accept=".pdf,.epub"
-            hidden
-            (change)="onFileSelected($event)"
-          />
-          <button
-            mat-stroked-button
-            type="button"
-            (click)="fileInput.click()"
-            [disabled]="uploading()"
-          >
-            Choose file
-          </button>
-          <span class="file-name">
-            {{ selectedFile()?.name ?? 'No file selected' }}
+        <input
+          #fileInput
+          type="file"
+          accept=".pdf,.epub"
+          hidden
+          (change)="onFileSelected($event)"
+        />
+        <button
+          type="button"
+          class="dropzone"
+          [class.has-file]="selectedFile()"
+          [disabled]="uploading()"
+          (click)="fileInput.click()"
+        >
+          <mat-icon>{{ selectedFile() ? 'description' : 'cloud_upload' }}</mat-icon>
+          <span class="dropzone-main">{{ selectedFile()?.name ?? 'Choose a file' }}</span>
+          <span class="dropzone-sub">
+            {{ selectedFile() ? sizeLabel(selectedFile()!.size) : 'PDF or EPUB · up to 50 MB' }}
           </span>
-        </div>
+        </button>
 
         @if (uploading()) {
           <mat-progress-bar mode="determinate" [value]="progress()" />
@@ -50,53 +54,54 @@
           mat-flat-button
           color="primary"
           type="submit"
+          class="submit"
           [disabled]="uploading() || form.invalid || !selectedFile()"
         >
-          {{ uploading() ? 'Importing…' : 'Import' }}
+          {{ uploading() ? 'Importing…' : 'Import to library' }}
         </button>
       </form>
-    </mat-card-content>
-  </mat-card>
+    </mat-card>
 
-  <mat-card class="list-card">
-    <mat-card-header>
-      <mat-card-title>Your library</mat-card-title>
-    </mat-card-header>
-
-    <mat-card-content>
+    <!-- Collection -->
+    <div class="collection">
       @if (loading()) {
-        <p>Loading books…</p>
+        <div class="lib-state">Summoning your library…</div>
       } @else if (books().length === 0) {
-        <p class="empty">No books yet. Import your first title above.</p>
+        <div class="empty">
+          <span class="empty-mark"><mat-icon>menu_book</mat-icon></span>
+          <p class="empty-title">No scrolls yet</p>
+          <p class="empty-sub">Import your first title and it will take its place on the shelf.</p>
+        </div>
       } @else {
-        <mat-nav-list>
+        <div class="books">
           @for (book of books(); track book.id) {
-            <mat-list-item>
-              <mat-icon matListItemIcon>menu_book</mat-icon>
-              <span matListItemTitle>{{ book.title }}</span>
-              <span matListItemLine>
-                {{ book.author ?? 'Unknown author' }} · {{ book.file_format | uppercase }}
-              </span>
-              <button
-                mat-icon-button
-                matListItemMeta
-                aria-label="Download"
-                (click)="download(book)"
-              >
-                <mat-icon>download</mat-icon>
-              </button>
-              <button
-                mat-icon-button
-                matListItemMeta
-                aria-label="Delete"
-                (click)="remove(book)"
-              >
-                <mat-icon>delete</mat-icon>
-              </button>
-            </mat-list-item>
+            <article class="book">
+              <div class="spine">
+                <span class="spine-initials">{{ initials(book.title) }}</span>
+                <span class="spine-format">{{ book.file_format | uppercase }}</span>
+              </div>
+              <div class="book-body">
+                <h3 class="book-title" [title]="book.title">{{ book.title }}</h3>
+                <p class="book-author">{{ book.author ?? 'Unknown author' }}</p>
+                <p class="book-meta">{{ sizeLabel(book.file_size) }}</p>
+              </div>
+              <div class="book-actions">
+                <button mat-icon-button aria-label="Download" (click)="download(book)">
+                  <mat-icon>download</mat-icon>
+                </button>
+                <button
+                  mat-icon-button
+                  class="danger"
+                  aria-label="Delete"
+                  (click)="remove(book)"
+                >
+                  <mat-icon>delete</mat-icon>
+                </button>
+              </div>
+            </article>
           }
-        </mat-nav-list>
+        </div>
       }
-    </mat-card-content>
-  </mat-card>
-</div>
+    </div>
+  </div>
+</section>

@@ -7,7 +7,6 @@ import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
-import { MatListModule } from '@angular/material/list';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { LibraryService } from '../../core/services/library';
 import { Book } from '../../core/models/book.model';
@@ -25,7 +24,6 @@ const ACCEPTED_EXTENSIONS = ['.pdf', '.epub'];
     MatInputModule,
     MatButtonModule,
     MatProgressBarModule,
-    MatListModule,
     MatIconModule,
   ],
   templateUrl: './library.html',
@@ -143,5 +141,21 @@ export class Library implements OnInit {
       next: () => this.books.update((books) => books.filter((b) => b.id !== book.id)),
       error: (e) => this.error.set(e?.error?.detail ?? 'Delete failed'),
     });
+  }
+
+  /** First two significant letters of a title, for the cover-spine stand-in. */
+  initials(title: string): string {
+    const words = title.trim().split(/\s+/).filter(Boolean);
+    if (words.length === 0) return '·';
+    if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+    return (words[0][0] + words[1][0]).toUpperCase();
+  }
+
+  /** Human-readable file size. */
+  sizeLabel(bytes: number): string {
+    if (!bytes) return '—';
+    const mb = bytes / (1024 * 1024);
+    if (mb >= 1) return `${mb.toFixed(1)} MB`;
+    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
   }
 }
