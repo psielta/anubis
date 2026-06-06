@@ -185,9 +185,10 @@ Surface conventions:
 - Auth screens (`features/auth/`): a dark cinematic `.auth-page` chamber holding
   a papyrus `.auth-card` stele. Shared styles live in `features/auth/_auth.scss`
   and are `@use`d by both login and register.
-- App shell (`layout/admin-layout/`): obsidian sidenav with gold navigation
-  (active item = gold left bar + gold tint), parchment header, and an
-  `--anubis-canvas` content area.
+- App shell (`layout/admin-layout/`): a stacked layout — an obsidian top bar
+  with horizontal gold navigation (active item underlined in gold) over a
+  full-width, centered `--anubis-canvas` content column. Chosen over a side rail
+  because the app targets portrait displays.
 - Cards/panels: `--anubis-surface` background, `--anubis-line` hairline border,
   squared, soft shadow; interactive cards lift on hover.
 

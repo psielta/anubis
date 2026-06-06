@@ -99,7 +99,7 @@ Binding rules:
 - The UI is square. `--mat-sys-corner-*` are flattened to `0px` and components
   use no `border-radius`. New components stay square.
 - Material primary is gold, tertiary is lapis blue.
-- Dark surfaces (auth backdrop, sidenav) carry gold text/accents; light surfaces
+- Dark surfaces (auth backdrop, top bar) carry gold text/accents; light surfaces
   (content, cards) use `--anubis-canvas` / `--anubis-surface` with
   `--anubis-line` hairlines.
 

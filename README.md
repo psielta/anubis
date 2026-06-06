@@ -45,7 +45,7 @@ Planned AI study capabilities:
 Implemented:
 
 - User registration and login.
-- Protected admin/dashboard shell.
+- Protected app shell with a stacked top-navigation layout (portrait-friendly).
 - Access token stored client-side for API calls.
 - Refresh token stored as an httpOnly cookie scoped to auth routes.
 - Refresh token rotation with stale-token rejection.
@@ -53,12 +53,13 @@ Implemented:
 - Alembic migrations for the users table and refresh-token hash.
 - Backend tests covering auth, refresh, logout and duplicate registration.
 - Angular route guard, auth interceptor and refresh flow.
-- Book import: PDF/EPUB upload to MinIO with owner-scoped library API and UI.
+- Book import: PDF upload to MinIO with owner-scoped library API and UI.
+- Book covers: manual image upload plus automatic PDF first-page extraction.
+- In-app PDF reader (continuous scroll, zoom, page count).
 
 Not implemented yet:
 
 - Library shelves/collections.
-- Reader interface.
 - Highlights, annotations and notes.
 - AI ingestion, embeddings, chat or summarization workflows.
 - Production deployment containers for backend/frontend.
