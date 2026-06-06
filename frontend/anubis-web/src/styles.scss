@@ -13,10 +13,63 @@ html {
         primary: mat.$yellow-palette,
         tertiary: mat.$blue-palette,
       ),
-      typography: Roboto,
+      // Brand voice: Cinzel for display/headlines (classical Roman caps),
+      // Spectral for body/UI (a refined screen serif fit for a library).
+      typography: (
+        brand-family: 'Cinzel, "Times New Roman", serif',
+        plain-family: 'Spectral, Georgia, serif',
+        bold-weight: 600,
+        medium-weight: 500,
+        regular-weight: 400,
+      ),
       density: 0,
     )
   );
+
+  // Square theme: remove all corner rounding by flattening the Material 3
+  // shape tokens. Every component reads its container-shape from these
+  // system variables, so overriding them here cascades app-wide.
+  //
+  // Note: keep the `px` unit. Some components (e.g. the outlined form field)
+  // feed these tokens into `max(16px, var(--mat-sys-corner-*))` to compute
+  // horizontal padding. A unitless `0` makes that `max()` invalid, so the
+  // browser drops the padding rule and inputs lose their inner left/right
+  // spacing. `0px` keeps the math valid while still rendering square corners.
+  --mat-sys-corner-extra-large: 0px;
+  --mat-sys-corner-extra-large-top: 0px;
+  --mat-sys-corner-extra-small: 0px;
+  --mat-sys-corner-extra-small-top: 0px;
+  --mat-sys-corner-full: 0px;
+  --mat-sys-corner-large: 0px;
+  --mat-sys-corner-large-end: 0px;
+  --mat-sys-corner-large-start: 0px;
+  --mat-sys-corner-large-top: 0px;
+  --mat-sys-corner-medium: 0px;
+  --mat-sys-corner-none: 0px;
+  --mat-sys-corner-small: 0px;
+}
+
+// ---------------------------------------------------------------------------
+// Anubis design tokens — an Egyptian "archive / museum" palette.
+// Obsidian stone, antique gold, papyrus, a whisper of lapis & carnelian.
+// ---------------------------------------------------------------------------
+:root {
+  --anubis-obsidian: #15151d;
+  --anubis-obsidian-soft: #1e1e29;
+  --anubis-obsidian-deep: #0c0c12;
+
+  --anubis-gold: #c8a24c;
+  --anubis-gold-bright: #e8cf88;
+  --anubis-gold-deep: #8f7330;
+
+  --anubis-canvas: #efe5cd; // page background (papyrus)
+  --anubis-surface: #fbf6ea; // card surface (parchment)
+  --anubis-ink: #2a2520; // primary text on light
+  --anubis-ink-soft: #6f6555; // secondary text on light
+  --anubis-line: #e0d2ab; // hairline on light (soft gold)
+
+  --anubis-lapis: #22456e;
+  --anubis-danger: #a8432d;
 }
 
 body {
@@ -28,7 +81,7 @@ body {
   // Set a default background, font and text colors for the application using
   // Angular Material's system-level CSS variables. Learn more about these
   // variables at https://material.angular.dev/guide/system-variables
-  background-color: var(--mat-sys-surface);
+  background-color: var(--anubis-obsidian-deep);
   color: var(--mat-sys-on-surface);
   font: var(--mat-sys-body-medium);
 
@@ -36,4 +89,44 @@ body {
   margin: 0;
   height: 100%;
 }
-/* You can add global styles to this file, and also import other style files */
+
+// A small uppercase gold "eyebrow" label reused across screens.
+.eyebrow {
+  margin: 0;
+  font-family: 'Cinzel', serif;
+  font-weight: 600;
+  font-size: 0.72rem;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--anubis-gold-deep);
+}
+
+// Tame the default browser anchor color (the old purple links) anywhere
+// a bare link is used outside of Material components.
+a {
+  color: var(--anubis-gold-deep);
+}
+
+::selection {
+  background: var(--anubis-gold);
+  color: var(--anubis-obsidian-deep);
+}
+
+// Thin, themed scrollbars (WebKit/Blink).
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--anubis-gold-deep) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(143, 115, 48, 0.55);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--anubis-gold-deep);
+  background-clip: padding-box;
+}
