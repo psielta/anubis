@@ -1,153 +1,121 @@
-.layout {
-  height: 100vh;
+// Stacked layout: a full-width top bar over full-width content. Chosen over a
+// side rail because the app is used on portrait displays, where vertical space
+// is plentiful and horizontal space is precious.
+.shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
   background: var(--anubis-canvas);
 }
 
-// --- Sidebar: a slab of obsidian, lit from the top in gold -----------------
-.sidenav {
-  width: 252px;
-  border-inline-end: 1px solid rgba(200, 162, 76, 0.18);
-  background:
-    radial-gradient(130% 22% at 50% 0%, rgba(200, 162, 76, 0.12), transparent 60%),
-    linear-gradient(180deg, #16161f 0%, #101017 100%);
-  color: #e7dcbf;
-
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
   display: flex;
-  flex-direction: column;
-
-  // Recolour the M3 nav list for a dark surface. These are `--mat-list-*`
-  // tokens (not `--mdc-list-*`); the mdc-prefixed names are ignored, which
-  // leaves the labels on the dark theme's near-black default.
-  --mat-list-list-item-label-text-color: #e7dcbf;
-  --mat-list-list-item-leading-icon-color: #c8a24c;
-  --mat-list-list-item-hover-label-text-color: #f9efd2;
-  --mat-list-list-item-hover-leading-icon-color: #f0dca0;
-  --mat-list-list-item-focus-label-text-color: #f9efd2;
-  --mat-list-list-item-hover-state-layer-color: #c8a24c;
-  --mat-list-list-item-focus-state-layer-color: #c8a24c;
+  align-items: center;
+  gap: 1.5rem;
+  height: 60px;
+  padding-inline: clamp(1rem, 4vw, 2rem);
+  background:
+    radial-gradient(120% 300% at 0% 0%, rgba(200, 162, 76, 0.1), transparent 60%),
+    linear-gradient(180deg, #16161f, #101017);
+  border-block-end: 1px solid rgba(200, 162, 76, 0.22);
+  color: #e7dcbf;
 }
 
 .brand {
-  height: 64px;
-  min-height: 64px;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--anubis-gold-bright);
+  text-decoration: none;
+}
+
+.topnav {
   display: flex;
   align-items: center;
-  padding-inline: 20px;
-  background: transparent;
-  color: var(--anubis-gold-bright);
-  border-block-end: 1px solid rgba(200, 162, 76, 0.18);
+  gap: 0.25rem;
+  height: 100%;
 }
 
-.nav-label {
-  margin: 1.25rem 0 0.25rem;
-  padding-inline: 20px;
-  font-family: 'Cinzel', serif;
+.topnav a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  height: 100%;
+  padding-inline: 0.9rem;
+  color: #cdc3aa;
   font-weight: 600;
-  font-size: 0.64rem;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
-  color: rgba(200, 162, 76, 0.7);
-}
+  font-size: 0.92rem;
+  text-decoration: none;
+  border-block-end: 2px solid transparent;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease;
 
-.sidenav mat-nav-list {
-  padding-block: 0;
-}
+  mat-icon {
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+  }
 
-.sidenav a.mat-mdc-list-item {
-  position: relative;
-  margin: 2px 10px;
-  width: auto;
-  transition: background 0.2s ease;
-}
+  &:hover {
+    color: #f3e7c6;
+  }
 
-.sidenav a.active {
-  background: rgba(200, 162, 76, 0.16);
-  --mat-list-list-item-label-text-color: #f9efd2;
-  --mat-list-list-item-leading-icon-color: var(--anubis-gold-bright);
-
-  &::before {
-    content: '';
-    position: absolute;
-    inset-block: 0;
-    inset-inline-start: 0;
-    width: 3px;
-    background: var(--anubis-gold-bright);
+  &.active {
+    color: var(--anubis-gold-bright);
+    border-block-end-color: var(--anubis-gold-bright);
+    background: rgba(200, 162, 76, 0.08);
   }
 }
 
-// --- User identity, pinned to the foot of the rail -------------------------
-.sidenav-foot {
-  margin-top: auto;
+.spacer {
+  flex: 1;
+}
+
+.account {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 1rem 20px;
-  border-block-start: 1px solid rgba(200, 162, 76, 0.18);
-}
-
-.sidenav-foot__avatar {
-  display: grid;
-  place-items: center;
-  width: 38px;
-  height: 38px;
-  flex-shrink: 0;
-  font-family: 'Cinzel', serif;
-  font-weight: 600;
-  text-transform: uppercase;
-  color: var(--anubis-obsidian-deep);
-  background: linear-gradient(160deg, var(--anubis-gold-bright), var(--anubis-gold-deep));
-}
-
-.sidenav-foot__meta {
-  display: flex;
-  flex-direction: column;
+  gap: 0.5rem;
   min-width: 0;
 }
 
-.sidenav-foot__name {
-  font-size: 0.85rem;
-  color: #ece2c6;
+.account .email {
+  font-size: 0.88rem;
+  color: rgba(231, 220, 191, 0.75);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 30vw;
 }
 
-.sidenav-foot__role {
-  font-size: 0.7rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: rgba(200, 162, 76, 0.8);
-}
-
-// --- Top bar over the parchment content ------------------------------------
-mat-sidenav-content {
-  background: var(--anubis-canvas);
-}
-
-.header {
-  background: var(--anubis-surface);
-  color: var(--anubis-ink);
-  border-block-end: 1px solid var(--anubis-line);
-}
-
-.toolbar-start {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 48px;
-}
-
-.spacer {
-  flex: 1 1 auto;
-}
-
-.email {
-  margin-right: 8px;
-  font-size: 0.9rem;
-  color: var(--anubis-ink-soft);
+.account button {
+  color: #e7dcbf;
+  flex-shrink: 0;
 }
 
 .content {
+  flex: 1;
+  width: 100%;
+  max-width: 1100px;
+  margin-inline: auto;
   padding: clamp(1.5rem, 3vw, 2.5rem);
-  min-height: calc(100% - 64px);
+  box-sizing: border-box;
+}
+
+// Compact bar for narrow / portrait widths: drop nav labels and the email.
+@media (max-width: 680px) {
+  .topbar {
+    gap: 0.75rem;
+  }
+  .topnav a {
+    padding-inline: 0.6rem;
+  }
+  .topnav span,
+  .account .email {
+    display: none;
+  }
 }
