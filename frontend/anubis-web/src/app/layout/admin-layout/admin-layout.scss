@@ -4,12 +4,18 @@
 
 .sidenav {
   width: 240px;
+  border-inline-end: 1px solid var(--mat-sys-outline-variant);
 }
 
 .brand {
   display: flex;
   align-items: center;
   padding-inline: 16px;
+  border-block-end: 1px solid var(--mat-sys-outline-variant);
+}
+
+.header {
+  border-block-end: 1px solid var(--mat-sys-outline-variant);
 }
 
 .toolbar-start {
