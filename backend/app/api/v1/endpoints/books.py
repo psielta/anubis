@@ -2,18 +2,27 @@ import re
 from typing import Annotated
 from uuid import uuid4
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.deps import CurrentUser, DbSession
 from app.core.config import settings
 from app.crud import book as book_crud
-from app.schemas.book import BookRead
+from app.crud import collection as collection_crud
+from app.models.book import Book
+from app.schemas.book import BookPage, BookRead, CollectionsUpdate, ProgressUpdate
 from app.services import covers
 from app.services.storage import storage
 
 router = APIRouter(prefix="/books", tags=["books"])
+
+
+async def _book_read(db: DbSession, book: Book) -> BookRead:
+    """BookRead with the book's collection memberships attached."""
+    ids = await collection_crud.collection_ids_for_book(db, book.id)
+    return BookRead.model_validate(book).model_copy(update={"collection_ids": ids})
+
 
 PDF_MAGIC = b"%PDF"
 PDF_CONTENT_TYPE = "application/pdf"
@@ -122,13 +131,34 @@ async def import_book(
             await storage.delete(cover_key)
         raise
 
-    return BookRead.model_validate(book)
+    return await _book_read(db, book)
 
 
-@router.get("", response_model=list[BookRead])
-async def list_books(current_user: CurrentUser, db: DbSession) -> list[BookRead]:
-    books = await book_crud.list_for_user(db, current_user.id)
-    return [BookRead.model_validate(b) for b in books]
+@router.get("", response_model=BookPage)
+async def list_books(
+    current_user: CurrentUser,
+    db: DbSession,
+    search: Annotated[str | None, Query(max_length=200)] = None,
+    collection_id: Annotated[int | None, Query()] = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 12,
+) -> BookPage:
+    books, total = await book_crud.list_page(
+        db,
+        current_user.id,
+        search=search,
+        collection_id=collection_id,
+        page=page,
+        page_size=page_size,
+    )
+    coll_map = await collection_crud.collection_ids_for_books(db, [b.id for b in books])
+    items = [
+        BookRead.model_validate(b).model_copy(
+            update={"collection_ids": coll_map.get(b.id, [])}
+        )
+        for b in books
+    ]
+    return BookPage(items=items, total=total, page=page, page_size=page_size)
 
 
 @router.get("/{book_id}", response_model=BookRead)
@@ -138,7 +168,7 @@ async def get_book(
     book = await book_crud.get_for_user(db, current_user.id, book_id)
     if book is None:
         raise HTTPException(404, "Book not found")
-    return BookRead.model_validate(book)
+    return await _book_read(db, book)
 
 
 @router.get("/{book_id}/file")
@@ -158,6 +188,44 @@ async def download_book(
             "Content-Disposition": f'attachment; filename="{safe_name}"',
         },
     )
+
+
+@router.put("/{book_id}/progress", response_model=BookRead)
+async def update_progress(
+    book_id: int,
+    current_user: CurrentUser,
+    db: DbSession,
+    payload: ProgressUpdate,
+) -> BookRead:
+    book = await book_crud.get_for_user(db, current_user.id, book_id)
+    if book is None:
+        raise HTTPException(404, "Book not found")
+
+    last_page = min(payload.last_page, payload.page_count)
+    book = await book_crud.set_progress(
+        db, book, last_page=last_page, page_count=payload.page_count
+    )
+    return await _book_read(db, book)
+
+
+@router.put("/{book_id}/collections", response_model=BookRead)
+async def set_book_collections(
+    book_id: int,
+    current_user: CurrentUser,
+    db: DbSession,
+    payload: CollectionsUpdate,
+) -> BookRead:
+    book = await book_crud.get_for_user(db, current_user.id, book_id)
+    if book is None:
+        raise HTTPException(404, "Book not found")
+
+    await collection_crud.set_book_collections(
+        db,
+        user_id=current_user.id,
+        book_id=book_id,
+        collection_ids=payload.collection_ids,
+    )
+    return await _book_read(db, book)
 
 
 @router.post("/{book_id}/cover", response_model=BookRead)
@@ -190,7 +258,7 @@ async def set_book_cover(
     if old_key is not None and old_key != new_key:
         await storage.delete(old_key)
 
-    return BookRead.model_validate(book)
+    return await _book_read(db, book)
 
 
 @router.get("/{book_id}/cover")

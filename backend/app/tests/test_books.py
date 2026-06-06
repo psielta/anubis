@@ -190,9 +190,9 @@ async def test_list_books_isolated_per_user(client):
         list2 = await other_client.get(f"{API}/books", headers=_auth_headers(token2))
         assert list1.status_code == 200
         assert list2.status_code == 200
-        assert len(list1.json()) == 1
-        assert len(list2.json()) == 0
-        book_id = list1.json()[0]["id"]
+        assert list1.json()["total"] == 1
+        assert list2.json()["total"] == 0
+        book_id = list1.json()["items"][0]["id"]
 
         other_file = await other_client.get(
             f"{API}/books/{book_id}/file",
@@ -215,7 +215,8 @@ async def test_delete_book_returns_204_and_deletes_storage(client):
     storage_module.storage.delete.assert_awaited()
 
     listing = await client.get(f"{API}/books", headers=_auth_headers(token))
-    assert listing.json() == []
+    assert listing.json()["items"] == []
+    assert listing.json()["total"] == 0
 
 
 @pytest.mark.asyncio
@@ -328,3 +329,213 @@ async def test_cover_isolated_per_user(client):
             f"{API}/books/{book_id}/cover", headers=_auth_headers(token2)
         )
         assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_update_progress_sets_values(client):
+    _, token = await _token(client)
+    book_id = (await _upload_pdf(client, token)).json()["id"]
+
+    response = await client.put(
+        f"{API}/books/{book_id}/progress",
+        headers=_auth_headers(token),
+        json={"last_page": 3, "page_count": 10},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["last_page"] == 3
+    assert body["page_count"] == 10
+
+
+@pytest.mark.asyncio
+async def test_progress_clamped_to_page_count(client):
+    _, token = await _token(client)
+    book_id = (await _upload_pdf(client, token)).json()["id"]
+
+    response = await client.put(
+        f"{API}/books/{book_id}/progress",
+        headers=_auth_headers(token),
+        json={"last_page": 99, "page_count": 10},
+    )
+    assert response.status_code == 200
+    assert response.json()["last_page"] == 10
+
+
+@pytest.mark.asyncio
+async def test_progress_rejects_invalid_page(client):
+    _, token = await _token(client)
+    book_id = (await _upload_pdf(client, token)).json()["id"]
+
+    response = await client.put(
+        f"{API}/books/{book_id}/progress",
+        headers=_auth_headers(token),
+        json={"last_page": 0, "page_count": 10},
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_progress_isolated_per_user(client):
+    _, token1 = await _token(client)
+    book_id = (await _upload_pdf(client, token1)).json()["id"]
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as other:
+        _, token2 = await _token(other)
+        resp = await other.put(
+            f"{API}/books/{book_id}/progress",
+            headers=_auth_headers(token2),
+            json={"last_page": 2, "page_count": 10},
+        )
+        assert resp.status_code == 404
+
+
+async def _create_collection(client, token: str, name: str) -> int:
+    resp = await client.post(
+        f"{API}/collections", headers=_auth_headers(token), json={"name": name}
+    )
+    assert resp.status_code == 201
+    return resp.json()["id"]
+
+
+@pytest.mark.asyncio
+async def test_create_and_list_collections(client):
+    _, token = await _token(client)
+    await _create_collection(client, token, "Ancient Egypt")
+    await _create_collection(client, token, "Studying")
+
+    resp = await client.get(f"{API}/collections", headers=_auth_headers(token))
+    assert resp.status_code == 200
+    names = [c["name"] for c in resp.json()]
+    assert names == ["Ancient Egypt", "Studying"]  # ordered by name
+
+
+@pytest.mark.asyncio
+async def test_duplicate_collection_returns_409(client):
+    _, token = await _token(client)
+    await _create_collection(client, token, "Egypt")
+    resp = await client.post(
+        f"{API}/collections", headers=_auth_headers(token), json={"name": "Egypt"}
+    )
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_assign_book_to_collections(client):
+    _, token = await _token(client)
+    book_id = (await _upload_pdf(client, token)).json()["id"]
+    coll_id = await _create_collection(client, token, "Egypt")
+
+    resp = await client.put(
+        f"{API}/books/{book_id}/collections",
+        headers=_auth_headers(token),
+        json={"collection_ids": [coll_id]},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["collection_ids"] == [coll_id]
+
+    listing = await client.get(f"{API}/collections", headers=_auth_headers(token))
+    assert listing.json()[0]["book_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_filter_books_by_collection(client):
+    _, token = await _token(client)
+    a = (await _upload_pdf(client, token, "Alpha")).json()["id"]
+    await _upload_pdf(client, token, "Beta")
+    coll_id = await _create_collection(client, token, "Egypt")
+    await client.put(
+        f"{API}/books/{a}/collections",
+        headers=_auth_headers(token),
+        json={"collection_ids": [coll_id]},
+    )
+
+    resp = await client.get(
+        f"{API}/books?collection_id={coll_id}", headers=_auth_headers(token)
+    )
+    assert resp.json()["total"] == 1
+    assert resp.json()["items"][0]["id"] == a
+
+
+@pytest.mark.asyncio
+async def test_search_books_by_title(client):
+    _, token = await _token(client)
+    await _upload_pdf(client, token, "Pyramid Texts")
+    await _upload_pdf(client, token, "Coffin Texts")
+
+    resp = await client.get(
+        f"{API}/books?search=pyramid", headers=_auth_headers(token)
+    )
+    assert resp.json()["total"] == 1
+    assert resp.json()["items"][0]["title"] == "Pyramid Texts"
+
+
+@pytest.mark.asyncio
+async def test_books_pagination(client):
+    _, token = await _token(client)
+    for i in range(3):
+        await _upload_pdf(client, token, f"Book {i}")
+
+    page1 = await client.get(
+        f"{API}/books?page=1&page_size=2", headers=_auth_headers(token)
+    )
+    assert page1.json()["total"] == 3
+    assert len(page1.json()["items"]) == 2
+
+    page2 = await client.get(
+        f"{API}/books?page=2&page_size=2", headers=_auth_headers(token)
+    )
+    assert len(page2.json()["items"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_delete_collection_keeps_books(client):
+    _, token = await _token(client)
+    book_id = (await _upload_pdf(client, token)).json()["id"]
+    coll_id = await _create_collection(client, token, "Egypt")
+    await client.put(
+        f"{API}/books/{book_id}/collections",
+        headers=_auth_headers(token),
+        json={"collection_ids": [coll_id]},
+    )
+
+    resp = await client.delete(
+        f"{API}/collections/{coll_id}", headers=_auth_headers(token)
+    )
+    assert resp.status_code == 204
+
+    listing = await client.get(f"{API}/collections", headers=_auth_headers(token))
+    assert listing.json() == []
+    book = await client.get(f"{API}/books/{book_id}", headers=_auth_headers(token))
+    assert book.json()["collection_ids"] == []
+
+
+@pytest.mark.asyncio
+async def test_collection_isolated_per_user(client):
+    _, token1 = await _token(client)
+    coll_id = await _create_collection(client, token1, "Egypt")
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as other:
+        _, token2 = await _token(other)
+        resp = await other.delete(
+            f"{API}/collections/{coll_id}", headers=_auth_headers(token2)
+        )
+        assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_rename_collection(client):
+    _, token = await _token(client)
+    coll_id = await _create_collection(client, token, "Egpt")
+
+    resp = await client.patch(
+        f"{API}/collections/{coll_id}",
+        headers=_auth_headers(token),
+        json={"name": "Egypt"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "Egypt"
+
+    listing = await client.get(f"{API}/collections", headers=_auth_headers(token))
+    assert [c["name"] for c in listing.json()] == ["Egypt"]

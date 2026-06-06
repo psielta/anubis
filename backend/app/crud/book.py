@@ -1,9 +1,10 @@
 from collections.abc import Sequence
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.book import Book
+from app.models.collection import book_collections
 
 
 async def create(
@@ -65,14 +66,42 @@ async def clear_cover(db: AsyncSession, book: Book) -> Book:
     return book
 
 
-async def list_for_user(db: AsyncSession, user_id: int) -> Sequence[Book]:
-    return (
-        await db.scalars(
-            select(Book)
-            .where(Book.user_id == user_id)
-            .order_by(Book.created_at.desc())
-        )
-    ).all()
+async def set_progress(
+    db: AsyncSession, book: Book, *, last_page: int, page_count: int
+) -> Book:
+    book.last_page = last_page
+    book.page_count = page_count
+    await db.commit()
+    await db.refresh(book)
+    return book
+
+
+async def list_page(
+    db: AsyncSession,
+    user_id: int,
+    *,
+    search: str | None = None,
+    collection_id: int | None = None,
+    page: int = 1,
+    page_size: int = 12,
+) -> tuple[Sequence[Book], int]:
+    base = select(Book).where(Book.user_id == user_id)
+    if search:
+        like = f"%{search.strip()}%"
+        base = base.where(or_(Book.title.ilike(like), Book.author.ilike(like)))
+    if collection_id is not None:
+        base = base.join(
+            book_collections, book_collections.c.book_id == Book.id
+        ).where(book_collections.c.collection_id == collection_id)
+
+    total = await db.scalar(select(func.count()).select_from(base.subquery())) or 0
+    stmt = (
+        base.order_by(Book.created_at.desc())
+        .limit(page_size)
+        .offset((page - 1) * page_size)
+    )
+    books = (await db.scalars(stmt)).all()
+    return books, total
 
 
 async def get_for_user(db: AsyncSession, user_id: int, book_id: int) -> Book | None:
