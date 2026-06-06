@@ -24,7 +24,9 @@ class Settings(BaseSettings):
     S3_SECRET_KEY: str
     S3_BUCKET: str = "anubis-library"
     S3_REGION: str = "us-east-1"
-    MAX_UPLOAD_SIZE_MB: int = 50
+    # Upload limits — overridable via .env. Note: the dev server reloads on
+    # .py changes only, so editing .env requires restarting the backend.
+    MAX_UPLOAD_SIZE_MB: int = 250
     MAX_COVER_SIZE_MB: int = 5
 
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
