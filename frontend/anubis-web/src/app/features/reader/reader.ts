@@ -24,12 +24,9 @@ import { StudyService } from '../../core/services/study';
 import { Book } from '../../core/models/book.model';
 import { StudyKind, StudyMessage, StudyRequest } from '../../core/models/study.model';
 
-// Resolve the pdf.js worker through the bundler (Angular's esbuild builder
-// emits it as an asset and rewrites this URL).
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.min.mjs',
-  import.meta.url,
-).toString();
+// Served as a static asset (see angular.json); must be an absolute URL so
+// production nginx does not fall through to the SPA index.html.
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
 
 interface PdfPage {
   num: number;
