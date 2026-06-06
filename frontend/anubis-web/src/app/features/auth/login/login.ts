@@ -6,10 +6,12 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
 import { AuthService } from '../../../core/services/auth';
+import { AppLogo } from '../../../shared/app-logo/app-logo';
 
 @Component({
   selector: 'app-login',
   imports: [
+    AppLogo,
     ReactiveFormsModule,
     RouterLink,
     MatCardModule,

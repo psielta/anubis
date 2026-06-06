@@ -6,10 +6,12 @@ import { MatListModule } from '@angular/material/list';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { AuthService } from '../../core/services/auth';
+import { AppLogo } from '../../shared/app-logo/app-logo';
 
 @Component({
   selector: 'app-admin-layout',
   imports: [
+    AppLogo,
     RouterOutlet,
     RouterLink,
     RouterLinkActive,

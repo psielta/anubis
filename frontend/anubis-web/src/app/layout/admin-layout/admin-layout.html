@@ -1,6 +1,8 @@
 <mat-sidenav-container class="layout">
   <mat-sidenav class="sidenav" [opened]="opened()" mode="side">
-    <mat-toolbar class="brand">Anubis</mat-toolbar>
+    <mat-toolbar class="brand">
+      <app-logo />
+    </mat-toolbar>
     <mat-nav-list>
       <a mat-list-item routerLink="/dashboard" routerLinkActive="active">
         <mat-icon matListItemIcon>dashboard</mat-icon>
@@ -15,8 +17,12 @@
 
   <mat-sidenav-content>
     <mat-toolbar color="primary">
-      <button mat-icon-button (click)="toggle()"><mat-icon>menu</mat-icon></button>
-      <span>Admin</span>
+      <div class="toolbar-start">
+        <button mat-icon-button (click)="toggle()"><mat-icon>menu</mat-icon></button>
+        @if (!opened()) {
+          <app-logo size="sm" />
+        }
+      </div>
       <span class="spacer"></span>
       <span class="email">{{ user()?.email }}</span>
       <button mat-icon-button (click)="logout()" aria-label="Logout">

@@ -1,0 +1,55 @@
+:host {
+  display: inline-flex;
+  align-items: center;
+  line-height: 0;
+}
+
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: inherit;
+  line-height: 1;
+}
+
+.logo__mark {
+  display: block;
+  flex-shrink: 0;
+  object-fit: contain;
+  object-position: center;
+}
+
+.logo__label {
+  font-family: 'Cinzel Decorative', 'Times New Roman', serif;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  transform: translateY(1px);
+}
+
+.logo--sm .logo__mark {
+  width: 24px;
+  height: 24px;
+}
+
+.logo--sm .logo__label {
+  font-size: 0.95rem;
+}
+
+.logo--md .logo__mark {
+  width: 32px;
+  height: 32px;
+}
+
+.logo--md .logo__label {
+  font-size: 1.1rem;
+}
+
+.logo--lg .logo__mark {
+  width: 56px;
+  height: 56px;
+}
+
+.logo--lg .logo__label {
+  font-size: 1.75rem;
+}
