@@ -58,11 +58,14 @@ Implemented:
 - In-app PDF reader (continuous scroll, zoom, table of contents from the PDF outline).
 - Reading progress: resumes where you left off, with progress bars in the library.
 - Collections: organise books into collections, with search and pagination in the library.
+- AI study assistant: ask, summarize and generate flashcards over a book or chapter
+  (or a selected passage) via the Gemini API — streamed over SSE with the model's
+  reasoning and rendered as Markdown. Requires `GEMINI_API_KEY` in `backend/.env`.
 
 Not implemented yet:
 
-- Highlights, annotations and notes.
-- AI ingestion, embeddings, chat or summarization workflows.
+- Highlights, annotations and notes (persisted).
+- AI embeddings / retrieval-augmented search across the whole library.
 - Production deployment containers for backend/frontend.
 
 ## Tech Stack
