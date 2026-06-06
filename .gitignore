@@ -9,3 +9,7 @@ cookies.txt
 mcps/
 terminals/
 .playwright-mcp/
+
+# Local verification artifacts (screenshots, agent scratch)
+/agent-tools/
+/*.png
