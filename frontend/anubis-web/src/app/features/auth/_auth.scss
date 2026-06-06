@@ -1,0 +1,227 @@
+// Shared styling for the Anubis auth screens (login + register).
+// "The Hall of Anubis" — a papyrus stele standing in a cinematic
+// obsidian chamber, watched over by the jackal.
+
+.auth-page {
+  position: relative;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: clamp(1.5rem, 5vh, 4rem) 1.25rem;
+  overflow: hidden;
+  color: var(--anubis-canvas);
+
+  // Layered chamber light: a warm gold halo from above, cool lapis from
+  // below, over deep obsidian. Fixed so it always fills the viewport.
+  background:
+    radial-gradient(110% 75% at 50% -8%, rgba(200, 162, 76, 0.22), transparent 55%),
+    radial-gradient(90% 60% at 50% 115%, rgba(34, 69, 110, 0.22), transparent 60%),
+    linear-gradient(180deg, #0c0c12 0%, #16161f 52%, #101019 100%);
+  background-attachment: fixed;
+}
+
+// Fine film grain so the obsidian reads as carved stone, not flat black.
+.auth-page::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+// The guardian: an oversized jackal silhouette, masked in faint gold.
+.auth-watermark {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(64vh, 540px);
+  aspect-ratio: 1;
+  translate: -50% -54%;
+  z-index: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    rgba(232, 207, 136, 0.12),
+    rgba(200, 162, 76, 0.02)
+  );
+  -webkit-mask: url('/assets/anubis.svg') center / contain no-repeat;
+  mask: url('/assets/anubis.svg') center / contain no-repeat;
+}
+
+.auth-shell {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 416px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.6rem;
+  animation: auth-rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.auth-brand {
+  color: var(--anubis-gold-bright);
+  filter: drop-shadow(0 3px 18px rgba(200, 162, 76, 0.4));
+}
+
+// A slim cartouche rule: gold line broken by a diamond.
+.auth-rule {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 168px;
+  color: rgba(200, 162, 76, 0.55);
+
+  &::before,
+  &::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, currentColor);
+  }
+  &::after {
+    background: linear-gradient(90deg, currentColor, transparent);
+  }
+}
+.auth-rule span {
+  width: 6px;
+  height: 6px;
+  rotate: 45deg;
+  background: var(--anubis-gold);
+}
+
+.auth-card {
+  position: relative;
+  width: 100%;
+  padding: 1.75rem 1.75rem 1.25rem;
+  background: var(--anubis-surface);
+  color: var(--anubis-ink);
+  border: 1px solid rgba(200, 162, 76, 0.5);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    0 28px 70px -30px rgba(0, 0, 0, 0.8);
+
+  // Keep Material's card surface in step with the parchment.
+  --mdc-elevated-card-container-color: var(--anubis-surface);
+  --mdc-outlined-card-container-color: var(--anubis-surface);
+  --mat-card-title-text-size: 1.35rem;
+
+  // gold seam across the top of the stele
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      var(--anubis-gold) 25%,
+      var(--anubis-gold-bright) 50%,
+      var(--anubis-gold) 75%,
+      transparent
+    );
+  }
+}
+
+.auth-eyebrow {
+  margin: 0 0 0.35rem;
+}
+
+.auth-title {
+  margin: 0 0 1.25rem;
+  font-family: 'Cinzel', serif;
+  font-weight: 600;
+  font-size: 1.4rem;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  color: var(--anubis-ink);
+}
+
+.auth-card form {
+  display: flex;
+  flex-direction: column;
+}
+
+.full-width {
+  width: 100%;
+  display: block;
+}
+
+// Warm the form fields and pull the focus state toward gold.
+.auth-card .mat-mdc-form-field {
+  --mdc-outlined-text-field-focus-outline-color: var(--anubis-gold-deep);
+  --mdc-outlined-text-field-focus-label-text-color: var(--anubis-gold-deep);
+  --mdc-outlined-text-field-caret-color: var(--anubis-gold-deep);
+}
+
+.auth-submit {
+  width: 100%;
+  height: 48px;
+  margin-top: 0.5rem;
+  font-family: 'Cinzel', serif;
+  font-weight: 600;
+  font-size: 0.82rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  transition:
+    box-shadow 0.25s ease,
+    transform 0.1s ease;
+
+  &:not(:disabled):hover {
+    box-shadow: 0 10px 26px -10px rgba(200, 162, 76, 0.75);
+  }
+  &:not(:disabled):active {
+    transform: translateY(1px);
+  }
+}
+
+.error {
+  margin: 0 0 1rem;
+  padding: 0.6rem 0.85rem;
+  font-size: 0.85rem;
+  color: #7c2d1c;
+  background: rgba(168, 67, 45, 0.08);
+  border-left: 3px solid var(--anubis-danger);
+}
+
+.auth-foot {
+  margin-top: 1.25rem;
+  text-align: center;
+  font-size: 0.88rem;
+  color: var(--anubis-ink-soft);
+}
+
+.auth-link {
+  color: var(--anubis-gold-deep);
+  font-weight: 600;
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.2s ease;
+
+  &:hover {
+    border-bottom-color: currentColor;
+  }
+}
+
+@keyframes auth-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-shell {
+    animation: none;
+  }
+}
