@@ -3,6 +3,8 @@
     <mat-toolbar class="brand">
       <app-logo />
     </mat-toolbar>
+
+    <p class="nav-label">Navigation</p>
     <mat-nav-list>
       <a mat-list-item routerLink="/dashboard" routerLinkActive="active">
         <mat-icon matListItemIcon>dashboard</mat-icon>
@@ -13,12 +15,24 @@
         <span matListItemTitle>Library</span>
       </a>
     </mat-nav-list>
+
+    @if (user(); as u) {
+      <div class="sidenav-foot">
+        <span class="sidenav-foot__avatar">{{ (u.full_name || u.email).charAt(0) }}</span>
+        <span class="sidenav-foot__meta">
+          <span class="sidenav-foot__name">{{ u.full_name || u.email }}</span>
+          <span class="sidenav-foot__role">{{ u.role }}</span>
+        </span>
+      </div>
+    }
   </mat-sidenav>
 
   <mat-sidenav-content>
-    <mat-toolbar color="primary" class="header">
+    <mat-toolbar class="header">
       <div class="toolbar-start">
-        <button mat-icon-button (click)="toggle()"><mat-icon>menu</mat-icon></button>
+        <button mat-icon-button (click)="toggle()" aria-label="Toggle navigation">
+          <mat-icon>menu</mat-icon>
+        </button>
         @if (!opened()) {
           <app-logo size="sm" />
         }
