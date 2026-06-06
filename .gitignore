@@ -10,6 +10,9 @@ mcps/
 terminals/
 .playwright-mcp/
 
+# Private deployment runbook with production access details.
+/DEPLOY.md
+
 # Local verification artifacts (screenshots, agent scratch)
 /agent-tools/
 /*.png
