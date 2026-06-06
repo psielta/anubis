@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     MAX_UPLOAD_SIZE_MB: int = 250
     MAX_COVER_SIZE_MB: int = 5
 
+    # AI study assistant (Gemini). GEMINI_MODEL is the current Gemini-3 flash
+    # model from the docs; override via .env as the lineup evolves.
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-3.5-flash"
+    AI_INLINE_MAX_MB: int = 15
+
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     @classmethod
     def _split_cors(cls, v: object) -> object:

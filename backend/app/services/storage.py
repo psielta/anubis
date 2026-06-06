@@ -24,6 +24,15 @@ class StorageService:
                 Bucket=settings.S3_BUCKET, Key=key, Body=body, ContentType=content_type
             )
 
+    async def read_bytes(self, key: str) -> bytes:
+        async with self._client() as s3:
+            resp = await s3.get_object(Bucket=settings.S3_BUCKET, Key=key)
+            body = resp["Body"]
+            try:
+                return await body.read()
+            finally:
+                body.close()
+
     async def stream(self, key: str) -> AsyncIterator[bytes]:
         async with self._client() as s3:
             resp = await s3.get_object(Bucket=settings.S3_BUCKET, Key=key)
