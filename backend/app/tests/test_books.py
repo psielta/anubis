@@ -1,11 +1,13 @@
 import uuid
 from unittest.mock import AsyncMock, MagicMock
 
+import pymupdf
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.main import app
 from app.services import storage as storage_module
+from app.services.metadata import extract_pdf_metadata
 from app.services.storage import StorageService
 
 API = "/api/v1"
@@ -101,6 +103,25 @@ async def _upload_pdf(client, token: str, title: str = "Test Book") -> dict:
         files={"file": ("book.pdf", FAKE_PDF, "application/pdf")},
     )
     return response
+
+
+def _pdf_with_metadata(
+    title: str | None = None, author: str | None = None, pages: int = 1
+) -> bytes:
+    """Build a real, parseable PDF carrying the given embedded metadata."""
+    doc = pymupdf.open()
+    for _ in range(pages):
+        doc.new_page()
+    meta: dict[str, str] = {}
+    if title is not None:
+        meta["title"] = title
+    if author is not None:
+        meta["author"] = author
+    if meta:
+        doc.set_metadata(meta)
+    data: bytes = doc.tobytes()
+    doc.close()
+    return data
 
 
 @pytest.mark.asyncio
@@ -539,3 +560,264 @@ async def test_rename_collection(client):
 
     listing = await client.get(f"{API}/collections", headers=_auth_headers(token))
     assert [c["name"] for c in listing.json()] == ["Egypt"]
+
+
+# --- Auto-detected metadata on upload -------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_import_without_title_falls_back_to_filename(client):
+    _, token = await _token(client)
+    response = await client.post(
+        f"{API}/books",
+        headers=_auth_headers(token),
+        files={"file": ("My Great Book.pdf", FAKE_PDF, "application/pdf")},
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["title"] == "My Great Book"
+    assert body["author"] is None
+
+
+@pytest.mark.asyncio
+async def test_import_blank_title_falls_back_to_filename(client):
+    _, token = await _token(client)
+    response = await client.post(
+        f"{API}/books",
+        headers=_auth_headers(token),
+        data={"title": "   "},
+        files={"file": ("Spaced.pdf", FAKE_PDF, "application/pdf")},
+    )
+    assert response.status_code == 201
+    assert response.json()["title"] == "Spaced"
+
+
+@pytest.mark.asyncio
+async def test_import_client_title_wins(client):
+    _, token = await _token(client)
+    response = await client.post(
+        f"{API}/books",
+        headers=_auth_headers(token),
+        data={"title": "Chosen", "author": "Me"},
+        files={"file": ("ignored.pdf", FAKE_PDF, "application/pdf")},
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["title"] == "Chosen"
+    assert body["author"] == "Me"
+
+
+@pytest.mark.asyncio
+async def test_import_extracts_metadata_from_real_pdf(client):
+    _, token = await _token(client)
+    pdf = _pdf_with_metadata("Embedded Title", "Embedded Author", pages=2)
+    response = await client.post(
+        f"{API}/books",
+        headers=_auth_headers(token),
+        files={"file": ("whatever.pdf", pdf, "application/pdf")},
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["title"] == "Embedded Title"
+    assert body["author"] == "Embedded Author"
+    assert body["page_count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_import_real_pdf_no_metadata_uses_filename_and_page_count(client):
+    _, token = await _token(client)
+    pdf = _pdf_with_metadata(pages=3)
+    response = await client.post(
+        f"{API}/books",
+        headers=_auth_headers(token),
+        files={"file": ("Fallback Name.pdf", pdf, "application/pdf")},
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["title"] == "Fallback Name"
+    assert body["author"] is None
+    assert body["page_count"] == 3
+
+
+@pytest.mark.asyncio
+async def test_import_fake_pdf_has_null_page_count(client):
+    _, token = await _token(client)
+    response = await _upload_pdf(client, token)
+    assert response.status_code == 201
+    assert response.json()["page_count"] is None
+
+
+# --- PATCH /books/{id} (edit details) -------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_patch_updates_title(client):
+    _, token = await _token(client)
+    book_id = (await _upload_pdf(client, token)).json()["id"]
+
+    response = await client.patch(
+        f"{API}/books/{book_id}",
+        headers=_auth_headers(token),
+        json={"title": "Renamed"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["title"] == "Renamed"
+    assert body["author"] == "Test Author"  # untouched
+
+
+@pytest.mark.asyncio
+async def test_patch_updates_author(client):
+    _, token = await _token(client)
+    book_id = (await _upload_pdf(client, token)).json()["id"]
+
+    response = await client.patch(
+        f"{API}/books/{book_id}",
+        headers=_auth_headers(token),
+        json={"author": "New Author"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["author"] == "New Author"
+    assert body["title"] == "Test Book"  # untouched
+
+
+@pytest.mark.asyncio
+async def test_patch_clears_author(client):
+    _, token = await _token(client)
+    book_id = (await _upload_pdf(client, token)).json()["id"]
+
+    response = await client.patch(
+        f"{API}/books/{book_id}",
+        headers=_auth_headers(token),
+        json={"author": None},
+    )
+    assert response.status_code == 200
+    assert response.json()["author"] is None
+
+
+@pytest.mark.asyncio
+async def test_patch_empty_body_changes_nothing(client):
+    _, token = await _token(client)
+    book_id = (await _upload_pdf(client, token)).json()["id"]
+
+    response = await client.patch(
+        f"{API}/books/{book_id}",
+        headers=_auth_headers(token),
+        json={},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["title"] == "Test Book"
+    assert body["author"] == "Test Author"
+
+
+@pytest.mark.asyncio
+async def test_patch_strips_title(client):
+    _, token = await _token(client)
+    book_id = (await _upload_pdf(client, token)).json()["id"]
+
+    response = await client.patch(
+        f"{API}/books/{book_id}",
+        headers=_auth_headers(token),
+        json={"title": "  Trimmed  "},
+    )
+    assert response.status_code == 200
+    assert response.json()["title"] == "Trimmed"
+
+
+@pytest.mark.asyncio
+async def test_patch_rejects_empty_title(client):
+    _, token = await _token(client)
+    book_id = (await _upload_pdf(client, token)).json()["id"]
+
+    response = await client.patch(
+        f"{API}/books/{book_id}",
+        headers=_auth_headers(token),
+        json={"title": ""},
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_patch_rejects_null_title(client):
+    _, token = await _token(client)
+    book_id = (await _upload_pdf(client, token)).json()["id"]
+
+    response = await client.patch(
+        f"{API}/books/{book_id}",
+        headers=_auth_headers(token),
+        json={"title": None},
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_patch_rejects_whitespace_title_and_keeps_value(client):
+    _, token = await _token(client)
+    book_id = (await _upload_pdf(client, token)).json()["id"]
+
+    response = await client.patch(
+        f"{API}/books/{book_id}",
+        headers=_auth_headers(token),
+        json={"title": "   "},
+    )
+    assert response.status_code == 422
+    book = await client.get(f"{API}/books/{book_id}", headers=_auth_headers(token))
+    assert book.json()["title"] == "Test Book"  # not overwritten with empty
+
+
+@pytest.mark.asyncio
+async def test_patch_missing_book_returns_404(client):
+    _, token = await _token(client)
+    response = await client.patch(
+        f"{API}/books/999999",
+        headers=_auth_headers(token),
+        json={"title": "Nope"},
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_patch_isolated_per_user(client):
+    _, token1 = await _token(client)
+    book_id = (await _upload_pdf(client, token1)).json()["id"]
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as other:
+        _, token2 = await _token(other)
+        resp = await other.patch(
+            f"{API}/books/{book_id}",
+            headers=_auth_headers(token2),
+            json={"title": "Hijacked"},
+        )
+        assert resp.status_code == 404
+
+
+# --- metadata service -----------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_extract_metadata_fake_pdf_returns_none():
+    meta = await extract_pdf_metadata(FAKE_PDF)
+    assert meta == {"title": None, "author": None, "page_count": None}
+
+
+@pytest.mark.asyncio
+async def test_extract_metadata_non_pdf_returns_none():
+    meta = await extract_pdf_metadata(b"not a pdf at all")
+    assert meta == {"title": None, "author": None, "page_count": None}
+
+
+@pytest.mark.asyncio
+async def test_extract_metadata_real_pdf():
+    meta = await extract_pdf_metadata(_pdf_with_metadata("X", "Y", pages=2))
+    assert meta["title"] == "X"
+    assert meta["author"] == "Y"
+    assert meta["page_count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_extract_metadata_strips_whitespace():
+    meta = await extract_pdf_metadata(_pdf_with_metadata("  Spaced  "))
+    assert meta["title"] == "Spaced"

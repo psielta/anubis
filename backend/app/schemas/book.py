@@ -27,6 +27,15 @@ class BookPage(BaseModel):
     page_size: int
 
 
+class BookUpdate(BaseModel):
+    # PATCH: omitting a field leaves it unchanged. ``author`` may be sent as null
+    # to clear it. ``title`` cannot be null/empty -- the schema rejects "" via
+    # min_length, and the endpoint rejects null and "   " (empty after strip)
+    # using ``model_fields_set`` to tell "absent" from "explicitly null".
+    title: str | None = Field(default=None, min_length=1, max_length=512)
+    author: str | None = Field(default=None, max_length=255)
+
+
 class ProgressUpdate(BaseModel):
     last_page: int = Field(ge=1)
     page_count: int = Field(ge=1)

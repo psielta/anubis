@@ -11,8 +11,14 @@ from app.core.config import settings
 from app.crud import book as book_crud
 from app.crud import collection as collection_crud
 from app.models.book import Book
-from app.schemas.book import BookPage, BookRead, CollectionsUpdate, ProgressUpdate
-from app.services import covers
+from app.schemas.book import (
+    BookPage,
+    BookRead,
+    BookUpdate,
+    CollectionsUpdate,
+    ProgressUpdate,
+)
+from app.services import covers, metadata
 from app.services.storage import storage
 
 router = APIRouter(prefix="/books", tags=["books"])
@@ -48,6 +54,14 @@ def _sanitize_filename(name: str) -> str:
     return safe or "download"
 
 
+def _first_nonempty(*values: str | None) -> str | None:
+    """First value that is non-empty after stripping, else None."""
+    for value in values:
+        if value is not None and value.strip():
+            return value.strip()
+    return None
+
+
 def _max_bytes() -> int:
     return settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
 
@@ -76,8 +90,8 @@ async def _store_cover(user_id: int, data: bytes, content_type: str) -> str:
 async def import_book(
     current_user: CurrentUser,
     db: DbSession,
-    title: Annotated[str, Form(min_length=1, max_length=512)],
     file: Annotated[UploadFile, File()],
+    title: Annotated[str | None, Form(max_length=512)] = None,
     author: Annotated[str | None, Form(max_length=255)] = None,
     cover: Annotated[UploadFile | None, File()] = None,
 ) -> BookRead:
@@ -93,6 +107,18 @@ async def import_book(
 
     # Validate a manual cover (if any) up front, before storing anything.
     manual_cover = await _read_manual_cover(cover) if cover is not None else None
+
+    # Auto-detect from the same bytes already read. Resolution order for each
+    # field: client-provided value > embedded PDF metadata > filename (title only).
+    meta = await metadata.extract_pdf_metadata(data)
+    meta_title = meta["title"] if isinstance(meta["title"], str) else None
+    meta_author = meta["author"] if isinstance(meta["author"], str) else None
+    stem = filename[:-4] if filename.lower().endswith(".pdf") else filename
+    resolved_title = (_first_nonempty(title, meta_title) or stem or "Untitled")[:512]
+    resolved_author = _first_nonempty(author, meta_author)
+    if resolved_author is not None:
+        resolved_author = resolved_author[:255]
+    page_count = meta["page_count"] if isinstance(meta["page_count"], int) else None
 
     object_key = f"users/{current_user.id}/books/{uuid4().hex}.{file_format}"
     await storage.upload(object_key, data, content_type)
@@ -114,13 +140,14 @@ async def import_book(
         book = await book_crud.create(
             db,
             user_id=current_user.id,
-            title=title,
-            author=author,
+            title=resolved_title,
+            author=resolved_author,
             file_format=file_format,
             content_type=content_type,
             file_size=len(data),
             original_filename=filename,
             object_key=object_key,
+            page_count=page_count,
             cover_object_key=cover_key,
             cover_content_type=cover_content_type,
             cover_file_size=cover_file_size,
@@ -168,6 +195,34 @@ async def get_book(
     book = await book_crud.get_for_user(db, current_user.id, book_id)
     if book is None:
         raise HTTPException(404, "Book not found")
+    return await _book_read(db, book)
+
+
+@router.patch("/{book_id}", response_model=BookRead)
+async def update_book(
+    book_id: int,
+    current_user: CurrentUser,
+    db: DbSession,
+    payload: BookUpdate,
+) -> BookRead:
+    book = await book_crud.get_for_user(db, current_user.id, book_id)
+    if book is None:
+        raise HTTPException(404, "Book not found")
+
+    fields = payload.model_fields_set
+    new_title: str | None = None
+    if "title" in fields:  # title present: must not be null/empty
+        if payload.title is None or not payload.title.strip():
+            raise HTTPException(422, "Title cannot be empty")
+        new_title = payload.title.strip()
+
+    book = await book_crud.update_details(
+        db,
+        book,
+        title=new_title,
+        author=payload.author,
+        set_author="author" in fields,
+    )
     return await _book_read(db, book)
 
 

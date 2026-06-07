@@ -18,6 +18,7 @@ async def create(
     file_size: int,
     original_filename: str,
     object_key: str,
+    page_count: int | None = None,
     cover_object_key: str | None = None,
     cover_content_type: str | None = None,
     cover_file_size: int | None = None,
@@ -31,6 +32,7 @@ async def create(
         file_size=file_size,
         original_filename=original_filename,
         object_key=object_key,
+        page_count=page_count,
         cover_object_key=cover_object_key,
         cover_content_type=cover_content_type,
         cover_file_size=cover_file_size,
@@ -71,6 +73,25 @@ async def set_progress(
 ) -> Book:
     book.last_page = last_page
     book.page_count = page_count
+    await db.commit()
+    await db.refresh(book)
+    return book
+
+
+async def update_details(
+    db: AsyncSession,
+    book: Book,
+    *,
+    title: str | None = None,
+    author: str | None = None,
+    set_author: bool = False,
+) -> Book:
+    """Patch title/author. ``title`` is applied only when not None; ``author`` is
+    applied (including to None, to clear it) only when ``set_author`` is True."""
+    if title is not None:
+        book.title = title
+    if set_author:
+        book.author = author
     await db.commit()
     await db.refresh(book)
     return book
