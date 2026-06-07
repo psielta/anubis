@@ -1,4 +1,8 @@
-# Anubis
+<p align="center">
+  <img src="docs/anubis-logo.svg" alt="Anubis" width="140" height="140" />
+</p>
+
+<h1 align="center">Anubis</h1>
 
 Anubis is a portfolio full-stack application inspired by BookFusion: a personal
 digital library where users can organize books, read and study long-form
