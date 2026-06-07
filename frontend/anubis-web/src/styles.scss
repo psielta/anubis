@@ -16,12 +16,12 @@ html {
       // Brand voice: Cinzel for display/headlines (classical Roman caps),
       // Spectral for body/UI (a refined screen serif fit for a library).
       typography: (
-        brand-family: 'Cinzel, "Times New Roman", serif',
-        plain-family: 'Spectral, Georgia, serif',
-        bold-weight: 600,
-        medium-weight: 500,
-        regular-weight: 400,
-      ),
+          brand-family: 'Cinzel, "Times New Roman", serif',
+          plain-family: 'Spectral, Georgia, serif',
+          bold-weight: 600,
+          medium-weight: 500,
+          regular-weight: 400,
+        ),
       density: 0,
     )
   );
@@ -137,6 +137,15 @@ a {
   color: var(--anubis-gold-deep);
   font-size: 0.8rem;
   font-variant-numeric: tabular-nums;
+}
+
+// Dialog surfaces (upload queue + edit details) live in a CDK overlay, so they
+// are styled globally. Honour the Anubis light "parchment" surface with a gold
+// hairline; corners are already squared by the --mat-sys-corner-* flattening.
+.anubis-dialog .mat-mdc-dialog-surface {
+  background: var(--anubis-surface);
+  border: 1px solid var(--anubis-line);
+  color: var(--anubis-ink);
 }
 
 // pdf.js text layer — transparent selectable text over each page canvas.

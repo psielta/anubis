@@ -1,0 +1,63 @@
+<div class="dialog">
+  <header class="dialog-head">
+    <div>
+      <p class="eyebrow">Edit details</p>
+      <h2 class="dialog-title">Book details</h2>
+    </div>
+    <button type="button" class="dialog-close" aria-label="Close" (click)="cancel()">
+      <mat-icon>close</mat-icon>
+    </button>
+  </header>
+
+  <p class="dialog-sub">Fix the title or author if auto-detection got it wrong.</p>
+
+  <mat-form-field appearance="outline" class="full-width">
+    <mat-label>Title</mat-label>
+    <input
+      matInput
+      [value]="editTitle()"
+      (input)="editTitle.set($any($event.target).value)"
+      maxlength="512"
+    />
+  </mat-form-field>
+
+  <mat-form-field appearance="outline" class="full-width">
+    <mat-label>Author</mat-label>
+    <input
+      matInput
+      [value]="editAuthor()"
+      (input)="editAuthor.set($any($event.target).value)"
+      maxlength="255"
+    />
+    @if (editAuthor()) {
+      <button
+        matSuffix
+        type="button"
+        class="clear-suffix"
+        aria-label="Clear author"
+        (click)="editAuthor.set('')"
+      >
+        <mat-icon>close</mat-icon>
+      </button>
+    }
+  </mat-form-field>
+
+  @if (error()) {
+    <p class="dialog-error">{{ error() }}</p>
+  }
+
+  <footer class="dialog-foot">
+    <button mat-stroked-button type="button" [disabled]="savingEdit()" (click)="cancel()">
+      Cancel
+    </button>
+    <button
+      mat-flat-button
+      color="primary"
+      class="save-btn"
+      [disabled]="savingEdit() || !editTitle().trim()"
+      (click)="save()"
+    >
+      {{ savingEdit() ? 'Saving…' : 'Save changes' }}
+    </button>
+  </footer>
+</div>

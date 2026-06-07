@@ -19,3 +19,14 @@ export interface BookPage {
   page: number;
   page_size: number;
 }
+
+export type UploadStatus = 'queued' | 'uploading' | 'done' | 'error';
+
+export interface UploadItem {
+  id: number; // local client id (incrementing counter)
+  file: File;
+  status: UploadStatus;
+  progress: number; // 0..100
+  error?: string;
+  book?: Book; // populated on success
+}

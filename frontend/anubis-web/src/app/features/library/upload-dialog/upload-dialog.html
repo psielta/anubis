@@ -1,0 +1,73 @@
+<div class="dialog">
+  <header class="dialog-head">
+    <div>
+      <p class="eyebrow">Your archive</p>
+      <h2 class="dialog-title">Upload books</h2>
+    </div>
+    <button type="button" class="dialog-close" aria-label="Close" (click)="close()">
+      <mat-icon>close</mat-icon>
+    </button>
+  </header>
+
+  <p class="dialog-sub">
+    Drag &amp; drop your PDFs or click to select. Titles are detected automatically — you can fix
+    any details later.
+  </p>
+
+  <input #fileInput type="file" accept=".pdf" multiple hidden (change)="onFilesSelected($event)" />
+  <button
+    type="button"
+    class="dropzone"
+    [class.dragging]="dragging()"
+    (click)="fileInput.click()"
+    (dragover)="onDragOver($event)"
+    (dragleave)="onDragLeave($event)"
+    (drop)="onDrop($event)"
+  >
+    <mat-icon>cloud_upload</mat-icon>
+    <span class="dropzone-main">Drag &amp; drop your files</span>
+    <span class="dropzone-sub">or click to select &middot; PDF &middot; up to 250 MB</span>
+  </button>
+
+  @if (error()) {
+    <p class="dialog-error">{{ error() }}</p>
+  }
+
+  @if (queue().length) {
+    <ul class="queue">
+      @for (item of queue(); track item.id) {
+        <li class="queue-item" [class]="'is-' + item.status">
+          <mat-icon class="queue-icon">{{ statusIcon(item.status) }}</mat-icon>
+          <div class="queue-body">
+            <span class="queue-name" [title]="item.file.name">{{ item.file.name }}</span>
+            @if (item.status === 'uploading') {
+              <mat-progress-bar mode="determinate" [value]="item.progress" />
+            } @else if (item.status === 'error') {
+              <span class="queue-err">{{ item.error }}</span>
+            } @else {
+              <span class="queue-sub">{{ sizeLabel(item.file.size) }}</span>
+            }
+          </div>
+          @if (item.status !== 'uploading') {
+            <button
+              type="button"
+              class="queue-remove"
+              aria-label="Remove"
+              (click)="removeQueued(item.id)"
+            >
+              <mat-icon>close</mat-icon>
+            </button>
+          }
+        </li>
+      }
+    </ul>
+  }
+
+  <footer class="dialog-foot">
+    @if (hasCompleted()) {
+      <button type="button" class="link-btn" (click)="clearCompleted()">Clear finished</button>
+    }
+    <span class="foot-spacer"></span>
+    <button mat-flat-button color="primary" class="done-btn" (click)="close()">Done</button>
+  </footer>
+</div>

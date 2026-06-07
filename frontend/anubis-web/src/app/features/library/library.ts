@@ -1,24 +1,21 @@
 import { UpperCasePipe } from '@angular/common';
 import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { HttpEventType } from '@angular/common/http';
 import { DomSanitizer, SafeUrl } from '@angular/platform-browser';
 import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
-import { MatCardModule } from '@angular/material/card';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
-import { MatProgressBarModule } from '@angular/material/progress-bar';
-import { LibraryService } from '../../core/services/library';
 import { Book } from '../../core/models/book.model';
 import { Collection } from '../../core/models/collection.model';
+import { LibraryService } from '../../core/services/library';
+import { EditBookDialog } from './edit-book-dialog/edit-book-dialog';
+import { UploadDialog } from './upload-dialog/upload-dialog';
 
-const MAX_UPLOAD_MB = 250;
 const MAX_COVER_MB = 5;
-const ACCEPTED_EXTENSIONS = ['.pdf'];
 const ACCEPTED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
 const SEARCH_DEBOUNCE_MS = 300;
 
@@ -26,13 +23,11 @@ const SEARCH_DEBOUNCE_MS = 300;
   selector: 'app-library',
   imports: [
     UpperCasePipe,
-    ReactiveFormsModule,
     RouterLink,
-    MatCardModule,
+    MatDialogModule,
     MatFormFieldModule,
     MatInputModule,
     MatButtonModule,
-    MatProgressBarModule,
     MatIconModule,
     MatMenuModule,
     MatPaginatorModule,
@@ -41,9 +36,9 @@ const SEARCH_DEBOUNCE_MS = 300;
   styleUrl: './library.scss',
 })
 export class Library implements OnInit, OnDestroy {
-  private fb = inject(FormBuilder);
   private library = inject(LibraryService);
   private sanitizer = inject(DomSanitizer);
+  private dialog = inject(MatDialog);
 
   protected readonly books = signal<Book[]>([]);
   protected readonly total = signal(0);
@@ -56,22 +51,11 @@ export class Library implements OnInit, OnDestroy {
   protected readonly editingCollectionId = signal<number | null>(null);
 
   protected readonly loading = signal(false);
-  protected readonly uploading = signal(false);
-  protected readonly progress = signal(0);
   protected readonly error = signal<string | null>(null);
-  protected readonly selectedFile = signal<File | null>(null);
-  protected readonly selectedCover = signal<File | null>(null);
-  protected readonly coverPreview = signal<SafeUrl | null>(null);
 
   protected readonly coverUrls = signal<Record<number, SafeUrl>>({});
   private coverRawUrls: Record<number, string> = {};
-  private coverPreviewRaw: string | null = null;
   private searchTimer: ReturnType<typeof setTimeout> | null = null;
-
-  protected form = this.fb.nonNullable.group({
-    title: ['', [Validators.required, Validators.maxLength(512)]],
-    author: ['', [Validators.maxLength(255)]],
-  });
 
   ngOnInit() {
     this.loadCollections();
@@ -81,7 +65,6 @@ export class Library implements OnInit, OnDestroy {
   ngOnDestroy() {
     if (this.searchTimer) clearTimeout(this.searchTimer);
     for (const url of Object.values(this.coverRawUrls)) URL.revokeObjectURL(url);
-    if (this.coverPreviewRaw) URL.revokeObjectURL(this.coverPreviewRaw);
   }
 
   private load() {
@@ -225,53 +208,6 @@ export class Library implements OnInit, OnDestroy {
     });
   }
 
-  onFileSelected(event: Event) {
-    const input = event.target as HTMLInputElement;
-    const file = input.files?.[0] ?? null;
-    this.error.set(null);
-
-    if (!file) {
-      this.selectedFile.set(null);
-      return;
-    }
-
-    const ext = '.' + file.name.split('.').pop()?.toLowerCase();
-    if (!ACCEPTED_EXTENSIONS.includes(ext)) {
-      this.error.set('Only PDF files are supported');
-      this.selectedFile.set(null);
-      input.value = '';
-      return;
-    }
-
-    if (file.size > MAX_UPLOAD_MB * 1024 * 1024) {
-      this.error.set(`File exceeds ${MAX_UPLOAD_MB} MB limit`);
-      this.selectedFile.set(null);
-      input.value = '';
-      return;
-    }
-
-    this.selectedFile.set(file);
-  }
-
-  onCoverSelected(event: Event) {
-    const input = event.target as HTMLInputElement;
-    const file = input.files?.[0] ?? null;
-    if (!file) return;
-    if (!this.validateImage(file, input)) return;
-
-    this.selectedCover.set(file);
-    if (this.coverPreviewRaw) URL.revokeObjectURL(this.coverPreviewRaw);
-    this.coverPreviewRaw = URL.createObjectURL(file);
-    this.coverPreview.set(this.sanitizer.bypassSecurityTrustUrl(this.coverPreviewRaw));
-  }
-
-  clearCover() {
-    this.selectedCover.set(null);
-    if (this.coverPreviewRaw) URL.revokeObjectURL(this.coverPreviewRaw);
-    this.coverPreviewRaw = null;
-    this.coverPreview.set(null);
-  }
-
   private validateImage(file: File, input: HTMLInputElement): boolean {
     if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
       this.error.set('Cover must be a PNG, JPEG or WebP image');
@@ -287,38 +223,33 @@ export class Library implements OnInit, OnDestroy {
     return true;
   }
 
-  import() {
-    const file = this.selectedFile();
-    if (!file || this.form.invalid) return;
+  openUpload() {
+    const ref = this.dialog.open(UploadDialog, {
+      panelClass: 'anubis-dialog',
+      width: '520px',
+      autoFocus: false,
+    });
+    ref.afterClosed().subscribe((didUpload: boolean | undefined) => {
+      if (!didUpload) return;
+      // Surface the freshly imported books at the top of the first page.
+      this.search.set('');
+      this.activeCollectionId.set(null);
+      this.page.set(0);
+      this.load();
+    });
+  }
 
-    const { title, author } = this.form.getRawValue();
-    this.uploading.set(true);
-    this.progress.set(0);
-    this.error.set(null);
-
-    this.library.import(title, author || null, file, this.selectedCover()).subscribe({
-      next: (event) => {
-        if (event.type === HttpEventType.UploadProgress && event.total) {
-          this.progress.set(Math.round((100 * event.loaded) / event.total));
-        }
-        if (event.type === HttpEventType.Response) {
-          this.form.reset();
-          this.selectedFile.set(null);
-          this.clearCover();
-          this.uploading.set(false);
-          this.progress.set(0);
-          // Show the newest book at the top of the first page.
-          this.search.set('');
-          this.activeCollectionId.set(null);
-          this.page.set(0);
-          this.load();
-        }
-      },
-      error: (e) => {
-        this.error.set(e?.error?.detail ?? 'Import failed');
-        this.uploading.set(false);
-        this.progress.set(0);
-      },
+  openEdit(book: Book) {
+    const ref = this.dialog.open(EditBookDialog, {
+      panelClass: 'anubis-dialog',
+      width: '440px',
+      data: { book },
+      autoFocus: false,
+    });
+    ref.afterClosed().subscribe((updated: Book | undefined) => {
+      if (updated) {
+        this.books.update((list) => list.map((b) => (b.id === updated.id ? updated : b)));
+      }
     });
   }
 

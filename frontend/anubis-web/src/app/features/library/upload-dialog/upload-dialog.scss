@@ -1,0 +1,241 @@
+:host {
+  display: block;
+}
+
+.dialog {
+  display: flex;
+  flex-direction: column;
+  padding: 1.5rem;
+}
+
+.dialog-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.dialog-title {
+  margin: 0.2rem 0 0;
+  font-family: 'Cinzel', serif;
+  font-weight: 600;
+  font-size: 1.3rem;
+  color: var(--anubis-ink);
+}
+
+.dialog-close {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--anubis-ink-soft);
+  transition: color 0.15s ease;
+
+  &:hover {
+    color: var(--anubis-ink);
+  }
+}
+
+.dialog-sub {
+  margin: 0.4rem 0 1.1rem;
+  font-size: 0.85rem;
+  color: var(--anubis-ink-soft);
+}
+
+// Dropzone (drag & drop + click) — mirrors the library's dashed dropzone.
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  padding: 1.8rem 1rem;
+  cursor: pointer;
+  color: var(--anubis-ink-soft);
+  background: rgba(200, 162, 76, 0.05);
+  border: 1px dashed rgba(143, 115, 48, 0.5);
+  font: inherit;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease;
+
+  mat-icon {
+    color: var(--anubis-gold-deep);
+    font-size: 30px;
+    width: 30px;
+    height: 30px;
+  }
+
+  &:hover {
+    background: rgba(200, 162, 76, 0.1);
+    border-color: var(--anubis-gold-deep);
+  }
+
+  &.dragging {
+    border-style: solid;
+    border-color: var(--anubis-gold-deep);
+    background: rgba(200, 162, 76, 0.14);
+  }
+}
+
+.dropzone-main {
+  font-weight: 600;
+  color: var(--anubis-ink);
+}
+
+.dropzone-sub {
+  font-size: 0.78rem;
+}
+
+.dialog-error {
+  margin: 0.9rem 0 0;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.84rem;
+  color: #7c2d1c;
+  background: rgba(168, 67, 45, 0.08);
+  border-left: 3px solid var(--anubis-danger);
+}
+
+// Queue list.
+.queue {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.queue-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.6rem;
+  background: var(--anubis-canvas);
+  border: 1px solid var(--anubis-line);
+
+  mat-progress-bar {
+    margin: 0.35rem 0 0;
+  }
+}
+
+.queue-icon {
+  flex-shrink: 0;
+  font-size: 20px;
+  width: 20px;
+  height: 20px;
+  color: var(--anubis-ink-soft);
+}
+
+.queue-item.is-done .queue-icon,
+.queue-item.is-uploading .queue-icon {
+  color: var(--anubis-gold-deep);
+}
+
+.queue-item.is-error .queue-icon {
+  color: var(--anubis-danger);
+}
+
+.queue-item.is-uploading .queue-icon {
+  animation: queue-spin 1.2s linear infinite;
+}
+
+.queue-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.queue-name {
+  font-size: 0.84rem;
+  color: var(--anubis-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.queue-sub {
+  font-size: 0.72rem;
+  color: var(--anubis-ink-soft);
+}
+
+.queue-err {
+  font-size: 0.74rem;
+  color: var(--anubis-danger);
+}
+
+.queue-remove {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--anubis-ink-soft);
+
+  mat-icon {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+  }
+
+  &:hover {
+    color: var(--anubis-danger);
+  }
+}
+
+.dialog-foot {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+
+.foot-spacer {
+  flex: 1;
+}
+
+.link-btn {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 0.8rem;
+  color: var(--anubis-gold-deep);
+  cursor: pointer;
+
+  &:hover {
+    color: var(--anubis-ink);
+  }
+}
+
+.done-btn {
+  font-family: 'Cinzel', serif;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-size: 0.78rem;
+}
+
+@keyframes queue-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .queue-item.is-uploading .queue-icon {
+    animation: none;
+  }
+}

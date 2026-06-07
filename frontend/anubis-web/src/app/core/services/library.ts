@@ -50,21 +50,19 @@ export class LibraryService {
     });
   }
 
-  import(
-    title: string,
-    author: string | null,
-    file: File,
-    cover: File | null = null,
-  ): Observable<HttpEvent<Book>> {
+  /** Upload a single PDF; title/author/page count are detected server-side. */
+  import(file: File): Observable<HttpEvent<Book>> {
     const form = new FormData();
-    form.append('title', title);
-    if (author) form.append('author', author);
     form.append('file', file);
-    if (cover) form.append('cover', cover);
     return this.http.post<Book>(`${this.base}/books`, form, {
       reportProgress: true,
       observe: 'events',
     });
+  }
+
+  /** Patch a book's editable details (title/author). */
+  update(id: number, changes: { title?: string; author?: string | null }): Observable<Book> {
+    return this.http.patch<Book>(`${this.base}/books/${id}`, changes);
   }
 
   get(id: number): Observable<Book> {
