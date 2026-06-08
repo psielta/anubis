@@ -21,8 +21,12 @@ import type {
 } from 'pdfjs-dist';
 import { LibraryService } from '../../core/services/library';
 import { StudyService } from '../../core/services/study';
+import { DiagramsService } from '../../core/services/diagrams';
 import { Book } from '../../core/models/book.model';
 import { StudyKind, StudyMessage, StudyRequest } from '../../core/models/study.model';
+import { Diagram, DiagramType } from '../../core/models/diagram.model';
+import { ExcalidrawCanvas } from './excalidraw-canvas/excalidraw-canvas';
+import { MermaidPreview } from './mermaid-preview/mermaid-preview';
 
 // Served as a static asset (see angular.json); must be an absolute URL so
 // production nginx does not fall through to the SPA index.html.
@@ -44,7 +48,15 @@ const SAVE_DEBOUNCE_MS = 1200;
 
 @Component({
   selector: 'app-reader',
-  imports: [RouterLink, MatButtonModule, MatIconModule, MatMenuModule, MarkdownComponent],
+  imports: [
+    RouterLink,
+    MatButtonModule,
+    MatIconModule,
+    MatMenuModule,
+    MarkdownComponent,
+    ExcalidrawCanvas,
+    MermaidPreview,
+  ],
   templateUrl: './reader.html',
   styleUrl: './reader.scss',
 })
@@ -52,8 +64,10 @@ export class Reader implements OnInit, OnDestroy {
   private route = inject(ActivatedRoute);
   private library = inject(LibraryService);
   private study = inject(StudyService);
+  private diagrams = inject(DiagramsService);
 
   private viewport = viewChild<ElementRef<HTMLDivElement>>('viewport');
+  private excalidrawCanvas = viewChild(ExcalidrawCanvas);
 
   protected readonly book = signal<Book | null>(null);
   protected readonly loading = signal(true);
@@ -78,6 +92,19 @@ export class Reader implements OnInit, OnDestroy {
   protected readonly pendingSelection = signal<string | null>(null);
   private historyLoaded = false;
   private aiController: AbortController | null = null;
+
+  // Study diagrams
+  protected readonly diagramsOpen = signal(false);
+  protected readonly diagramView = signal<'list' | 'edit'>('list');
+  protected readonly diagramList = signal<Diagram[]>([]);
+  protected readonly diagramsLoaded = signal(false);
+  protected readonly diagramsError = signal<string | null>(null);
+  protected readonly activeDiagram = signal<Diagram | null>(null);
+  protected readonly draftTitle = signal('');
+  protected readonly draftType = signal<DiagramType>('mermaid');
+  protected readonly draftContent = signal(''); // mermaid source OR excalidraw scene JSON
+  protected readonly draftPage = signal<number | null>(null);
+  protected readonly diagramSaving = signal(false);
 
   private bookId = 0;
   private data: ArrayBuffer | null = null;
@@ -357,7 +384,10 @@ export class Reader implements OnInit, OnDestroy {
   togglePanel() {
     const open = !this.panelOpen();
     this.panelOpen.set(open);
-    if (open && !this.historyLoaded) this.loadHistory();
+    if (open) {
+      this.diagramsOpen.set(false); // the two right-docked panels are exclusive
+      if (!this.historyLoaded) this.loadHistory();
+    }
   }
 
   captureSelection() {
@@ -506,6 +536,113 @@ export class Reader implements OnInit, OnDestroy {
     this.study.clear(this.bookId).subscribe({
       next: () => this.messages.set([]),
       error: () => {},
+    });
+  }
+
+  // --- Study diagrams ------------------------------------------------------
+  toggleDiagrams() {
+    const open = !this.diagramsOpen();
+    this.diagramsOpen.set(open);
+    if (open) {
+      this.panelOpen.set(false); // mutually exclusive with the AI panel
+      if (!this.diagramsLoaded()) this.loadDiagrams();
+    }
+  }
+
+  private loadDiagrams() {
+    this.diagrams.list(this.bookId).subscribe({
+      next: (items) => {
+        this.diagramList.set(items);
+        this.diagramsLoaded.set(true);
+      },
+      error: () => this.diagramsError.set('Could not load diagrams'),
+    });
+  }
+
+  newDiagram(type: DiagramType) {
+    this.activeDiagram.set(null);
+    this.draftType.set(type);
+    this.draftTitle.set(type === 'mermaid' ? 'Untitled diagram' : 'Untitled drawing');
+    this.draftContent.set(type === 'mermaid' ? 'graph TD\n  A[Start] --> B[End]' : '');
+    this.draftPage.set(this.currentPage());
+    this.diagramsError.set(null);
+    this.diagramView.set('edit');
+  }
+
+  openDiagram(diagram: Diagram) {
+    this.activeDiagram.set(diagram);
+    this.draftType.set(diagram.type);
+    this.draftTitle.set(diagram.title);
+    this.draftContent.set(diagram.content);
+    this.draftPage.set(diagram.page);
+    this.diagramsError.set(null);
+    this.diagramView.set('edit');
+  }
+
+  backToDiagramList() {
+    this.diagramView.set('list');
+  }
+
+  setDraftPage(value: number) {
+    this.draftPage.set(value && value > 0 ? value : null);
+  }
+
+  onSceneChange(json: string) {
+    this.draftContent.set(json);
+  }
+
+  saveDiagram() {
+    const title = this.draftTitle().trim();
+    if (!title || this.diagramSaving()) return;
+
+    // Excalidraw changes are debounced inside the canvas, so pull the freshest
+    // scene synchronously before saving to avoid losing the last edits.
+    let content = this.draftContent();
+    if (this.draftType() === 'excalidraw') {
+      const fresh = this.excalidrawCanvas()?.getScene();
+      if (fresh != null) content = fresh;
+    }
+
+    this.diagramSaving.set(true);
+    this.diagramsError.set(null);
+    const existing = this.activeDiagram();
+    const page = this.draftPage();
+    const request = existing
+      ? this.diagrams.update(this.bookId, existing.id, { title, content, page })
+      : this.diagrams.create(this.bookId, {
+          title,
+          type: this.draftType(),
+          content,
+          page,
+        });
+    request.subscribe({
+      next: (saved) => {
+        this.activeDiagram.set(saved);
+        this.draftContent.set(saved.content);
+        this.diagramList.update((list) => [
+          saved,
+          ...list.filter((d) => d.id !== saved.id),
+        ]);
+        this.diagramSaving.set(false);
+      },
+      error: (err) => {
+        this.diagramsError.set(err?.error?.detail ?? 'Could not save diagram');
+        this.diagramSaving.set(false);
+      },
+    });
+  }
+
+  deleteDiagram(diagram: Diagram) {
+    this.diagrams.remove(this.bookId, diagram.id).subscribe({
+      next: () => {
+        this.diagramList.update((list) => list.filter((d) => d.id !== diagram.id));
+        if (this.activeDiagram()?.id === diagram.id) {
+          this.activeDiagram.set(null);
+          this.diagramView.set('list');
+        }
+      },
+      error: (err) =>
+        this.diagramsError.set(err?.error?.detail ?? 'Could not delete diagram'),
     });
   }
 }

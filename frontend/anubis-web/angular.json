@@ -46,6 +46,34 @@
             "browser": "src/main.ts",
             "tsConfig": "tsconfig.app.json",
             "inlineStyleLanguage": "scss",
+            "define": {
+              "process.env.NODE_ENV": "\"production\""
+            },
+            "allowedCommonJsDependencies": [
+              "@excalidraw/excalidraw",
+              "react",
+              "react-dom",
+              "react-dom/client",
+              "roughjs",
+              "pako",
+              "nanoid",
+              "clsx",
+              "lodash.debounce",
+              "lodash.throttle",
+              "points-on-curve",
+              "perfect-freehand",
+              "png-chunks-extract",
+              "png-chunk-text",
+              "png-chunks-encode",
+              "es6-promise-pool",
+              "@braintree/sanitize-url",
+              "pica",
+              "@excalidraw/markdown-to-text",
+              "dayjs/plugin/customParseFormat.js",
+              "dayjs/plugin/advancedFormat.js",
+              "dayjs/plugin/duration.js",
+              "cytoscape-cose-bilkent"
+            ],
             "assets": [
               {
                 "glob": "**/*",
@@ -58,7 +86,8 @@
               }
             ],
             "styles": [
-              "src/styles.scss"
+              "src/styles.scss",
+              "node_modules/@excalidraw/excalidraw/dist/prod/index.css"
             ]
           },
           "configurations": {

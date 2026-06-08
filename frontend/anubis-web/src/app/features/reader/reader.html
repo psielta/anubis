@@ -1,4 +1,4 @@
-<div class="reader">
+<div class="reader" [class.diagrams-open]="diagramsOpen()">
   <header class="reader-bar">
     <a class="reader-back" routerLink="/library" aria-label="Back to library">
       <mat-icon>arrow_back</mat-icon>
@@ -13,6 +13,15 @@
         aria-label="Study assistant"
       >
         <mat-icon>auto_awesome</mat-icon>
+      </button>
+      <button
+        mat-icon-button
+        class="diagrams-toggle"
+        [class.active]="diagramsOpen()"
+        (click)="toggleDiagrams()"
+        aria-label="Study diagrams"
+      >
+        <mat-icon>account_tree</mat-icon>
       </button>
       @if (toc().length) {
         <button mat-icon-button [matMenuTriggerFor]="tocMenu" aria-label="Table of contents">
@@ -197,6 +206,119 @@
           <mat-icon>send</mat-icon>
         </button>
       </form>
+    </aside>
+  }
+
+  @if (diagramsOpen()) {
+    <aside class="diagrams-panel">
+      <header class="dg-head">
+        @if (diagramView() === 'edit') {
+          <button mat-icon-button (click)="backToDiagramList()" aria-label="Back to list">
+            <mat-icon>arrow_back</mat-icon>
+          </button>
+        }
+        <span class="dg-title"><mat-icon>account_tree</mat-icon> Diagrams</span>
+        <span class="ai-spacer"></span>
+        <button mat-icon-button (click)="toggleDiagrams()" aria-label="Close">
+          <mat-icon>close</mat-icon>
+        </button>
+      </header>
+
+      @if (diagramView() === 'list') {
+        <div class="dg-list">
+          <div class="dg-new">
+            <button class="dg-new-btn" (click)="newDiagram('mermaid')">
+              <mat-icon>schema</mat-icon> New Mermaid
+            </button>
+            <button class="dg-new-btn" (click)="newDiagram('excalidraw')">
+              <mat-icon>draw</mat-icon> New drawing
+            </button>
+          </div>
+          @if (!diagramList().length) {
+            <p class="dg-empty">
+              No diagrams yet. Build a Mermaid diagram or a free-form drawing to map out
+              what you are reading.
+            </p>
+          }
+          @for (d of diagramList(); track d.id) {
+            <button class="dg-card" (click)="openDiagram(d)">
+              <mat-icon class="dg-card-icon">{{
+                d.type === 'mermaid' ? 'schema' : 'draw'
+              }}</mat-icon>
+              <span class="dg-card-main">
+                <span class="dg-card-title">{{ d.title }}</span>
+                <span class="dg-card-meta"
+                  >{{ d.type }}@if (d.page) { · p. {{ d.page }} }</span
+                >
+              </span>
+              <span
+                class="dg-card-del"
+                role="button"
+                aria-label="Delete diagram"
+                (click)="$event.stopPropagation(); deleteDiagram(d)"
+              >
+                <mat-icon>delete</mat-icon>
+              </span>
+            </button>
+          }
+        </div>
+      } @else {
+        <div class="dg-edit">
+          <div class="dg-edit-bar">
+            <input
+              class="dg-name"
+              [value]="draftTitle()"
+              (input)="draftTitle.set($any($event.target).value)"
+              placeholder="Diagram title"
+              maxlength="200"
+            />
+            <label class="dg-page">
+              p.
+              <input
+                type="number"
+                min="1"
+                class="dg-page-input"
+                [value]="draftPage() ?? ''"
+                (input)="setDraftPage($any($event.target).valueAsNumber)"
+              />
+            </label>
+            <button
+              class="dg-save"
+              (click)="saveDiagram()"
+              [disabled]="diagramSaving() || !draftTitle().trim()"
+            >
+              {{ diagramSaving() ? 'Saving…' : 'Save' }}
+            </button>
+          </div>
+
+          @if (draftType() === 'mermaid') {
+            <div class="dg-mermaid">
+              <textarea
+                class="dg-code"
+                [value]="draftContent()"
+                (input)="draftContent.set($any($event.target).value)"
+                spellcheck="false"
+                placeholder="graph TD; A--&gt;B"
+              ></textarea>
+              <app-mermaid-preview class="dg-preview" [source]="draftContent()" />
+            </div>
+          } @else {
+            @defer (on immediate) {
+              <app-excalidraw-canvas
+                class="dg-canvas"
+                [initialScene]="activeDiagram()?.content ?? null"
+                (sceneChange)="onSceneChange($event)"
+              />
+            } @placeholder {
+              <div class="dg-loading">Loading canvas…</div>
+            }
+          }
+        </div>
+      }
+
+      @if (diagramsError()) {
+        <p class="ai-error">{{ diagramsError() }}</p>
+      }
     </aside>
   }
 </div>

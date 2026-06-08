@@ -449,3 +449,277 @@
     color: var(--anubis-danger);
   }
 }
+
+// --- Study diagrams panel --------------------------------------------------
+.diagrams-toggle.active {
+  color: var(--anubis-gold-bright);
+  background: rgba(200, 162, 76, 0.18);
+}
+
+.reader {
+  --dg-panel-w: min(720px, 96vw); // overlay width on narrow screens
+}
+
+.diagrams-panel {
+  position: absolute;
+  top: 56px;
+  right: 0;
+  bottom: 0;
+  width: var(--dg-panel-w);
+  display: flex;
+  flex-direction: column;
+  background: var(--anubis-surface);
+  color: var(--anubis-ink);
+  border-inline-start: 1px solid rgba(200, 162, 76, 0.4);
+  box-shadow: -16px 0 40px -24px rgba(0, 0, 0, 0.7);
+  z-index: 5;
+}
+
+// On desktop the panel reserves its own space so the PDF reflows beside it and
+// stays usable, rather than being covered. Narrow screens keep the overlay.
+@media (min-width: 1024px) {
+  .reader {
+    --dg-panel-w: clamp(360px, 45vw, 720px);
+  }
+
+  .reader.diagrams-open .reader-stage {
+    padding-inline-end: var(--dg-panel-w);
+  }
+}
+
+.dg-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.4rem 0.4rem 1rem;
+  border-block-end: 1px solid var(--anubis-line);
+}
+
+.dg-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: 'Cinzel', serif;
+  font-weight: 600;
+
+  mat-icon {
+    color: var(--anubis-gold-deep);
+  }
+}
+
+.dg-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 1rem;
+}
+
+.dg-new {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.dg-new-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.5rem;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--anubis-ink);
+  background: var(--anubis-canvas);
+  border: 1px solid var(--anubis-line);
+  cursor: pointer;
+
+  &:hover {
+    border-color: var(--anubis-gold-deep);
+  }
+
+  mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+}
+
+.dg-empty {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--anubis-ink-soft);
+}
+
+.dg-card {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.6rem 0.7rem;
+  text-align: start;
+  font: inherit;
+  color: var(--anubis-ink);
+  background: var(--anubis-canvas);
+  border: 1px solid var(--anubis-line);
+  cursor: pointer;
+
+  &:hover {
+    border-color: var(--anubis-gold-deep);
+  }
+}
+
+.dg-card-icon {
+  flex-shrink: 0;
+  color: var(--anubis-gold-deep);
+}
+
+.dg-card-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dg-card-title {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dg-card-meta {
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--anubis-ink-soft);
+}
+
+.dg-card-del {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  color: var(--anubis-ink-soft);
+
+  &:hover {
+    color: var(--anubis-danger);
+  }
+
+  mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+}
+
+.dg-edit {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dg-edit-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1rem;
+  border-block-end: 1px solid var(--anubis-line);
+}
+
+.dg-name {
+  flex: 1;
+  min-width: 0;
+  padding: 0.45rem 0.6rem;
+  font: inherit;
+  color: var(--anubis-ink);
+  background: var(--anubis-canvas);
+  border: 1px solid var(--anubis-line);
+  outline: none;
+
+  &:focus {
+    border-color: var(--anubis-gold-deep);
+  }
+}
+
+.dg-page {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--anubis-ink-soft);
+}
+
+.dg-page-input {
+  width: 5ch;
+  padding: 0.3rem;
+  font: inherit;
+  color: var(--anubis-ink);
+  background: var(--anubis-canvas);
+  border: 1px solid var(--anubis-line);
+  outline: none;
+}
+
+.dg-save {
+  padding: 0.45rem 0.9rem;
+  font: inherit;
+  font-weight: 600;
+  color: var(--anubis-obsidian-deep);
+  background: linear-gradient(160deg, var(--anubis-gold-bright), var(--anubis-gold-deep));
+  border: none;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+}
+
+.dg-mermaid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+@media (max-width: 680px) {
+  .dg-mermaid {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 1fr;
+  }
+}
+
+.dg-code {
+  width: 100%;
+  height: 100%;
+  resize: none;
+  padding: 0.75rem;
+  font-family: ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.85rem;
+  color: var(--anubis-ink);
+  background: var(--anubis-canvas);
+  border: none;
+  border-inline-end: 1px solid var(--anubis-line);
+  outline: none;
+}
+
+.dg-preview {
+  min-height: 0;
+  padding: 0.75rem;
+  background: #fff;
+}
+
+.dg-canvas {
+  flex: 1;
+  min-height: 0;
+  display: block;
+}
+
+.dg-loading {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  color: var(--anubis-ink-soft);
+  font-size: 0.9rem;
+}
