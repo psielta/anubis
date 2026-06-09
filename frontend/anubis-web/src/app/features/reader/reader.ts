@@ -3,6 +3,7 @@ import {
   ElementRef,
   OnDestroy,
   OnInit,
+  computed,
   inject,
   signal,
   viewChild,
@@ -22,11 +23,14 @@ import type {
 import { LibraryService } from '../../core/services/library';
 import { StudyService } from '../../core/services/study';
 import { DiagramsService } from '../../core/services/diagrams';
+import { NotesService } from '../../core/services/notes';
 import { Book } from '../../core/models/book.model';
 import { StudyKind, StudyMessage, StudyRequest } from '../../core/models/study.model';
 import { Diagram, DiagramType } from '../../core/models/diagram.model';
+import { Note } from '../../core/models/note.model';
 import { ExcalidrawCanvas } from './excalidraw-canvas/excalidraw-canvas';
 import { MermaidPreview } from './mermaid-preview/mermaid-preview';
+import { NoteEditor } from './note-editor/note-editor';
 
 // Served as a static asset (see angular.json); must be an absolute URL so
 // production nginx does not fall through to the SPA index.html.
@@ -56,6 +60,7 @@ const SAVE_DEBOUNCE_MS = 1200;
     MarkdownComponent,
     ExcalidrawCanvas,
     MermaidPreview,
+    NoteEditor,
   ],
   templateUrl: './reader.html',
   styleUrl: './reader.scss',
@@ -65,9 +70,11 @@ export class Reader implements OnInit, OnDestroy {
   private library = inject(LibraryService);
   private study = inject(StudyService);
   private diagrams = inject(DiagramsService);
+  private notes = inject(NotesService);
 
   private viewport = viewChild<ElementRef<HTMLDivElement>>('viewport');
   private excalidrawCanvas = viewChild(ExcalidrawCanvas);
+  private noteEditor = viewChild(NoteEditor);
 
   protected readonly book = signal<Book | null>(null);
   protected readonly loading = signal(true);
@@ -105,6 +112,27 @@ export class Reader implements OnInit, OnDestroy {
   protected readonly draftContent = signal(''); // mermaid source OR excalidraw scene JSON
   protected readonly draftPage = signal<number | null>(null);
   protected readonly diagramSaving = signal(false);
+
+  // Study notes (Markdown)
+  protected readonly notesOpen = signal(false);
+  protected readonly noteView = signal<'list' | 'edit'>('list');
+  protected readonly noteList = signal<Note[]>([]);
+  protected readonly notesLoaded = signal(false);
+  protected readonly notesError = signal<string | null>(null);
+  protected readonly noteSearch = signal('');
+  protected readonly activeNote = signal<Note | null>(null);
+  protected readonly noteTitle = signal('');
+  protected readonly noteContent = signal('');
+  protected readonly notePage = signal<number | null>(null);
+  protected readonly noteSaving = signal(false);
+  protected readonly filteredNotes = computed(() => {
+    const q = this.noteSearch().trim().toLowerCase();
+    const list = this.noteList();
+    if (!q) return list;
+    return list.filter(
+      (n) => n.title.toLowerCase().includes(q) || n.content.toLowerCase().includes(q),
+    );
+  });
 
   private bookId = 0;
   private data: ArrayBuffer | null = null;
@@ -385,7 +413,9 @@ export class Reader implements OnInit, OnDestroy {
     const open = !this.panelOpen();
     this.panelOpen.set(open);
     if (open) {
-      this.diagramsOpen.set(false); // the two right-docked panels are exclusive
+      // The right-docked panels (AI, diagrams, notes) are mutually exclusive.
+      this.diagramsOpen.set(false);
+      this.notesOpen.set(false);
       if (!this.historyLoaded) this.loadHistory();
     }
   }
@@ -544,7 +574,8 @@ export class Reader implements OnInit, OnDestroy {
     const open = !this.diagramsOpen();
     this.diagramsOpen.set(open);
     if (open) {
-      this.panelOpen.set(false); // mutually exclusive with the AI panel
+      this.panelOpen.set(false); // mutually exclusive with the AI and notes panels
+      this.notesOpen.set(false);
       if (!this.diagramsLoaded()) this.loadDiagrams();
     }
   }
@@ -619,10 +650,7 @@ export class Reader implements OnInit, OnDestroy {
       next: (saved) => {
         this.activeDiagram.set(saved);
         this.draftContent.set(saved.content);
-        this.diagramList.update((list) => [
-          saved,
-          ...list.filter((d) => d.id !== saved.id),
-        ]);
+        this.diagramList.update((list) => [saved, ...list.filter((d) => d.id !== saved.id)]);
         this.diagramSaving.set(false);
       },
       error: (err) => {
@@ -641,8 +669,121 @@ export class Reader implements OnInit, OnDestroy {
           this.diagramView.set('list');
         }
       },
-      error: (err) =>
-        this.diagramsError.set(err?.error?.detail ?? 'Could not delete diagram'),
+      error: (err) => this.diagramsError.set(err?.error?.detail ?? 'Could not delete diagram'),
+    });
+  }
+
+  // --- Study notes (Markdown) ----------------------------------------------
+  toggleNotes() {
+    const open = !this.notesOpen();
+    this.notesOpen.set(open);
+    if (open) {
+      this.panelOpen.set(false); // mutually exclusive with the AI and diagram panels
+      this.diagramsOpen.set(false);
+      if (!this.notesLoaded()) this.loadNotes();
+    }
+  }
+
+  private loadNotes() {
+    this.notes.list(this.bookId).subscribe({
+      next: (items) => {
+        this.noteList.set(items);
+        this.notesLoaded.set(true);
+      },
+      error: () => this.notesError.set('Could not load notes'),
+    });
+  }
+
+  newNote() {
+    this.activeNote.set(null);
+    this.noteTitle.set('Untitled note');
+    this.noteContent.set('');
+    this.notePage.set(this.currentPage());
+    this.notesError.set(null);
+    this.noteView.set('edit');
+  }
+
+  openNote(note: Note) {
+    this.activeNote.set(note);
+    this.noteTitle.set(note.title);
+    this.noteContent.set(note.content);
+    this.notePage.set(note.page);
+    this.notesError.set(null);
+    this.noteView.set('edit');
+  }
+
+  onNoteContentChange(markdown: string) {
+    this.noteContent.set(markdown);
+  }
+
+  backToNoteList() {
+    this.noteView.set('list');
+  }
+
+  setNotePage(value: number) {
+    this.notePage.set(value && value > 0 ? value : null);
+  }
+
+  /** Native date formatting — DatePipe would pull Angular's locale data into
+   *  the initial bundle just for this label. */
+  noteUpdatedLabel(note: Note): string {
+    return new Date(note.updated_at).toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  }
+
+  /** First content line, stripped of leading Markdown markers, for list cards. */
+  noteExcerpt(note: Note): string {
+    const line = note.content
+      .split('\n')
+      .map((l) => l.replace(/^[#>*\-+`\s]+|^\d+\.\s+/g, '').trim())
+      .find((l) => l.length > 0);
+    if (!line) return '';
+    return line.length > 90 ? `${line.slice(0, 90)}…` : line;
+  }
+
+  saveNote() {
+    const title = this.noteTitle().trim();
+    if (!title || this.noteSaving()) return;
+
+    // The editor debounces its markdownChange output, so pull the freshest
+    // Markdown synchronously before saving to avoid losing the last edits.
+    let content = this.noteContent();
+    const fresh = this.noteEditor()?.getMarkdown();
+    if (fresh != null) content = fresh;
+
+    this.noteSaving.set(true);
+    this.notesError.set(null);
+    const existing = this.activeNote();
+    const page = this.notePage();
+    const request = existing
+      ? this.notes.update(this.bookId, existing.id, { title, content, page })
+      : this.notes.create(this.bookId, { title, content, page });
+    request.subscribe({
+      next: (saved) => {
+        this.activeNote.set(saved);
+        this.noteList.update((list) => [saved, ...list.filter((n) => n.id !== saved.id)]);
+        this.noteSaving.set(false);
+      },
+      error: (err) => {
+        this.notesError.set(err?.error?.detail ?? 'Could not save note');
+        this.noteSaving.set(false);
+      },
+    });
+  }
+
+  deleteNote(note: Note) {
+    this.notes.remove(this.bookId, note.id).subscribe({
+      next: () => {
+        this.noteList.update((list) => list.filter((n) => n.id !== note.id));
+        if (this.activeNote()?.id === note.id) {
+          this.activeNote.set(null);
+          this.noteView.set('list');
+        }
+      },
+      error: (err) => this.notesError.set(err?.error?.detail ?? 'Could not delete note'),
     });
   }
 }

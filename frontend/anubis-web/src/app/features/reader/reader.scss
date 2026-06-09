@@ -256,12 +256,13 @@
   color: var(--anubis-ink-soft);
 }
 
-.ai-markdown {
+.md-body {
   display: block;
 }
 
 // Markdown HTML is rendered dynamically by ngx-markdown, so pierce encapsulation.
-.ai-markdown ::ng-deep {
+// Shared by the AI assistant thread and the study-note preview.
+.md-body ::ng-deep {
   > :first-child {
     margin-top: 0;
   }
@@ -450,8 +451,9 @@
   }
 }
 
-// --- Study diagrams panel --------------------------------------------------
-.diagrams-toggle.active {
+// --- Study diagrams + notes panels ------------------------------------------
+.diagrams-toggle.active,
+.notes-toggle.active {
   color: var(--anubis-gold-bright);
   background: rgba(200, 162, 76, 0.18);
 }
@@ -460,7 +462,8 @@
   --dg-panel-w: min(720px, 96vw); // overlay width on narrow screens
 }
 
-.diagrams-panel {
+.diagrams-panel,
+.notes-panel {
   position: absolute;
   top: 56px;
   right: 0;
@@ -482,7 +485,8 @@
     --dg-panel-w: clamp(360px, 45vw, 720px);
   }
 
-  .reader.diagrams-open .reader-stage {
+  .reader.diagrams-open .reader-stage,
+  .reader.notes-open .reader-stage {
     padding-inline-end: var(--dg-panel-w);
   }
 }
@@ -722,4 +726,33 @@
   place-items: center;
   color: var(--anubis-ink-soft);
   font-size: 0.9rem;
+}
+
+// --- Study notes (Markdown) --------------------------------------------------
+.note-search {
+  padding: 0.5rem 0.7rem;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--anubis-ink);
+  background: var(--anubis-canvas);
+  border: 1px solid var(--anubis-line);
+  outline: none;
+
+  &:focus {
+    border-color: var(--anubis-gold-deep);
+  }
+}
+
+.note-card-excerpt {
+  font-size: 0.8rem;
+  color: var(--anubis-ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.note-editor {
+  flex: 1;
+  min-height: 0;
+  display: block;
 }

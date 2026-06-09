@@ -1,0 +1,178 @@
+<div class="ne-toolbar" role="toolbar" aria-label="Formatting">
+  <div class="ne-group">
+    <button type="button" class="ne-btn" title="Undo" aria-label="Undo" (click)="undo()">
+      <mat-icon>undo</mat-icon>
+    </button>
+    <button type="button" class="ne-btn" title="Redo" aria-label="Redo" (click)="redo()">
+      <mat-icon>redo</mat-icon>
+    </button>
+  </div>
+
+  <div class="ne-group">
+    <button
+      type="button"
+      class="ne-btn ne-text"
+      title="Heading 1"
+      aria-label="Heading 1"
+      [class.active]="state().h1"
+      (click)="toggleHeading(1)"
+    >
+      H1
+    </button>
+    <button
+      type="button"
+      class="ne-btn ne-text"
+      title="Heading 2"
+      aria-label="Heading 2"
+      [class.active]="state().h2"
+      (click)="toggleHeading(2)"
+    >
+      H2
+    </button>
+    <button
+      type="button"
+      class="ne-btn ne-text"
+      title="Heading 3"
+      aria-label="Heading 3"
+      [class.active]="state().h3"
+      (click)="toggleHeading(3)"
+    >
+      H3
+    </button>
+  </div>
+
+  <div class="ne-group">
+    <button
+      type="button"
+      class="ne-btn"
+      title="Bold"
+      aria-label="Bold"
+      [class.active]="state().bold"
+      (click)="toggleBold()"
+    >
+      <mat-icon>format_bold</mat-icon>
+    </button>
+    <button
+      type="button"
+      class="ne-btn"
+      title="Italic"
+      aria-label="Italic"
+      [class.active]="state().italic"
+      (click)="toggleItalic()"
+    >
+      <mat-icon>format_italic</mat-icon>
+    </button>
+    <button
+      type="button"
+      class="ne-btn"
+      title="Strikethrough"
+      aria-label="Strikethrough"
+      [class.active]="state().strike"
+      (click)="toggleStrike()"
+    >
+      <mat-icon>strikethrough_s</mat-icon>
+    </button>
+    <button
+      type="button"
+      class="ne-btn"
+      title="Inline code"
+      aria-label="Inline code"
+      [class.active]="state().code"
+      (click)="toggleCode()"
+    >
+      <mat-icon>code</mat-icon>
+    </button>
+  </div>
+
+  <div class="ne-group">
+    <button
+      type="button"
+      class="ne-btn"
+      title="Bullet list"
+      aria-label="Bullet list"
+      [class.active]="state().bulletList"
+      (click)="toggleBulletList()"
+    >
+      <mat-icon>format_list_bulleted</mat-icon>
+    </button>
+    <button
+      type="button"
+      class="ne-btn"
+      title="Numbered list"
+      aria-label="Numbered list"
+      [class.active]="state().orderedList"
+      (click)="toggleOrderedList()"
+    >
+      <mat-icon>format_list_numbered</mat-icon>
+    </button>
+  </div>
+
+  <div class="ne-group">
+    <button
+      type="button"
+      class="ne-btn"
+      title="Quote"
+      aria-label="Quote"
+      [class.active]="state().blockquote"
+      (click)="toggleBlockquote()"
+    >
+      <mat-icon>format_quote</mat-icon>
+    </button>
+    <button
+      type="button"
+      class="ne-btn"
+      title="Code block"
+      aria-label="Code block"
+      [class.active]="state().codeBlock"
+      (click)="toggleCodeBlock()"
+    >
+      <mat-icon>data_object</mat-icon>
+    </button>
+    <button
+      type="button"
+      class="ne-btn"
+      title="Link"
+      aria-label="Link"
+      [class.active]="state().link"
+      (click)="toggleLink()"
+    >
+      <mat-icon>link</mat-icon>
+    </button>
+    <button
+      type="button"
+      class="ne-btn"
+      title="Divider"
+      aria-label="Divider"
+      (click)="setHorizontalRule()"
+    >
+      <mat-icon>horizontal_rule</mat-icon>
+    </button>
+  </div>
+
+  <div class="ne-group">
+    <button
+      type="button"
+      class="ne-btn"
+      title="Inline equation"
+      aria-label="Inline equation"
+      (click)="insertInlineMath()"
+    >
+      <mat-icon>functions</mat-icon>
+    </button>
+    <button
+      type="button"
+      class="ne-btn"
+      title="Block equation"
+      aria-label="Block equation"
+      (click)="insertBlockMath()"
+    >
+      <mat-icon>calculate</mat-icon>
+    </button>
+  </div>
+</div>
+
+<div #host class="ne-surface"></div>
+
+@if (!ready()) {
+  <p class="ne-loading">Loading editor…</p>
+}

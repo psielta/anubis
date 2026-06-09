@@ -1,4 +1,4 @@
-<div class="reader" [class.diagrams-open]="diagramsOpen()">
+<div class="reader" [class.diagrams-open]="diagramsOpen()" [class.notes-open]="notesOpen()">
   <header class="reader-bar">
     <a class="reader-back" routerLink="/library" aria-label="Back to library">
       <mat-icon>arrow_back</mat-icon>
@@ -22,6 +22,15 @@
         aria-label="Study diagrams"
       >
         <mat-icon>account_tree</mat-icon>
+      </button>
+      <button
+        mat-icon-button
+        class="notes-toggle"
+        [class.active]="notesOpen()"
+        (click)="toggleNotes()"
+        aria-label="Study notes"
+      >
+        <mat-icon>edit_note</mat-icon>
       </button>
       @if (toc().length) {
         <button mat-icon-button [matMenuTriggerFor]="tocMenu" aria-label="Table of contents">
@@ -136,19 +145,23 @@
         }
         @for (m of messages(); track m.id) {
           @if (m.role === 'user') {
-            <div class="ai-msg ai-user"><p>{{ m.content }}</p></div>
+            <div class="ai-msg ai-user">
+              <p>{{ m.content }}</p>
+            </div>
           } @else {
             <div class="ai-msg ai-assistant">
               @if (m.kind !== 'chat') {
                 <span class="ai-scope-label">{{ m.kind }} · {{ m.scope }}</span>
               }
-              <markdown class="ai-markdown" [data]="m.content" />
+              <markdown class="md-body" [data]="m.content" />
             </div>
           }
         }
 
         @if (pendingQuestion()) {
-          <div class="ai-msg ai-user"><p>{{ pendingQuestion() }}</p></div>
+          <div class="ai-msg ai-user">
+            <p>{{ pendingQuestion() }}</p>
+          </div>
         }
         @if (aiBusy()) {
           <div class="ai-msg ai-assistant">
@@ -159,7 +172,7 @@
               </details>
             }
             @if (streamingAnswer()) {
-              <markdown class="ai-markdown" [data]="streamingAnswer()" />
+              <markdown class="md-body" [data]="streamingAnswer()" />
             } @else if (!thinking()) {
               <p class="ai-working">Working…</p>
             }
@@ -196,12 +209,7 @@
       }
 
       <form class="ai-ask" (submit)="$event.preventDefault(); send('chat', q)">
-        <input
-          #q
-          class="ai-input"
-          placeholder="Ask about this book…"
-          [disabled]="aiBusy()"
-        />
+        <input #q class="ai-input" placeholder="Ask about this book…" [disabled]="aiBusy()" />
         <button class="ai-send" type="submit" [disabled]="aiBusy()" aria-label="Ask">
           <mat-icon>send</mat-icon>
         </button>
@@ -236,8 +244,8 @@
           </div>
           @if (!diagramList().length) {
             <p class="dg-empty">
-              No diagrams yet. Build a Mermaid diagram or a free-form drawing to map out
-              what you are reading.
+              No diagrams yet. Build a Mermaid diagram or a free-form drawing to map out what you
+              are reading.
             </p>
           }
           @for (d of diagramList(); track d.id) {
@@ -248,8 +256,11 @@
               <span class="dg-card-main">
                 <span class="dg-card-title">{{ d.title }}</span>
                 <span class="dg-card-meta"
-                  >{{ d.type }}@if (d.page) { · p. {{ d.page }} }</span
-                >
+                  >{{ d.type }}
+                  @if (d.page) {
+                    · p. {{ d.page }}
+                  }
+                </span>
               </span>
               <span
                 class="dg-card-del"
@@ -318,6 +329,115 @@
 
       @if (diagramsError()) {
         <p class="ai-error">{{ diagramsError() }}</p>
+      }
+    </aside>
+  }
+
+  @if (notesOpen()) {
+    <aside class="notes-panel">
+      <header class="dg-head">
+        @if (noteView() === 'edit') {
+          <button mat-icon-button (click)="backToNoteList()" aria-label="Back to list">
+            <mat-icon>arrow_back</mat-icon>
+          </button>
+        }
+        <span class="dg-title"><mat-icon>edit_note</mat-icon> Notes</span>
+        <span class="ai-spacer"></span>
+        <button mat-icon-button (click)="toggleNotes()" aria-label="Close">
+          <mat-icon>close</mat-icon>
+        </button>
+      </header>
+
+      @if (noteView() === 'list') {
+        <div class="dg-list">
+          <div class="dg-new">
+            <button class="dg-new-btn" (click)="newNote()">
+              <mat-icon>post_add</mat-icon> New note
+            </button>
+          </div>
+          @if (noteList().length) {
+            <input
+              class="note-search"
+              type="search"
+              placeholder="Search notes…"
+              aria-label="Search notes"
+              [value]="noteSearch()"
+              (input)="noteSearch.set($any($event.target).value)"
+            />
+          }
+          @if (!noteList().length) {
+            <p class="dg-empty">
+              No notes yet. Capture concepts in your own words, summaries, questions and review
+              points in Markdown while you read.
+            </p>
+          } @else if (!filteredNotes().length) {
+            <p class="dg-empty">No notes match your search.</p>
+          }
+          @for (n of filteredNotes(); track n.id) {
+            <button class="dg-card" (click)="openNote(n)">
+              <mat-icon class="dg-card-icon">description</mat-icon>
+              <span class="dg-card-main">
+                <span class="dg-card-title">{{ n.title }}</span>
+                @if (noteExcerpt(n)) {
+                  <span class="note-card-excerpt">{{ noteExcerpt(n) }}</span>
+                }
+                <span class="dg-card-meta"
+                  >{{ noteUpdatedLabel(n) }}
+                  @if (n.page) {
+                    · p. {{ n.page }}
+                  }
+                </span>
+              </span>
+              <span
+                class="dg-card-del"
+                role="button"
+                aria-label="Delete note"
+                (click)="$event.stopPropagation(); deleteNote(n)"
+              >
+                <mat-icon>delete</mat-icon>
+              </span>
+            </button>
+          }
+        </div>
+      } @else {
+        <div class="dg-edit">
+          <div class="dg-edit-bar">
+            <input
+              class="dg-name"
+              [value]="noteTitle()"
+              (input)="noteTitle.set($any($event.target).value)"
+              placeholder="Note title"
+              maxlength="200"
+            />
+            <label class="dg-page">
+              p.
+              <input
+                type="number"
+                min="1"
+                class="dg-page-input"
+                [value]="notePage() ?? ''"
+                (input)="setNotePage($any($event.target).valueAsNumber)"
+              />
+            </label>
+            <button
+              class="dg-save"
+              (click)="saveNote()"
+              [disabled]="noteSaving() || !noteTitle().trim()"
+            >
+              {{ noteSaving() ? 'Saving…' : 'Save' }}
+            </button>
+          </div>
+
+          <app-note-editor
+            class="note-editor"
+            [initialMarkdown]="noteContent()"
+            (markdownChange)="onNoteContentChange($event)"
+          />
+        </div>
+      }
+
+      @if (notesError()) {
+        <p class="ai-error">{{ notesError() }}</p>
       }
     </aside>
   }
