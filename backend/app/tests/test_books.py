@@ -95,12 +95,14 @@ def mock_storage(monkeypatch):
     )
 
 
-async def _upload_pdf(client, token: str, title: str = "Test Book") -> dict:
+async def _upload_pdf(
+    client, token: str, title: str = "Test Book", data: bytes = FAKE_PDF
+) -> dict:
     response = await client.post(
         f"{API}/books",
         headers=_auth_headers(token),
         data={"title": title, "author": "Test Author"},
-        files={"file": ("book.pdf", FAKE_PDF, "application/pdf")},
+        files={"file": ("book.pdf", data, "application/pdf")},
     )
     return response
 
@@ -409,6 +411,172 @@ async def test_progress_isolated_per_user(client):
             json={"last_page": 2, "page_count": 10},
         )
         assert resp.status_code == 404
+
+
+# --- PUT /books/{id}/toc --------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_toc_save_and_get_preserves_order_and_nesting(client):
+    _, token = await _token(client)
+    book_id = (await _upload_pdf(client, token)).json()["id"]
+    items = [
+        {"title": "Part I", "page": 1, "depth": 0},
+        {"title": "Chapter 1", "page": 2, "depth": 1},
+        {"title": "Section 1.1", "page": None, "depth": 2},
+        {"title": "Part II", "page": 5, "depth": 0},
+    ]
+
+    response = await client.put(
+        f"{API}/books/{book_id}/toc",
+        headers=_auth_headers(token),
+        json={"items": items},
+    )
+    assert response.status_code == 200
+    assert response.json()["toc"] == items
+
+    book = await client.get(f"{API}/books/{book_id}", headers=_auth_headers(token))
+    assert book.status_code == 200
+    assert book.json()["toc"] == items
+
+
+@pytest.mark.asyncio
+async def test_toc_empty_list_clears_custom_toc(client):
+    _, token = await _token(client)
+    book_id = (await _upload_pdf(client, token)).json()["id"]
+    await client.put(
+        f"{API}/books/{book_id}/toc",
+        headers=_auth_headers(token),
+        json={"items": [{"title": "Chapter", "page": 1, "depth": 0}]},
+    )
+
+    response = await client.put(
+        f"{API}/books/{book_id}/toc",
+        headers=_auth_headers(token),
+        json={"items": []},
+    )
+    assert response.status_code == 200
+    assert response.json()["toc"] is None
+
+    book = await client.get(f"{API}/books/{book_id}", headers=_auth_headers(token))
+    assert book.json()["toc"] is None
+
+
+@pytest.mark.asyncio
+async def test_toc_rejects_page_above_known_page_count(client):
+    _, token = await _token(client)
+    pdf = _pdf_with_metadata(pages=2)
+    book_id = (await _upload_pdf(client, token, data=pdf)).json()["id"]
+
+    too_high = await client.put(
+        f"{API}/books/{book_id}/toc",
+        headers=_auth_headers(token),
+        json={"items": [{"title": "Too far", "page": 3, "depth": 0}]},
+    )
+    assert too_high.status_code == 422
+
+    valid = await client.put(
+        f"{API}/books/{book_id}/toc",
+        headers=_auth_headers(token),
+        json={"items": [{"title": "Last page", "page": 2, "depth": 0}]},
+    )
+    assert valid.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_toc_allows_page_when_page_count_unknown(client):
+    _, token = await _token(client)
+    book_id = (await _upload_pdf(client, token)).json()["id"]
+
+    response = await client.put(
+        f"{API}/books/{book_id}/toc",
+        headers=_auth_headers(token),
+        json={"items": [{"title": "Unknown count", "page": 99, "depth": 0}]},
+    )
+    assert response.status_code == 200
+    assert response.json()["toc"][0]["page"] == 99
+
+
+@pytest.mark.asyncio
+async def test_toc_rejects_invalid_titles_depth_and_size(client):
+    _, token = await _token(client)
+    book_id = (await _upload_pdf(client, token)).json()["id"]
+
+    blank = await client.put(
+        f"{API}/books/{book_id}/toc",
+        headers=_auth_headers(token),
+        json={"items": [{"title": "   ", "page": 1, "depth": 0}]},
+    )
+    assert blank.status_code == 422
+
+    bad_depth = await client.put(
+        f"{API}/books/{book_id}/toc",
+        headers=_auth_headers(token),
+        json={"items": [{"title": "Bad depth", "page": 1, "depth": 3}]},
+    )
+    assert bad_depth.status_code == 422
+
+    too_many = await client.put(
+        f"{API}/books/{book_id}/toc",
+        headers=_auth_headers(token),
+        json={
+            "items": [
+                {"title": f"Section {i}", "page": None, "depth": 0}
+                for i in range(1001)
+            ]
+        },
+    )
+    assert too_many.status_code == 422
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "items",
+    [
+        [{"title": "Child without parent", "page": 1, "depth": 1}],
+        [
+            {"title": "Parent", "page": 1, "depth": 0},
+            {"title": "Skipped child", "page": 2, "depth": 2},
+        ],
+    ],
+)
+async def test_toc_rejects_invalid_tree_shape(client, items):
+    _, token = await _token(client)
+    book_id = (await _upload_pdf(client, token)).json()["id"]
+
+    response = await client.put(
+        f"{API}/books/{book_id}/toc",
+        headers=_auth_headers(token),
+        json={"items": items},
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_toc_isolated_per_user(client):
+    _, token1 = await _token(client)
+    book_id = (await _upload_pdf(client, token1)).json()["id"]
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as other:
+        _, token2 = await _token(other)
+        resp = await other.put(
+            f"{API}/books/{book_id}/toc",
+            headers=_auth_headers(token2),
+            json={"items": [{"title": "Hijacked", "page": 1, "depth": 0}]},
+        )
+        assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_toc_missing_book_returns_404(client):
+    _, token = await _token(client)
+    response = await client.put(
+        f"{API}/books/999999/toc",
+        headers=_auth_headers(token),
+        json={"items": [{"title": "Missing", "page": 1, "depth": 0}]},
+    )
+    assert response.status_code == 404
 
 
 async def _create_collection(client, token: str, name: str) -> int:

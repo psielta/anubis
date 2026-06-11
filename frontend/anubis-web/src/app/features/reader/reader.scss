@@ -453,7 +453,8 @@
 
 // --- Study diagrams + notes panels ------------------------------------------
 .diagrams-toggle.active,
-.notes-toggle.active {
+.notes-toggle.active,
+.toc-toggle.active {
   color: var(--anubis-gold-bright);
   background: rgba(200, 162, 76, 0.18);
 }
@@ -463,7 +464,8 @@
 }
 
 .diagrams-panel,
-.notes-panel {
+.notes-panel,
+.toc-panel {
   position: absolute;
   top: 56px;
   right: 0;
@@ -486,7 +488,8 @@
   }
 
   .reader.diagrams-open .reader-stage,
-  .reader.notes-open .reader-stage {
+  .reader.notes-open .reader-stage,
+  .reader.toc-open .reader-stage {
     padding-inline-end: var(--dg-panel-w);
   }
 }
@@ -726,6 +729,111 @@
   place-items: center;
   color: var(--anubis-ink-soft);
   font-size: 0.9rem;
+}
+
+// --- Editable table of contents --------------------------------------------
+.toc-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.toc-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.4rem 0.55rem;
+  font: inherit;
+  font-size: 0.78rem;
+  color: var(--anubis-ink);
+  background: var(--anubis-canvas);
+  border: 1px solid var(--anubis-line);
+  cursor: pointer;
+
+  &:hover {
+    border-color: var(--anubis-gold-deep);
+  }
+
+  mat-icon {
+    font-size: 17px;
+    width: 17px;
+    height: 17px;
+  }
+}
+
+.toc-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 1rem;
+}
+
+.toc-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.toc-depth {
+  flex-shrink: 0;
+  height: 1px;
+}
+
+.toc-title-input {
+  min-width: 10ch;
+}
+
+.toc-page-field {
+  flex-shrink: 0;
+}
+
+.toc-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  flex-shrink: 0;
+}
+
+.toc-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  color: var(--anubis-ink-soft);
+  background: var(--anubis-canvas);
+  border: 1px solid var(--anubis-line);
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    color: var(--anubis-gold-deep);
+    border-color: var(--anubis-gold-deep);
+  }
+
+  &:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+
+  &.danger:hover:not(:disabled) {
+    color: var(--anubis-danger);
+    border-color: var(--anubis-danger);
+  }
+
+  mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+}
+
+.toc-hint {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--anubis-danger);
 }
 
 // --- Study notes (Markdown) --------------------------------------------------

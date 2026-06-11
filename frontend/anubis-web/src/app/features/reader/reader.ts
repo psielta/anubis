@@ -24,6 +24,7 @@ import { LibraryService } from '../../core/services/library';
 import { StudyService } from '../../core/services/study';
 import { DiagramsService } from '../../core/services/diagrams';
 import { NotesService } from '../../core/services/notes';
+import { TocService } from '../../core/services/toc';
 import { Book } from '../../core/models/book.model';
 import { StudyKind, StudyMessage, StudyRequest } from '../../core/models/study.model';
 import { Diagram, DiagramType } from '../../core/models/diagram.model';
@@ -71,6 +72,7 @@ export class Reader implements OnInit, OnDestroy {
   private study = inject(StudyService);
   private diagrams = inject(DiagramsService);
   private notes = inject(NotesService);
+  private tocService = inject(TocService);
 
   private viewport = viewChild<ElementRef<HTMLDivElement>>('viewport');
   private excalidrawCanvas = viewChild(ExcalidrawCanvas);
@@ -83,6 +85,14 @@ export class Reader implements OnInit, OnDestroy {
   protected readonly currentPage = signal(1);
   protected readonly zoomPct = signal(100);
   protected readonly toc = signal<TocItem[]>([]);
+  protected readonly tocOpen = signal(false);
+  protected readonly tocCustom = signal(false);
+  protected readonly tocDraft = signal<TocItem[]>([]);
+  protected readonly tocSaving = signal(false);
+  protected readonly tocError = signal<string | null>(null);
+  protected readonly tocHasBlankTitle = computed(() =>
+    this.tocDraft().some((t) => !t.title.trim()),
+  );
 
   // AI study assistant
   protected readonly panelOpen = signal(false);
@@ -221,7 +231,14 @@ export class Reader implements OnInit, OnDestroy {
       this.scaleBase = target > 0 ? target / unscaled.width : 1;
 
       await this.buildPages(el);
-      void this.loadOutline();
+      const saved = this.book()?.toc;
+      if (saved?.length) {
+        this.toc.set(this.cloneToc(saved));
+        this.tocCustom.set(true);
+      } else {
+        this.tocCustom.set(false);
+        void this.loadOutline();
+      }
 
       if (!this.resumed) {
         this.resumed = true;
@@ -298,10 +315,14 @@ export class Reader implements OnInit, OnDestroy {
 
   /** Build the table of contents from the PDF's outline (bookmarks), if any. */
   private async loadOutline() {
-    if (!this.pdfDoc) return;
+    this.toc.set(await this.extractOutline());
+  }
+
+  private async extractOutline(): Promise<TocItem[]> {
+    if (!this.pdfDoc) return [];
     try {
       const raw = await this.pdfDoc.getOutline();
-      if (!raw?.length) return;
+      if (!raw?.length) return [];
       const items: TocItem[] = [];
       const walk = async (nodes: typeof raw, depth: number): Promise<void> => {
         for (const node of nodes) {
@@ -310,10 +331,14 @@ export class Reader implements OnInit, OnDestroy {
         }
       };
       await walk(raw, 0);
-      this.toc.set(items);
+      return items;
     } catch {
-      // The outline is optional — ignore any failure to read it.
+      return [];
     }
+  }
+
+  private cloneToc(items: TocItem[]): TocItem[] {
+    return items.map((item) => ({ title: item.title, page: item.page, depth: item.depth }));
   }
 
   private async destToPage(dest: unknown): Promise<number | null> {
@@ -413,9 +438,10 @@ export class Reader implements OnInit, OnDestroy {
     const open = !this.panelOpen();
     this.panelOpen.set(open);
     if (open) {
-      // The right-docked panels (AI, diagrams, notes) are mutually exclusive.
+      // The right-docked panels are mutually exclusive.
       this.diagramsOpen.set(false);
       this.notesOpen.set(false);
+      this.tocOpen.set(false);
       if (!this.historyLoaded) this.loadHistory();
     }
   }
@@ -569,13 +595,201 @@ export class Reader implements OnInit, OnDestroy {
     });
   }
 
+  // --- Editable table of contents -----------------------------------------
+  toggleToc() {
+    const open = !this.tocOpen();
+    this.tocOpen.set(open);
+    if (open) {
+      this.panelOpen.set(false);
+      this.diagramsOpen.set(false);
+      this.notesOpen.set(false);
+      this.tocDraft.set(this.cloneToc(this.toc()));
+      this.tocError.set(null);
+    }
+  }
+
+  private blockEnd(list: TocItem[], index: number): number {
+    const item = list[index];
+    if (!item) return index;
+    let end = index + 1;
+    while (end < list.length && list[end].depth > item.depth) end++;
+    return end;
+  }
+
+  private maxDepthInBlock(list: TocItem[], index: number): number {
+    const end = this.blockEnd(list, index);
+    return Math.max(...list.slice(index, end).map((item) => item.depth));
+  }
+
+  private canIndentIn(list: TocItem[], index: number): boolean {
+    if (index <= 0 || index >= list.length) return false;
+    const depth = list[index].depth;
+    return depth <= list[index - 1].depth && this.maxDepthInBlock(list, index) < 2;
+  }
+
+  canIndent(index: number): boolean {
+    return this.canIndentIn(this.tocDraft(), index);
+  }
+
+  private canOutdentIn(list: TocItem[], index: number): boolean {
+    if (index < 0 || index >= list.length) return false;
+    const depth = list[index].depth;
+    if (depth <= 0) return false;
+    const end = this.blockEnd(list, index);
+    return end >= list.length || list[end].depth < depth;
+  }
+
+  canOutdent(index: number): boolean {
+    return this.canOutdentIn(this.tocDraft(), index);
+  }
+
+  setTocTitle(index: number, value: string) {
+    this.tocDraft.update((list) =>
+      list.map((item, i) => (i === index ? { ...item, title: value } : item)),
+    );
+  }
+
+  setTocPage(index: number, value: number) {
+    const page = Number.isFinite(value) && value > 0 ? value : null;
+    this.tocDraft.update((list) =>
+      list.map((item, i) => (i === index ? { ...item, page } : item)),
+    );
+  }
+
+  addTocEntry() {
+    this.tocDraft.update((list) => [
+      ...list,
+      { title: 'New section', page: this.currentPage(), depth: 0 },
+    ]);
+    this.tocError.set(null);
+  }
+
+  indentTocEntry(index: number) {
+    this.tocDraft.update((list) => {
+      if (!this.canIndentIn(list, index)) return list;
+      const end = this.blockEnd(list, index);
+      return list.map((item, i) =>
+        i >= index && i < end ? { ...item, depth: item.depth + 1 } : item,
+      );
+    });
+  }
+
+  outdentTocEntry(index: number) {
+    this.tocDraft.update((list) => {
+      if (!this.canOutdentIn(list, index)) return list;
+      const end = this.blockEnd(list, index);
+      return list.map((item, i) =>
+        i >= index && i < end ? { ...item, depth: item.depth - 1 } : item,
+      );
+    });
+  }
+
+  deleteTocEntry(index: number) {
+    this.tocDraft.update((list) => {
+      const end = this.blockEnd(list, index);
+      return [...list.slice(0, index), ...list.slice(end)];
+    });
+  }
+
+  private previousSiblingStart(list: TocItem[], index: number): number | null {
+    const depth = list[index]?.depth;
+    if (depth == null) return null;
+    for (let i = index - 1; i >= 0; i--) {
+      if (list[i].depth < depth) return null;
+      if (list[i].depth === depth) return i;
+    }
+    return null;
+  }
+
+  private nextSiblingStart(list: TocItem[], index: number): number | null {
+    const depth = list[index]?.depth;
+    if (depth == null) return null;
+    const end = this.blockEnd(list, index);
+    for (let i = end; i < list.length; i++) {
+      if (list[i].depth < depth) return null;
+      if (list[i].depth === depth) return i;
+    }
+    return null;
+  }
+
+  moveTocEntry(index: number, direction: -1 | 1) {
+    this.tocDraft.update((list) => {
+      if (index < 0 || index >= list.length) return list;
+      const end = this.blockEnd(list, index);
+      const block = list.slice(index, end);
+      if (direction < 0) {
+        const previous = this.previousSiblingStart(list, index);
+        if (previous == null) return list;
+        return [
+          ...list.slice(0, previous),
+          ...block,
+          ...list.slice(previous, index),
+          ...list.slice(end),
+        ];
+      }
+
+      const next = this.nextSiblingStart(list, index);
+      if (next == null) return list;
+      const nextEnd = this.blockEnd(list, next);
+      return [
+        ...list.slice(0, index),
+        ...list.slice(next, nextEnd),
+        ...block,
+        ...list.slice(nextEnd),
+      ];
+    });
+  }
+
+  async resetTocFromPdf() {
+    this.tocDraft.set(this.cloneToc(await this.extractOutline()));
+    this.tocError.set(null);
+  }
+
+  saveToc() {
+    if (this.tocSaving() || this.tocHasBlankTitle()) return;
+    const items = this.tocDraft().map((item) => ({
+      title: item.title.trim(),
+      page: item.page,
+      depth: item.depth,
+    }));
+
+    this.tocSaving.set(true);
+    this.tocError.set(null);
+    this.tocService.save(this.bookId, items).subscribe({
+      next: (book) => {
+        void this.applySavedToc(book);
+      },
+      error: (err) => {
+        this.tocError.set(err?.error?.detail ?? 'Could not save contents');
+        this.tocSaving.set(false);
+      },
+    });
+  }
+
+  private async applySavedToc(book: Book) {
+    this.book.set(book);
+    const saved = book.toc?.length ? this.cloneToc(book.toc) : [];
+    if (saved.length) {
+      this.toc.set(saved);
+      this.tocDraft.set(this.cloneToc(saved));
+      this.tocCustom.set(true);
+    } else {
+      const outline = await this.extractOutline();
+      this.toc.set(outline);
+      this.tocDraft.set(this.cloneToc(outline));
+      this.tocCustom.set(false);
+    }
+    this.tocSaving.set(false);
+  }
+
   // --- Study diagrams ------------------------------------------------------
   toggleDiagrams() {
     const open = !this.diagramsOpen();
     this.diagramsOpen.set(open);
     if (open) {
-      this.panelOpen.set(false); // mutually exclusive with the AI and notes panels
+      this.panelOpen.set(false);
       this.notesOpen.set(false);
+      this.tocOpen.set(false);
       if (!this.diagramsLoaded()) this.loadDiagrams();
     }
   }
@@ -678,8 +892,9 @@ export class Reader implements OnInit, OnDestroy {
     const open = !this.notesOpen();
     this.notesOpen.set(open);
     if (open) {
-      this.panelOpen.set(false); // mutually exclusive with the AI and diagram panels
+      this.panelOpen.set(false);
       this.diagramsOpen.set(false);
+      this.tocOpen.set(false);
       if (!this.notesLoaded()) this.loadNotes();
     }
   }

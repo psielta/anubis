@@ -17,6 +17,7 @@ from app.schemas.book import (
     BookUpdate,
     CollectionsUpdate,
     ProgressUpdate,
+    TocUpdate,
 )
 from app.services import covers, metadata
 from app.services.storage import storage
@@ -60,6 +61,20 @@ def _first_nonempty(*values: str | None) -> str | None:
         if value is not None and value.strip():
             return value.strip()
     return None
+
+
+def _validate_toc_tree(items: list[dict]) -> None:
+    if not items:
+        return
+    previous_depth = 0
+    for index, item in enumerate(items):
+        depth = item["depth"]
+        if index == 0:
+            if depth != 0:
+                raise HTTPException(422, "First table-of-contents entry must be top-level")
+        elif depth > previous_depth + 1:
+            raise HTTPException(422, "Table-of-contents nesting skips a level")
+        previous_depth = depth
 
 
 def _max_bytes() -> int:
@@ -260,6 +275,35 @@ async def update_progress(
     book = await book_crud.set_progress(
         db, book, last_page=last_page, page_count=payload.page_count
     )
+    return await _book_read(db, book)
+
+
+@router.put("/{book_id}/toc", response_model=BookRead)
+async def update_toc(
+    book_id: int,
+    current_user: CurrentUser,
+    db: DbSession,
+    payload: TocUpdate,
+) -> BookRead:
+    book = await book_crud.get_for_user(db, current_user.id, book_id)
+    if book is None:
+        raise HTTPException(404, "Book not found")
+
+    cleaned: list[dict] = []
+    for entry in payload.items:
+        title = entry.title.strip()
+        if not title:
+            raise HTTPException(422, "Title cannot be empty")
+        if (
+            entry.page is not None
+            and book.page_count is not None
+            and entry.page > book.page_count
+        ):
+            raise HTTPException(422, "Page cannot exceed the book page count")
+        cleaned.append({"title": title, "page": entry.page, "depth": entry.depth})
+
+    _validate_toc_tree(cleaned)
+    book = await book_crud.set_toc(db, book, toc=cleaned or None)
     return await _book_read(db, book)
 
 

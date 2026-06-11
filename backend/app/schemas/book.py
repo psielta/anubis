@@ -2,6 +2,21 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+MAX_TOC_ENTRIES = 1000
+
+
+class TocEntry(BaseModel):
+    title: str = Field(min_length=1, max_length=512)
+    page: int | None = Field(default=None, ge=1)
+    depth: int = Field(default=0, ge=0, le=2)
+
+
+class TocUpdate(BaseModel):
+    # Replace the whole custom TOC. An empty list clears it back to the PDF's
+    # embedded outline. Page upper-bound is enforced in the endpoint against the
+    # book's page_count.
+    items: list[TocEntry] = Field(max_length=MAX_TOC_ENTRIES)
+
 
 class BookRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -16,6 +31,7 @@ class BookRead(BaseModel):
     has_cover: bool
     last_page: int | None
     page_count: int | None
+    toc: list[TocEntry] | None = None
     collection_ids: list[int] = Field(default_factory=list)
     created_at: datetime
 

@@ -1,4 +1,9 @@
-<div class="reader" [class.diagrams-open]="diagramsOpen()" [class.notes-open]="notesOpen()">
+<div
+  class="reader"
+  [class.diagrams-open]="diagramsOpen()"
+  [class.notes-open]="notesOpen()"
+  [class.toc-open]="tocOpen()"
+>
   <header class="reader-bar">
     <a class="reader-back" routerLink="/library" aria-label="Back to library">
       <mat-icon>arrow_back</mat-icon>
@@ -31,6 +36,15 @@
         aria-label="Study notes"
       >
         <mat-icon>edit_note</mat-icon>
+      </button>
+      <button
+        mat-icon-button
+        class="toc-toggle"
+        [class.active]="tocOpen()"
+        (click)="toggleToc()"
+        aria-label="Edit contents"
+      >
+        <mat-icon>toc</mat-icon>
       </button>
       @if (toc().length) {
         <button mat-icon-button [matMenuTriggerFor]="tocMenu" aria-label="Table of contents">
@@ -438,6 +452,113 @@
 
       @if (notesError()) {
         <p class="ai-error">{{ notesError() }}</p>
+      }
+    </aside>
+  }
+
+  @if (tocOpen()) {
+    <aside class="toc-panel">
+      <header class="dg-head">
+        <span class="dg-title"><mat-icon>toc</mat-icon> Contents</span>
+        <span class="ai-spacer"></span>
+        <div class="toc-panel-actions">
+          <button class="toc-action" type="button" (click)="addTocEntry()">
+            <mat-icon>add</mat-icon> New section
+          </button>
+          <button class="toc-action" type="button" (click)="resetTocFromPdf()">
+            <mat-icon>restart_alt</mat-icon> Reset from PDF
+          </button>
+          <button
+            class="dg-save"
+            type="button"
+            (click)="saveToc()"
+            [disabled]="tocSaving() || tocHasBlankTitle()"
+          >
+            {{ tocSaving() ? 'Savingâ€¦' : 'Save' }}
+          </button>
+        </div>
+        <button mat-icon-button (click)="toggleToc()" aria-label="Close">
+          <mat-icon>close</mat-icon>
+        </button>
+      </header>
+
+      <div class="toc-list">
+        @if (!tocDraft().length) {
+          <p class="dg-empty">No contents yet.</p>
+        }
+        @if (tocHasBlankTitle()) {
+          <p class="toc-hint">Every section needs a title.</p>
+        }
+        @for (entry of tocDraft(); track $index) {
+          <div class="toc-row">
+            <span class="toc-depth" [style.width.px]="entry.depth * 14"></span>
+            <input
+              class="dg-name toc-title-input"
+              [value]="entry.title"
+              (input)="setTocTitle($index, $any($event.target).value)"
+              maxlength="512"
+              placeholder="Section title"
+            />
+            <label class="dg-page toc-page-field">
+              p.
+              <input
+                type="number"
+                min="1"
+                class="dg-page-input"
+                [value]="entry.page ?? ''"
+                (input)="setTocPage($index, $any($event.target).valueAsNumber)"
+              />
+            </label>
+            <div class="toc-row-actions">
+              <button
+                class="toc-icon"
+                type="button"
+                (click)="outdentTocEntry($index)"
+                [disabled]="!canOutdent($index)"
+                aria-label="Outdent section"
+              >
+                <mat-icon>format_indent_decrease</mat-icon>
+              </button>
+              <button
+                class="toc-icon"
+                type="button"
+                (click)="indentTocEntry($index)"
+                [disabled]="!canIndent($index)"
+                aria-label="Indent section"
+              >
+                <mat-icon>format_indent_increase</mat-icon>
+              </button>
+              <button
+                class="toc-icon"
+                type="button"
+                (click)="moveTocEntry($index, -1)"
+                aria-label="Move section up"
+              >
+                <mat-icon>keyboard_arrow_up</mat-icon>
+              </button>
+              <button
+                class="toc-icon"
+                type="button"
+                (click)="moveTocEntry($index, 1)"
+                aria-label="Move section down"
+              >
+                <mat-icon>keyboard_arrow_down</mat-icon>
+              </button>
+              <button
+                class="toc-icon danger"
+                type="button"
+                (click)="deleteTocEntry($index)"
+                aria-label="Delete section"
+              >
+                <mat-icon>delete</mat-icon>
+              </button>
+            </div>
+          </div>
+        }
+      </div>
+
+      @if (tocError()) {
+        <p class="ai-error">{{ tocError() }}</p>
       }
     </aside>
   }

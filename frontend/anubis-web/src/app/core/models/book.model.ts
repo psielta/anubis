@@ -1,3 +1,9 @@
+export interface TocEntry {
+  title: string;
+  page: number | null;
+  depth: number;
+}
+
 export interface Book {
   id: number;
   title: string;
@@ -9,6 +15,7 @@ export interface Book {
   has_cover: boolean;
   last_page: number | null;
   page_count: number | null;
+  toc: TocEntry[] | null;
   collection_ids: number[];
   created_at: string;
 }

@@ -59,7 +59,9 @@ Implemented:
 - Angular route guard, auth interceptor and refresh flow.
 - Book import: PDF upload (up to 250 MB) to MinIO with owner-scoped library API and UI.
 - Book covers: manual image upload plus automatic PDF first-page extraction.
-- In-app PDF reader (continuous scroll, zoom, table of contents from the PDF outline).
+- In-app PDF reader (continuous scroll, zoom, editable table of contents
+  auto-detected from the PDF outline, with custom sections you can create,
+  reorder and nest).
 - Reading progress: resumes where you left off, with progress bars in the library.
 - Collections: organise books into collections, with search and pagination in the library.
 - AI study assistant: ask, summarize and generate flashcards over a book or chapter

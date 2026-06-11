@@ -78,6 +78,15 @@ async def set_progress(
     return book
 
 
+async def set_toc(
+    db: AsyncSession, book: Book, *, toc: list[dict] | None
+) -> Book:
+    book.toc = toc
+    await db.commit()
+    await db.refresh(book)
+    return book
+
+
 async def update_details(
     db: AsyncSession,
     book: Book,
