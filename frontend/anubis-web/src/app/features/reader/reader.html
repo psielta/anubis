@@ -1,5 +1,7 @@
 <div
   class="reader"
+  #readerRoot
+  [style.--dg-user-panel-w]="panelWidth() + 'px'"
   [class.diagrams-open]="diagramsOpen()"
   [class.notes-open]="notesOpen()"
   [class.toc-open]="tocOpen()"
@@ -106,6 +108,20 @@
       (scroll)="hideSelectionButton()"
     ></div>
   </div>
+
+  @if (resizablePanelOpen()) {
+    <div
+      class="panel-splitter"
+      appPanelResizer
+      [resizeTarget]="readerRoot"
+      [initial]="panelWidth()"
+      (resizeEnd)="onPanelResize($event)"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize side panel"
+      tabindex="0"
+    ></div>
+  }
 
   @if (selectionText()) {
     <button
