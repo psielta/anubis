@@ -484,13 +484,93 @@
 // stays usable, rather than being covered. Narrow screens keep the overlay.
 @media (min-width: 1024px) {
   .reader {
-    --dg-panel-w: clamp(360px, 45vw, 720px);
+    --dg-panel-w: clamp(320px, var(--dg-user-panel-w, 45vw), min(90vw, calc(100vw - 360px)));
   }
 
   .reader.diagrams-open .reader-stage,
   .reader.notes-open .reader-stage,
   .reader.toc-open .reader-stage {
     padding-inline-end: var(--dg-panel-w);
+  }
+}
+
+.panel-splitter {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .panel-splitter {
+    position: absolute;
+    top: 56px;
+    bottom: 0;
+    right: var(--dg-panel-w);
+    width: 12px;
+    transform: translateX(50%);
+    z-index: 6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: col-resize;
+    touch-action: none;
+    background: transparent;
+
+    &::before {
+      content: '';
+      position: absolute;
+      inset-block: 0;
+      left: 50%;
+      width: 1px;
+      transform: translateX(-50%);
+      background: var(--anubis-line);
+      transition:
+        width 0.15s ease,
+        background 0.15s ease;
+    }
+
+    &::after {
+      content: '';
+      width: 4px;
+      height: 30px;
+      background: var(--anubis-gold-deep);
+      opacity: 0;
+      transition: opacity 0.15s ease;
+    }
+
+    &:hover::before {
+      width: 2px;
+      background: var(--anubis-gold-deep);
+    }
+
+    &:hover::after {
+      opacity: 0.55;
+    }
+
+    &:focus-visible {
+      outline: none;
+
+      &::before {
+        width: 2px;
+        background: var(--anubis-gold);
+      }
+
+      &::after {
+        opacity: 0.8;
+      }
+    }
+  }
+
+  .reader.resizing {
+    cursor: col-resize;
+    user-select: none;
+
+    .panel-splitter::before {
+      width: 2px;
+      background: var(--anubis-gold);
+    }
+
+    .panel-splitter::after {
+      opacity: 0.9;
+    }
   }
 }
 

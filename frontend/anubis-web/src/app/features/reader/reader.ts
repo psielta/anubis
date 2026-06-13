@@ -32,6 +32,8 @@ import { Note } from '../../core/models/note.model';
 import { ExcalidrawCanvas } from './excalidraw-canvas/excalidraw-canvas';
 import { MermaidPreview } from './mermaid-preview/mermaid-preview';
 import { NoteEditor } from './note-editor/note-editor';
+import { ReaderPrefsService } from '../../core/services/reader-prefs';
+import { PanelResizerDirective } from './panel-resizer.directive';
 
 // Served as a static asset (see angular.json); must be an absolute URL so
 // production nginx does not fall through to the SPA index.html.
@@ -62,6 +64,7 @@ const SAVE_DEBOUNCE_MS = 1200;
     ExcalidrawCanvas,
     MermaidPreview,
     NoteEditor,
+    PanelResizerDirective,
   ],
   templateUrl: './reader.html',
   styleUrl: './reader.scss',
@@ -73,6 +76,12 @@ export class Reader implements OnInit, OnDestroy {
   private diagrams = inject(DiagramsService);
   private notes = inject(NotesService);
   private tocService = inject(TocService);
+  private prefs = inject(ReaderPrefsService);
+
+  protected readonly panelWidth = this.prefs.panelWidth;
+  protected readonly resizablePanelOpen = computed(
+    () => this.tocOpen() || this.notesOpen() || this.diagramsOpen(),
+  );
 
   private viewport = viewChild<ElementRef<HTMLDivElement>>('viewport');
   private excalidrawCanvas = viewChild(ExcalidrawCanvas);
@@ -434,6 +443,10 @@ export class Reader implements OnInit, OnDestroy {
   }
 
   // --- AI study assistant --------------------------------------------------
+  protected onPanelResize(width: number) {
+    this.prefs.setPanelWidth(width);
+  }
+
   togglePanel() {
     const open = !this.panelOpen();
     this.panelOpen.set(open);
