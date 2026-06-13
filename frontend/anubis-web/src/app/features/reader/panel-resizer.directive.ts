@@ -3,7 +3,6 @@ import {
   ElementRef,
   NgZone,
   OnDestroy,
-  computed,
   effect,
   inject,
   input,
@@ -17,7 +16,7 @@ import {
     '(pointerdown)': 'onPointerDown($event)',
     '(keydown)': 'onKeyDown($event)',
     '[attr.aria-valuemin]': 'min()',
-    '[attr.aria-valuemax]': 'maxAllowed()',
+    '[attr.aria-valuemax]': 'maxPx()',
     '[attr.aria-valuenow]': 'now()',
   },
 })
@@ -33,23 +32,37 @@ export class PanelResizerDirective implements OnDestroy {
   readonly resizeEnd = output<number>();
 
   readonly now = signal(0);
-  readonly maxAllowed = computed(() => {
-    const el = this.resizeTarget();
-    const w = el.getBoundingClientRect().width;
-    return Math.min(w - this.readingMin(), w * 0.9);
-  });
+  /** Kept fresh via ResizeObserver for aria-valuemax; clamp reads live geometry. */
+  readonly maxPx = signal(0);
 
   private moveHandler: ((e: PointerEvent) => void) | null = null;
   private endHandler: ((e: PointerEvent) => void) | null = null;
   private capturedPointerId: number | null = null;
+  private resizeObserver: ResizeObserver | null = null;
 
   constructor() {
     effect(() => {
       this.now.set(this.initial());
     });
+
+    effect((onCleanup) => {
+      const el = this.resizeTarget();
+      this.maxPx.set(this.computeMaxAllowed(el));
+      const observer = new ResizeObserver(() => {
+        this.zone.run(() => this.maxPx.set(this.computeMaxAllowed(el)));
+      });
+      observer.observe(el);
+      this.resizeObserver = observer;
+      onCleanup(() => {
+        observer.disconnect();
+        this.resizeObserver = null;
+      });
+    });
   }
 
   ngOnDestroy() {
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
     this.detachListeners();
   }
 
@@ -63,10 +76,10 @@ export class PanelResizerDirective implements OnDestroy {
     this.capturedPointerId = e.pointerId;
 
     target.classList.add('resizing');
-    const rect = target.getBoundingClientRect();
     let current = this.readCurrentWidth(target);
 
     this.moveHandler = (ev: PointerEvent) => {
+      const rect = target.getBoundingClientRect();
       const width = this.clamp(rect.right - ev.clientX, target);
       target.style.setProperty('--dg-user-panel-w', `${width}px`);
       current = width;
@@ -118,8 +131,13 @@ export class PanelResizerDirective implements OnDestroy {
     }
   }
 
+  private computeMaxAllowed(target: HTMLElement): number {
+    const w = target.getBoundingClientRect().width;
+    return Math.min(w - this.readingMin(), w * 0.9);
+  }
+
   private clamp(width: number, target: HTMLElement): number {
-    return Math.round(Math.max(this.min(), Math.min(this.maxAllowed(), width)));
+    return Math.round(Math.max(this.min(), Math.min(this.computeMaxAllowed(target), width)));
   }
 
   private readCurrentWidth(target: HTMLElement): number {
