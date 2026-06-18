@@ -4,7 +4,7 @@ export interface TocEntry {
   depth: number;
 }
 
-export type ReaderPanel = 'assistant' | 'diagrams' | 'notes' | 'toc';
+export type ReaderPanel = 'assistant' | 'diagrams' | 'notes' | 'toc' | 'content_tree';
 export type ReaderSubView = 'list' | 'edit';
 
 export interface ReaderNotesState {

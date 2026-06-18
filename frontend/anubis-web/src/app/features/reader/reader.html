@@ -6,6 +6,7 @@
   [class.diagrams-open]="diagramsOpen()"
   [class.notes-open]="notesOpen()"
   [class.toc-open]="tocOpen()"
+  [class.content-tree-open]="contentTreeOpen()"
 >
   <header class="reader-bar">
     <a class="reader-back" routerLink="/library" aria-label="Back to library">
@@ -48,6 +49,15 @@
         aria-label="Edit contents"
       >
         <mat-icon>toc</mat-icon>
+      </button>
+      <button
+        mat-icon-button
+        class="content-tree-toggle"
+        [class.active]="contentTreeOpen()"
+        (click)="toggleContentTree()"
+        aria-label="Content tree"
+      >
+        <mat-icon>schema</mat-icon>
       </button>
       @if (toc().length) {
         <button mat-icon-button [matMenuTriggerFor]="tocMenu" aria-label="Table of contents">
@@ -245,6 +255,40 @@
           <mat-icon>send</mat-icon>
         </button>
       </form>
+    </aside>
+  }
+
+  @if (contentTreeOpen()) {
+    <aside class="content-tree-panel">
+      <header class="dg-head">
+        <span class="dg-title"><mat-icon>schema</mat-icon> Content tree</span>
+        <span class="ai-spacer"></span>
+        <button
+          class="dg-save"
+          type="button"
+          (click)="saveContentTreeDiagram()"
+          [disabled]="contentTreeSaving() || !toc().length"
+        >
+          {{ contentTreeSaving() ? 'Saving...' : 'Save as diagram' }}
+        </button>
+        <button mat-icon-button (click)="toggleContentTree()" aria-label="Close">
+          <mat-icon>close</mat-icon>
+        </button>
+      </header>
+
+      @if (!toc().length) {
+        <div class="content-tree-empty">
+          <p class="dg-empty">No contents yet.</p>
+        </div>
+      } @else {
+        <div class="content-tree-body">
+          <app-mermaid-preview class="content-tree-preview" [source]="contentTreeMermaid()" />
+        </div>
+      }
+
+      @if (contentTreeError()) {
+        <p class="ai-error">{{ contentTreeError() }}</p>
+      }
     </aside>
   }
 

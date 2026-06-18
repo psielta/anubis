@@ -19,6 +19,7 @@ import type {
   PDFDocumentLoadingTask,
   PDFPageProxy,
   PageViewport,
+  RenderTask,
 } from 'pdfjs-dist';
 import { LibraryService } from '../../core/services/library';
 import { StudyService } from '../../core/services/study';
@@ -42,8 +43,12 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
 
 interface PdfPage {
   num: number;
+  wrap: HTMLDivElement;
   canvas: HTMLCanvasElement;
   rendered: boolean;
+  rendering: boolean;
+  renderTask: RenderTask | null;
+  generation: number;
 }
 
 interface TocItem {
@@ -83,7 +88,12 @@ export class Reader implements OnInit, OnDestroy {
 
   protected readonly panelWidth = this.prefs.panelWidth;
   protected readonly resizablePanelOpen = computed(
-    () => this.panelOpen() || this.tocOpen() || this.notesOpen() || this.diagramsOpen(),
+    () =>
+      this.panelOpen() ||
+      this.tocOpen() ||
+      this.contentTreeOpen() ||
+      this.notesOpen() ||
+      this.diagramsOpen(),
   );
 
   private viewport = viewChild<ElementRef<HTMLDivElement>>('viewport');
@@ -104,6 +114,12 @@ export class Reader implements OnInit, OnDestroy {
   protected readonly tocError = signal<string | null>(null);
   protected readonly tocHasBlankTitle = computed(() =>
     this.tocDraft().some((t) => !t.title.trim()),
+  );
+  protected readonly contentTreeOpen = signal(false);
+  protected readonly contentTreeSaving = signal(false);
+  protected readonly contentTreeError = signal<string | null>(null);
+  protected readonly contentTreeMermaid = computed(() =>
+    this.buildContentTreeMermaid(this.book()?.title ?? 'Book', this.toc()),
   );
 
   // AI study assistant
@@ -286,6 +302,7 @@ export class Reader implements OnInit, OnDestroy {
   private async buildPages(el: HTMLElement) {
     if (!this.pdfDoc) return;
     this.observer?.disconnect();
+    this.releaseAllPages();
     this.visible.clear();
     el.replaceChildren();
     this.pages = [];
@@ -300,6 +317,7 @@ export class Reader implements OnInit, OnDestroy {
             void this.renderPage(num, scale);
           } else {
             this.visible.delete(num);
+            this.releasePage(num);
           }
         }
         if (this.visible.size) {
@@ -321,9 +339,45 @@ export class Reader implements OnInit, OnDestroy {
       const canvas = document.createElement('canvas');
       wrap.appendChild(canvas);
       el.appendChild(wrap);
-      this.pages.push({ num, canvas, rendered: false });
+      this.pages.push({
+        num,
+        wrap,
+        canvas,
+        rendered: false,
+        rendering: false,
+        renderTask: null,
+        generation: 0,
+      });
       this.observer.observe(wrap);
     }
+  }
+
+  private releaseAllPages() {
+    for (const entry of this.pages) {
+      this.releasePageEntry(entry);
+    }
+  }
+
+  private releasePage(num: number) {
+    const entry = this.pages.find((p) => p.num === num);
+    if (entry) this.releasePageEntry(entry);
+  }
+
+  private releasePageEntry(entry: PdfPage) {
+    entry.generation += 1;
+    try {
+      entry.renderTask?.cancel();
+    } catch {
+      // A completed or already-cancelled pdf.js render task can ignore this.
+    }
+    entry.renderTask = null;
+    entry.rendering = false;
+    entry.rendered = false;
+    entry.canvas.width = 0;
+    entry.canvas.height = 0;
+    entry.canvas.style.width = '';
+    entry.canvas.style.height = '';
+    entry.wrap.querySelector('.textLayer')?.remove();
   }
 
   private scrollToPage(el: HTMLElement, num: number) {
@@ -384,27 +438,41 @@ export class Reader implements OnInit, OnDestroy {
 
   private async renderPage(num: number, scale: number) {
     const entry = this.pages.find((p) => p.num === num);
-    if (!entry || entry.rendered || !this.pdfDoc) return;
-    entry.rendered = true;
+    if (!entry || entry.rendered || entry.rendering || !this.pdfDoc) return;
 
-    const page = await this.pdfDoc.getPage(num);
-    const dpr = window.devicePixelRatio || 1;
-    const viewport = page.getViewport({ scale });
-    const hi = page.getViewport({ scale: scale * dpr });
-    const canvas = entry.canvas;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    canvas.width = Math.floor(hi.width);
-    canvas.height = Math.floor(hi.height);
-    canvas.style.width = `${Math.floor(viewport.width)}px`;
-    canvas.style.height = `${Math.floor(viewport.height)}px`;
+    entry.rendering = true;
+    const generation = ++entry.generation;
 
     try {
-      await page.render({ canvas, canvasContext: ctx, viewport: hi }).promise;
+      const page = await this.pdfDoc.getPage(num);
+      if (generation !== entry.generation || !this.visible.has(num)) return;
+
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const viewport = page.getViewport({ scale });
+      const hi = page.getViewport({ scale: scale * dpr });
+      const canvas = entry.canvas;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      canvas.width = Math.floor(hi.width);
+      canvas.height = Math.floor(hi.height);
+      canvas.style.width = `${Math.floor(viewport.width)}px`;
+      canvas.style.height = `${Math.floor(viewport.height)}px`;
+
+      const task = page.render({ canvas, canvasContext: ctx, viewport: hi });
+      entry.renderTask = task;
+      await task.promise;
+      if (generation !== entry.generation || !this.visible.has(num)) return;
       await this.renderTextLayer(page, canvas, viewport);
+      if (generation !== entry.generation || !this.visible.has(num)) return;
+      entry.rendered = true;
     } catch {
-      entry.rendered = false;
+      if (generation === entry.generation) entry.rendered = false;
+    } finally {
+      if (generation === entry.generation) {
+        entry.renderTask = null;
+        entry.rendering = false;
+      }
     }
   }
 
@@ -473,6 +541,7 @@ export class Reader implements OnInit, OnDestroy {
     this.diagramsOpen.set(false);
     this.notesOpen.set(false);
     this.tocOpen.set(false);
+    this.contentTreeOpen.set(false);
 
     switch (state.panel) {
       case 'assistant':
@@ -492,6 +561,9 @@ export class Reader implements OnInit, OnDestroy {
         this.tocOpen.set(true);
         this.tocDraft.set(this.cloneToc(this.toc()));
         break;
+      case 'content_tree':
+        this.contentTreeOpen.set(true);
+        break;
     }
 
     this.readerStateSaveEnabled = true;
@@ -506,6 +578,7 @@ export class Reader implements OnInit, OnDestroy {
     if (this.diagramsOpen()) return 'diagrams';
     if (this.notesOpen()) return 'notes';
     if (this.tocOpen()) return 'toc';
+    if (this.contentTreeOpen()) return 'content_tree';
     return null;
   }
 
@@ -560,6 +633,7 @@ export class Reader implements OnInit, OnDestroy {
       this.diagramsOpen.set(false);
       this.notesOpen.set(false);
       this.tocOpen.set(false);
+      this.contentTreeOpen.set(false);
       if (!this.historyLoaded) this.loadHistory();
     }
     this.scheduleReaderStateSave();
@@ -734,6 +808,7 @@ export class Reader implements OnInit, OnDestroy {
       this.panelOpen.set(false);
       this.diagramsOpen.set(false);
       this.notesOpen.set(false);
+      this.contentTreeOpen.set(false);
       this.tocDraft.set(this.cloneToc(this.toc()));
       this.tocError.set(null);
     }
@@ -916,6 +991,81 @@ export class Reader implements OnInit, OnDestroy {
     this.tocSaving.set(false);
   }
 
+  // --- Content tree ---------------------------------------------------------
+  toggleContentTree() {
+    const open = !this.contentTreeOpen();
+    this.contentTreeOpen.set(open);
+    if (open) {
+      this.panelOpen.set(false);
+      this.diagramsOpen.set(false);
+      this.notesOpen.set(false);
+      this.tocOpen.set(false);
+      this.contentTreeError.set(null);
+    }
+    this.scheduleReaderStateSave();
+  }
+
+  private buildContentTreeMermaid(bookTitle: string, items: TocItem[]): string {
+    const lines = ['flowchart TD', `  root["${this.mermaidLabel(bookTitle)}"]`];
+    const stack = ['root'];
+    items.forEach((item, index) => {
+      const depth = Math.max(0, Math.min(2, Math.round(item.depth)));
+      const id = `toc_${index}`;
+      const title = item.page ? `${item.title} (p. ${item.page})` : item.title;
+      const parent = stack[depth] ?? 'root';
+      lines.push(`  ${id}["${this.mermaidLabel(title)}"]`);
+      lines.push(`  ${parent} --> ${id}`);
+      stack[depth + 1] = id;
+      stack.length = depth + 2;
+    });
+    return lines.join('\n');
+  }
+
+  private mermaidLabel(value: string): string {
+    return value
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  private contentTreeDiagramTitle(): string {
+    const title = `${this.book()?.title?.trim() || 'Book'} content tree`;
+    return title.length > 200 ? title.slice(0, 200) : title;
+  }
+
+  saveContentTreeDiagram() {
+    const content = this.contentTreeMermaid();
+    if (this.contentTreeSaving() || !this.toc().length || !content.trim()) return;
+
+    this.contentTreeSaving.set(true);
+    this.contentTreeError.set(null);
+    this.diagrams
+      .create(this.bookId, {
+        title: this.contentTreeDiagramTitle(),
+        type: 'mermaid',
+        content,
+        page: null,
+      })
+      .subscribe({
+        next: (saved) => {
+          if (this.diagramsLoaded()) {
+            this.diagramList.update((list) => [saved, ...list.filter((d) => d.id !== saved.id)]);
+          }
+          this.contentTreeSaving.set(false);
+          this.notify.success('Content tree saved as diagram');
+        },
+        error: (err) => {
+          const message = this.errorText(err, 'Could not save content tree');
+          this.contentTreeError.set(message);
+          this.notify.error(message);
+          this.contentTreeSaving.set(false);
+        },
+      });
+  }
+
   // --- Study diagrams ------------------------------------------------------
   toggleDiagrams() {
     const open = !this.diagramsOpen();
@@ -924,6 +1074,7 @@ export class Reader implements OnInit, OnDestroy {
       this.panelOpen.set(false);
       this.notesOpen.set(false);
       this.tocOpen.set(false);
+      this.contentTreeOpen.set(false);
       if (!this.diagramsLoaded()) this.loadDiagrams();
     }
     this.scheduleReaderStateSave();
@@ -1076,6 +1227,7 @@ export class Reader implements OnInit, OnDestroy {
       this.panelOpen.set(false);
       this.diagramsOpen.set(false);
       this.tocOpen.set(false);
+      this.contentTreeOpen.set(false);
       if (!this.notesLoaded()) this.loadNotes();
     }
     this.scheduleReaderStateSave();

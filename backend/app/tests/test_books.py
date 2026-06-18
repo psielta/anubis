@@ -449,6 +449,22 @@ async def test_reader_state_save_and_get(client):
 
 
 @pytest.mark.asyncio
+async def test_reader_state_accepts_content_tree_panel(client):
+    _, token = await _token(client)
+    book_id = (await _upload_pdf(client, token)).json()["id"]
+    state = _reader_state_payload(panel="content_tree")
+
+    response = await client.put(
+        f"{API}/books/{book_id}/reader-state",
+        headers=_auth_headers(token),
+        json=state,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["reader_state"] == state
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "payload",
     [

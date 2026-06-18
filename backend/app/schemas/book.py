@@ -33,7 +33,7 @@ class ReaderDiagramsState(BaseModel):
 class ReaderState(BaseModel):
     version: Literal[1] = 1
     zoom_pct: int = Field(default=100, ge=50, le=300)
-    panel: Literal["assistant", "diagrams", "notes", "toc"] | None = None
+    panel: Literal["assistant", "diagrams", "notes", "toc", "content_tree"] | None = None
     panel_width_px: int = Field(default=400, ge=320, le=2000)
     notes: ReaderNotesState = Field(default_factory=ReaderNotesState)
     diagrams: ReaderDiagramsState = Field(default_factory=ReaderDiagramsState)
