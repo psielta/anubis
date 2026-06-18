@@ -1,14 +1,16 @@
 :host {
   display: block;
   min-height: calc(100vh - 60px);
-  background: #202022;
-  color: #f3f3f5;
+  background:
+    radial-gradient(120% 80% at 100% 0%, rgba(200, 162, 76, 0.14), transparent 50%),
+    var(--anubis-canvas);
+  color: var(--anubis-ink);
 }
 
 .detail-page {
   width: min(100%, 1680px);
   margin-inline: auto;
-  padding: 1rem clamp(1rem, 2.4vw, 2.5rem) 2.5rem;
+  padding: clamp(1.25rem, 2.4vw, 2.5rem);
   box-sizing: border-box;
 }
 
@@ -24,10 +26,9 @@
   place-items: center;
   width: 36px;
   height: 36px;
-  border: 0;
-  border-radius: 999px;
-  color: #d6d7dd;
-  background: #171719;
+  border: 1px solid rgba(143, 115, 48, 0.35);
+  color: var(--anubis-gold-deep);
+  background: rgba(251, 246, 234, 0.72);
   cursor: pointer;
 }
 
@@ -36,8 +37,9 @@
 
   h1 {
     margin: 0;
-    color: #ffffff;
-    font-size: 1.45rem;
+    font-family: 'Cinzel', serif;
+    color: var(--anubis-ink);
+    font-size: 1.5rem;
     font-weight: 700;
     letter-spacing: 0;
     white-space: nowrap;
@@ -46,7 +48,7 @@
   }
 
   span {
-    color: #9fa0aa;
+    color: var(--anubis-ink-soft);
     font-size: 0.86rem;
   }
 }
@@ -60,8 +62,8 @@
 
   ::ng-deep .mat-mdc-text-field-wrapper {
     height: 38px;
-    border-radius: 999px;
-    background: #35363b;
+    background: var(--anubis-surface);
+    border: 1px solid var(--anubis-line);
   }
 
   ::ng-deep .mat-mdc-form-field-flex {
@@ -69,30 +71,31 @@
     align-items: center;
   }
 
-  ::ng-deep .mat-mdc-input-element,
+  ::ng-deep .mat-mdc-input-element {
+    color: var(--anubis-ink);
+  }
+
   mat-icon {
-    color: #eef0f6;
+    color: var(--anubis-gold-deep);
   }
 }
 
 .upload-btn {
   height: 38px;
-  border-radius: 999px;
 }
 
 .error {
   margin: 1rem 0 0;
   padding: 0.75rem 1rem;
-  color: #ffd5d0;
-  background: rgba(165, 55, 45, 0.22);
-  border: 1px solid rgba(225, 89, 74, 0.42);
-  border-radius: 8px;
+  color: #7c2d1c;
+  background: rgba(168, 67, 45, 0.08);
+  border: 1px solid rgba(168, 67, 45, 0.28);
 }
 
 .detail-state,
 .empty {
   margin-top: 3rem;
-  color: #a7a8b0;
+  color: var(--anubis-ink-soft);
   text-align: center;
 }
 
@@ -101,9 +104,11 @@
   place-items: center;
   gap: 0.35rem;
   padding: 4rem 1rem;
+  border: 1px dashed rgba(143, 115, 48, 0.45);
+  background: rgba(251, 246, 234, 0.45);
 
   mat-icon {
-    color: #4d83ff;
+    color: var(--anubis-gold-deep);
     font-size: 36px;
     width: 36px;
     height: 36px;
@@ -116,7 +121,8 @@
 }
 
 .empty-title {
-  color: #ffffff;
+  color: var(--anubis-ink);
+  font-family: 'Cinzel', serif;
   font-weight: 700;
 }
 
@@ -138,11 +144,10 @@
   width: 100%;
   aspect-ratio: 0.68;
   overflow: hidden;
-  border-radius: 8px;
-  background: #2b2b2f;
-  border: 1px solid #464750;
+  background: var(--anubis-surface);
+  border: 1px solid rgba(143, 115, 48, 0.45);
   text-decoration: none;
-  box-shadow: 0 16px 28px -20px rgba(0, 0, 0, 0.8);
+  box-shadow: 0 18px 32px -26px rgba(42, 37, 32, 0.65);
 }
 
 .book-cover,
@@ -160,10 +165,11 @@
   display: grid;
   align-content: space-between;
   padding: 1rem;
-  color: #f6d36e;
+  color: var(--anubis-gold-bright);
   background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.09), transparent 12%),
-    linear-gradient(150deg, #2f3036, #111113);
+    linear-gradient(90deg, rgba(232, 207, 136, 0.18), transparent 18%),
+    linear-gradient(160deg, var(--anubis-obsidian-soft), var(--anubis-obsidian-deep));
+  border-left: 4px solid var(--anubis-gold);
   box-sizing: border-box;
 
   span {
@@ -173,6 +179,7 @@
   }
 
   small {
+    color: rgba(232, 207, 136, 0.82);
     font-size: 0.7rem;
     letter-spacing: 0.08em;
   }
@@ -189,7 +196,7 @@
 }
 
 .book-author {
-  color: #858792;
+  color: var(--anubis-ink-soft);
   font-size: 0.8rem;
   white-space: nowrap;
   overflow: hidden;
@@ -198,7 +205,7 @@
 
 .book-title {
   margin-top: 0.15rem;
-  color: #ffffff;
+  color: var(--anubis-ink);
   font-size: 0.96rem;
   font-weight: 700;
   line-height: 1.15;
@@ -213,14 +220,12 @@
   height: 4px;
   margin-top: 0.55rem;
   overflow: hidden;
-  border-radius: 999px;
-  background: #393a40;
+  background: rgba(143, 115, 48, 0.2);
 
   span {
     display: block;
     height: 100%;
-    border-radius: inherit;
-    background: #4d83ff;
+    background: linear-gradient(90deg, var(--anubis-gold-deep), var(--anubis-gold));
   }
 }
 
@@ -240,22 +245,21 @@
 }
 
 .book-actions button {
-  --mdc-icon-button-icon-color: #f3f3f5;
+  --mdc-icon-button-icon-color: var(--anubis-gold-bright);
   width: 34px;
   height: 34px;
   padding: 5px;
-  color: #f3f3f5;
-  background: rgba(14, 14, 16, 0.82);
-  border-radius: 999px;
+  color: var(--anubis-gold-bright);
+  background: rgba(12, 12, 18, 0.84);
 }
 
 .book-actions button.active {
-  --mdc-icon-button-icon-color: #f6d36e;
-  color: #f6d36e;
+  --mdc-icon-button-icon-color: var(--anubis-gold-bright);
+  color: var(--anubis-gold-bright);
 }
 
 .danger-item {
-  color: #e1594a;
+  color: var(--anubis-danger);
 }
 
 @media (max-width: 780px) {
