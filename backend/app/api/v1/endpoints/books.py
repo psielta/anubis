@@ -1,5 +1,5 @@
 import re
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
@@ -109,10 +109,18 @@ async def import_book(
     file: Annotated[UploadFile, File()],
     title: Annotated[str | None, Form(max_length=512)] = None,
     author: Annotated[str | None, Form(max_length=255)] = None,
+    collection_id: Annotated[int | None, Form()] = None,
     cover: Annotated[UploadFile | None, File()] = None,
 ) -> BookRead:
     if file.size is not None and file.size > _max_bytes():
         raise HTTPException(413, f"File exceeds {settings.MAX_UPLOAD_SIZE_MB} MB limit")
+
+    if collection_id is not None:
+        collection = await collection_crud.get_for_user(
+            db, current_user.id, collection_id
+        )
+        if collection is None:
+            raise HTTPException(404, "Collection not found")
 
     filename = file.filename or "upload"
     data = await file.read()
@@ -168,6 +176,13 @@ async def import_book(
             cover_content_type=cover_content_type,
             cover_file_size=cover_file_size,
         )
+        if collection_id is not None:
+            await collection_crud.set_book_collections(
+                db,
+                user_id=current_user.id,
+                book_id=book.id,
+                collection_ids=[collection_id],
+            )
     except SQLAlchemyError:
         await storage.delete(object_key)
         if cover_key is not None:
@@ -183,6 +198,10 @@ async def list_books(
     db: DbSession,
     search: Annotated[str | None, Query(max_length=200)] = None,
     collection_id: Annotated[int | None, Query()] = None,
+    status: Annotated[
+        Literal["all", "favorites", "plan_to_read", "completed"], Query()
+    ] = "all",
+    sort: Annotated[Literal["date", "title", "series"], Query()] = "date",
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 12,
 ) -> BookPage:
@@ -191,6 +210,8 @@ async def list_books(
         current_user.id,
         search=search,
         collection_id=collection_id,
+        status=status,
+        sort=sort,
         page=page,
         page_size=page_size,
     )
@@ -238,6 +259,8 @@ async def update_book(
         title=new_title,
         author=payload.author,
         set_author="author" in fields,
+        is_favorite=payload.is_favorite,
+        set_is_favorite="is_favorite" in fields,
     )
     return await _book_read(db, book)
 

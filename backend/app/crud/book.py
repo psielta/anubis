@@ -103,13 +103,16 @@ async def update_details(
     title: str | None = None,
     author: str | None = None,
     set_author: bool = False,
+    is_favorite: bool | None = None,
+    set_is_favorite: bool = False,
 ) -> Book:
-    """Patch title/author. ``title`` is applied only when not None; ``author`` is
-    applied (including to None, to clear it) only when ``set_author`` is True."""
+    """Patch details while preserving omitted fields."""
     if title is not None:
         book.title = title
     if set_author:
         book.author = author
+    if set_is_favorite:
+        book.is_favorite = bool(is_favorite)
     await db.commit()
     await db.refresh(book)
     return book
@@ -121,6 +124,8 @@ async def list_page(
     *,
     search: str | None = None,
     collection_id: int | None = None,
+    status: str = "all",
+    sort: str = "date",
     page: int = 1,
     page_size: int = 12,
 ) -> tuple[Sequence[Book], int]:
@@ -132,13 +137,30 @@ async def list_page(
         base = base.join(
             book_collections, book_collections.c.book_id == Book.id
         ).where(book_collections.c.collection_id == collection_id)
+    if status == "favorites":
+        base = base.where(Book.is_favorite.is_(True))
+    elif status == "plan_to_read":
+        base = base.where(Book.last_page.is_(None))
+    elif status == "completed":
+        base = base.where(
+            Book.last_page.is_not(None),
+            Book.page_count.is_not(None),
+            Book.last_page >= Book.page_count,
+        )
 
     total = await db.scalar(select(func.count()).select_from(base.subquery())) or 0
-    stmt = (
-        base.order_by(Book.created_at.desc())
-        .limit(page_size)
-        .offset((page - 1) * page_size)
-    )
+    if sort == "title":
+        order_by = [func.lower(Book.title).asc(), Book.created_at.desc(), Book.id.asc()]
+    elif sort == "series" and collection_id is not None:
+        order_by = [
+            book_collections.c.position.asc(),
+            Book.created_at.desc(),
+            Book.id.asc(),
+        ]
+    else:
+        order_by = [Book.created_at.desc(), Book.id.desc()]
+
+    stmt = base.order_by(*order_by).limit(page_size).offset((page - 1) * page_size)
     books = (await db.scalars(stmt)).all()
     return books, total
 

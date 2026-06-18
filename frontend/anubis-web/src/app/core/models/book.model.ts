@@ -36,6 +36,7 @@ export interface Book {
   file_size: number;
   original_filename: string;
   has_cover: boolean;
+  is_favorite: boolean;
   last_page: number | null;
   page_count: number | null;
   toc: TocEntry[] | null;
@@ -50,6 +51,9 @@ export interface BookPage {
   page: number;
   page_size: number;
 }
+
+export type BookStatus = 'all' | 'favorites' | 'plan_to_read' | 'completed';
+export type BookSort = 'date' | 'title' | 'series';
 
 export type UploadStatus = 'queued' | 'uploading' | 'done' | 'error';
 

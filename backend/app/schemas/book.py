@@ -50,6 +50,7 @@ class BookRead(BaseModel):
     file_size: int
     original_filename: str
     has_cover: bool
+    is_favorite: bool = False
     last_page: int | None
     page_count: int | None
     toc: list[TocEntry] | None = None
@@ -72,6 +73,7 @@ class BookUpdate(BaseModel):
     # using ``model_fields_set`` to tell "absent" from "explicitly null".
     title: str | None = Field(default=None, min_length=1, max_length=512)
     author: str | None = Field(default=None, max_length=255)
+    is_favorite: bool | None = None
 
 
 class ProgressUpdate(BaseModel):

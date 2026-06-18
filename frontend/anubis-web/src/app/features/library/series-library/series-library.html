@@ -1,0 +1,105 @@
+<section class="series-page">
+  <header class="series-top">
+    <button type="button" class="round-btn" routerLink="/library" aria-label="Back to shelf">
+      <mat-icon>chevron_left</mat-icon>
+    </button>
+    <h1>Series</h1>
+    <span class="series-total">{{ series().length }}</span>
+    <span class="top-spacer"></span>
+    @if (creating()) {
+      <input
+        #seriesName
+        class="series-input"
+        placeholder="Series name"
+        autofocus
+        (keyup.enter)="seriesName.blur()"
+        (blur)="createSeries(seriesName.value)"
+      />
+    } @else {
+      <button type="button" class="new-series" (click)="startCreate()">
+        <mat-icon>add</mat-icon>
+        New Series
+      </button>
+    }
+  </header>
+
+  @if (error()) {
+    <p class="error">{{ error() }}</p>
+  }
+
+  @if (loading()) {
+    <div class="series-state">Loading series...</div>
+  } @else if (series().length === 0) {
+    <div class="empty">
+      <mat-icon>view_carousel</mat-icon>
+      <p class="empty-title">No series yet</p>
+      <p class="empty-sub">Create a series and add books to build a shelf row.</p>
+    </div>
+  } @else {
+    <div class="series-stack">
+      @for (item of series(); track item.id) {
+        <section class="series-row">
+          <header class="row-head">
+            <button type="button" class="collapse" (click)="toggleCollapsed(item.id)">
+              <mat-icon>{{ collapsed()[item.id] ? 'chevron_right' : 'expand_more' }}</mat-icon>
+            </button>
+            @if (editingId() === item.id) {
+              <input
+                #renameInput
+                class="row-input"
+                [value]="item.name"
+                autofocus
+                (keyup.enter)="renameInput.blur()"
+                (blur)="renameSeries(item, renameInput.value)"
+              />
+            } @else {
+              <h2>{{ item.name }}</h2>
+            }
+            <span class="count">{{ item.book_count }}</span>
+            <button mat-icon-button [matMenuTriggerFor]="seriesMenu" aria-label="Series options">
+              <mat-icon>more_horiz</mat-icon>
+            </button>
+            <mat-menu #seriesMenu="matMenu">
+              <button mat-menu-item (click)="startRename(item)">
+                <mat-icon>edit</mat-icon>
+                <span>Rename</span>
+              </button>
+              <button mat-menu-item class="danger-item" (click)="deleteSeries(item)">
+                <mat-icon>delete</mat-icon>
+                <span>Delete</span>
+              </button>
+            </mat-menu>
+            <span class="row-spacer"></span>
+            <a class="view-all" [routerLink]="['/library/series', item.id]">View all</a>
+          </header>
+
+          @if (!collapsed()[item.id]) {
+            <div class="book-strip">
+              @for (book of item.items; track bookTrack($index, book)) {
+                <a class="series-book" [routerLink]="['/read', book.id]" [attr.title]="book.title">
+                  <span class="cover">
+                    @if (coverUrls()[book.id]; as cover) {
+                      <img [src]="cover" [alt]="book.title" />
+                    } @else {
+                      <span class="cover-fallback">
+                        <strong>{{ initials(book.title) }}</strong>
+                        <small>{{ book.file_format | uppercase }}</small>
+                      </span>
+                    }
+                  </span>
+                  <span class="author">{{ book.author || 'Unknown' }}</span>
+                  <span class="title">{{ book.title }}</span>
+                </a>
+              }
+
+              <button type="button" class="add-content" (click)="openUpload(item.id)">
+                <span><mat-icon>add</mat-icon></span>
+                Add Content
+              </button>
+            </div>
+          }
+        </section>
+      }
+    </div>
+  }
+</section>

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, String, func
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, String, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -26,6 +26,9 @@ class Book(Base):
     )
     cover_content_type: Mapped[str | None] = mapped_column(String(100), default=None)
     cover_file_size: Mapped[int | None] = mapped_column(BigInteger, default=None)
+    is_favorite: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
     last_page: Mapped[int | None] = mapped_column(default=None)
     page_count: Mapped[int | None] = mapped_column(default=None)
     toc: Mapped[list[dict] | None] = mapped_column(JSONB, default=None)

@@ -1,7 +1,7 @@
 import { HttpEventType } from '@angular/common/http';
 import { Component, OnDestroy, computed, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
-import { MatDialogRef } from '@angular/material/dialog';
+import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { Subscription } from 'rxjs';
@@ -11,6 +11,10 @@ import { NotificationsService } from '../../../core/services/notifications';
 
 const MAX_UPLOAD_MB = 250;
 const ACCEPTED_EXTENSIONS = ['.pdf'];
+
+interface UploadDialogData {
+  collectionId?: number;
+}
 
 @Component({
   selector: 'app-upload-dialog',
@@ -22,6 +26,7 @@ export class UploadDialog implements OnDestroy {
   private library = inject(LibraryService);
   private notify = inject(NotificationsService);
   private dialogRef = inject<MatDialogRef<UploadDialog, boolean>>(MatDialogRef);
+  private data = inject<UploadDialogData | null>(MAT_DIALOG_DATA, { optional: true });
 
   protected readonly queue = signal<UploadItem[]>([]);
   protected readonly dragging = signal(false);
@@ -144,7 +149,7 @@ export class UploadDialog implements OnDestroy {
     this.running = true;
     this.patchItem(next.id, { status: 'uploading', progress: 0 });
 
-    this.uploadSub = this.library.import(next.file).subscribe({
+    this.uploadSub = this.library.import(next.file, this.data?.collectionId).subscribe({
       next: (event) => {
         if (event.type === HttpEventType.UploadProgress && event.total) {
           this.patchItem(next.id, {

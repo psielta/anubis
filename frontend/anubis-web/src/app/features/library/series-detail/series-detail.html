@@ -1,0 +1,101 @@
+<section class="detail-page">
+  <header class="detail-top">
+    <button type="button" class="round-btn" routerLink="/library/series" aria-label="Back to series">
+      <mat-icon>chevron_left</mat-icon>
+    </button>
+    <div class="title-block">
+      <h1>{{ seriesName() }}</h1>
+      <span>{{ total() }} {{ total() === 1 ? 'book' : 'books' }}</span>
+    </div>
+    <span class="top-spacer"></span>
+    <mat-form-field appearance="outline" class="search-field" subscriptSizing="dynamic">
+      <mat-icon matPrefix>search</mat-icon>
+      <input
+        matInput
+        type="search"
+        placeholder="Find a book..."
+        [value]="search()"
+        (input)="onSearch($event)"
+      />
+    </mat-form-field>
+    <button mat-flat-button color="primary" class="upload-btn" (click)="openUpload()">
+      <mat-icon>add</mat-icon>
+      Add Content
+    </button>
+  </header>
+
+  @if (error()) {
+    <p class="error">{{ error() }}</p>
+  }
+
+  @if (loading()) {
+    <div class="detail-state">Loading series...</div>
+  } @else if (visibleBooks().length === 0) {
+    <div class="empty">
+      <mat-icon>menu_book</mat-icon>
+      <p class="empty-title">No books found</p>
+      <p class="empty-sub">Add books to this series or adjust the search.</p>
+    </div>
+  } @else {
+    <div class="detail-grid">
+      @for (book of visibleBooks(); track book.id) {
+        <article class="book-card">
+          <a class="cover-wrap" [routerLink]="['/read', book.id]" [attr.aria-label]="book.title">
+            @if (coverUrls()[book.id]; as cover) {
+              <img class="book-cover" [src]="cover" [alt]="book.title" />
+            } @else {
+              <span class="cover-fallback">
+                <span>{{ initials(book.title) }}</span>
+                <small>{{ book.file_format | uppercase }}</small>
+              </span>
+            }
+          </a>
+          <div class="book-info">
+            <p class="book-author">{{ book.author || 'Unknown' }}</p>
+            <h2 class="book-title" [title]="book.title">{{ book.title }}</h2>
+            @if (readingProgress(book); as pct) {
+              <div class="book-progress">
+                <span [style.width.%]="pct"></span>
+              </div>
+            }
+          </div>
+          <div class="book-actions">
+            <button
+              mat-icon-button
+              [class.active]="book.is_favorite"
+              [attr.aria-label]="book.is_favorite ? 'Remove favorite' : 'Add favorite'"
+              (click)="toggleFavorite(book)"
+            >
+              <mat-icon>{{ book.is_favorite ? 'star' : 'star_border' }}</mat-icon>
+            </button>
+            <button mat-icon-button [matMenuTriggerFor]="bookMenu" aria-label="Book options">
+              <mat-icon>more_horiz</mat-icon>
+            </button>
+            <mat-menu #bookMenu="matMenu">
+              <a mat-menu-item [routerLink]="['/read', book.id]">
+                <mat-icon>auto_stories</mat-icon>
+                <span>Read</span>
+              </a>
+              <button mat-menu-item (click)="openEdit(book)">
+                <mat-icon>edit</mat-icon>
+                <span>Edit details</span>
+              </button>
+              <button mat-menu-item [disabled]="!canMove(book, -1)" (click)="move(book, -1)">
+                <mat-icon>arrow_upward</mat-icon>
+                <span>Move earlier</span>
+              </button>
+              <button mat-menu-item [disabled]="!canMove(book, 1)" (click)="move(book, 1)">
+                <mat-icon>arrow_downward</mat-icon>
+                <span>Move later</span>
+              </button>
+              <button mat-menu-item class="danger-item" (click)="removeFromSeries(book)">
+                <mat-icon>remove_circle_outline</mat-icon>
+                <span>Remove from series</span>
+              </button>
+            </mat-menu>
+          </div>
+        </article>
+      }
+    </div>
+  }
+</section>

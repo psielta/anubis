@@ -1,170 +1,171 @@
-<section class="library">
-  <header class="lib-head">
-    <div class="lib-head-text">
-      <p class="eyebrow">Your collection</p>
-      <h1 class="lib-title">The Library</h1>
-    </div>
+<section class="shelf-page">
+  <header class="shelf-head">
+    <button type="button" class="back-pill" routerLink="/dashboard" aria-label="Back">
+      <mat-icon>chevron_left</mat-icon>
+    </button>
+
+    <h1 class="shelf-title">My Shelf</h1>
+
+    <nav class="status-tabs" aria-label="Shelf status">
+      @for (item of statuses; track item.value) {
+        <button
+          type="button"
+          [class.active]="status() === item.value"
+          (click)="setStatus(item.value)"
+        >
+          {{ item.label }}
+        </button>
+      }
+    </nav>
+
+    <span class="head-spacer"></span>
+
+    <button type="button" class="series-link" routerLink="/library/series">
+      <mat-icon>view_carousel</mat-icon>
+      <span>Series</span>
+    </button>
+
     <button mat-flat-button color="primary" class="upload-btn" (click)="openUpload()">
       <mat-icon>cloud_upload</mat-icon>
-      Upload books
+      Upload
     </button>
   </header>
 
-  @if (error()) {
-    <p class="error">{{ error() }}</p>
-  }
+  <div class="shelf-toolbar">
+    <button type="button" class="sort-button" [matMenuTriggerFor]="sortMenu">
+      {{ sortLabel() }}
+      <mat-icon>expand_more</mat-icon>
+    </button>
+    <mat-menu #sortMenu="matMenu">
+      <button mat-menu-item (click)="setSort('date')">
+        <mat-icon>{{ sort() === 'date' ? 'check' : 'calendar_today' }}</mat-icon>
+        <span>Date</span>
+      </button>
+      <button mat-menu-item (click)="setSort('title')">
+        <mat-icon>{{ sort() === 'title' ? 'check' : 'sort_by_alpha' }}</mat-icon>
+        <span>Title</span>
+      </button>
+    </mat-menu>
 
-  <div class="lib-toolbar">
     <mat-form-field appearance="outline" class="search-field" subscriptSizing="dynamic">
       <mat-icon matPrefix>search</mat-icon>
       <input
         matInput
         type="search"
-        placeholder="Search title or author"
+        placeholder="Find a book..."
         [value]="search()"
         (input)="onSearch($event)"
       />
     </mat-form-field>
-    <span class="result-count">{{ total() }} {{ total() === 1 ? 'book' : 'books' }}</span>
+
+    <div class="view-toggle" aria-label="View mode">
+      <button
+        type="button"
+        [class.active]="viewMode() === 'grid'"
+        aria-label="Grid view"
+        (click)="setViewMode('grid')"
+      >
+        <mat-icon>grid_view</mat-icon>
+      </button>
+      <button
+        type="button"
+        [class.active]="viewMode() === 'list'"
+        aria-label="List view"
+        (click)="setViewMode('list')"
+      >
+        <mat-icon>view_list</mat-icon>
+      </button>
+    </div>
   </div>
 
-  <div class="chips">
-    <button class="chip" [class.active]="activeCollectionId() === null" (click)="filterBy(null)">
-      All
-    </button>
-    @for (c of collections(); track c.id) {
-      @if (editingCollectionId() === c.id) {
-        <input
-          #renameInput
-          class="chip-input"
-          [value]="c.name"
-          autofocus
-          (keyup.enter)="renameInput.blur()"
-          (blur)="renameCollection(c, renameInput.value)"
-        />
-      } @else {
-        <span class="chip chip-collection" [class.active]="activeCollectionId() === c.id">
-          <button type="button" class="chip-label" (click)="filterBy(c.id)">
-            {{ c.name }}
-            <span class="chip-count">{{ c.book_count }}</span>
-          </button>
-          <button
-            type="button"
-            class="chip-icon"
-            aria-label="Rename collection"
-            (click)="startRename(c, $event)"
-          >
-            <mat-icon>edit</mat-icon>
-          </button>
-          <button
-            type="button"
-            class="chip-icon chip-icon--danger"
-            aria-label="Delete collection"
-            (click)="deleteCollection(c, $event)"
-          >
-            <mat-icon>close</mat-icon>
-          </button>
-        </span>
-      }
-    }
-    @if (creatingCollection()) {
-      <input
-        #newColl
-        class="chip-input"
-        placeholder="Collection name"
-        autofocus
-        (keyup.enter)="newColl.blur()"
-        (blur)="createCollection(newColl.value)"
-      />
-    } @else {
-      <button class="chip chip-add" (click)="startCreateCollection()">
-        <mat-icon>add</mat-icon> New
-      </button>
-    }
-  </div>
+  @if (error()) {
+    <p class="error">{{ error() }}</p>
+  }
 
   @if (loading()) {
-    <div class="lib-state">Summoning your library…</div>
+    <div class="shelf-state">Loading shelf...</div>
   } @else if (books().length === 0) {
     <div class="empty">
-      <span class="empty-mark"><mat-icon>menu_book</mat-icon></span>
-      @if (search() || activeCollectionId() !== null) {
-        <p class="empty-title">Nothing matches</p>
-        <p class="empty-sub">Try a different search or collection.</p>
-      } @else {
-        <p class="empty-title">No scrolls yet</p>
-        <p class="empty-sub">Upload your first title and it will take its place on the shelf.</p>
-      }
+      <mat-icon>menu_book</mat-icon>
+      <p class="empty-title">No books found</p>
+      <p class="empty-sub">Upload a PDF or adjust the search and filters.</p>
     </div>
   } @else {
-    <div class="books">
+    <div class="book-grid" [class.book-grid--list]="viewMode() === 'list'">
       @for (book of books(); track book.id) {
-        <article class="book">
-          <div class="book-art">
+        <article class="book-card">
+          <a class="cover-wrap" [routerLink]="['/read', book.id]" [attr.aria-label]="book.title">
             @if (coverUrls()[book.id]; as cover) {
               <img class="book-cover" [src]="cover" [alt]="book.title" />
             } @else {
-              <div class="spine">
-                <span class="spine-initials">{{ initials(book.title) }}</span>
-                <span class="spine-format">{{ book.file_format | uppercase }}</span>
-              </div>
+              <span class="cover-fallback">
+                <span>{{ initials(book.title) }}</span>
+                <small>{{ book.file_format | uppercase }}</small>
+              </span>
             }
-            <input
-              #coverEdit
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              hidden
-              (change)="changeCover(book, $event)"
-            />
-            <button
-              type="button"
-              class="cover-edit"
-              aria-label="Change cover"
-              (click)="coverEdit.click()"
-            >
-              <mat-icon>photo_camera</mat-icon>
-            </button>
-          </div>
+          </a>
 
-          <div class="book-body">
-            <h3 class="book-title" [title]="book.title">{{ book.title }}</h3>
-            <p class="book-author">{{ book.author ?? 'Unknown author' }}</p>
-            <p class="book-meta">
-              {{ book.file_format | uppercase }} · {{ sizeLabel(book.file_size) }}
-            </p>
+          <div class="book-info">
+            <p class="book-author">{{ book.author || 'Unknown' }}</p>
+            <h2 class="book-title" [title]="book.title">{{ book.title }}</h2>
             @if (readingProgress(book); as pct) {
               <div
                 class="book-progress"
                 [attr.title]="'Page ' + book.last_page + ' of ' + book.page_count"
-                [attr.aria-label]="'Read ' + pct + '%'"
               >
-                <span class="book-progress__fill" [style.width.%]="pct"></span>
+                <span [style.width.%]="pct"></span>
               </div>
             }
             @if (collectionsFor(book).length) {
               <div class="book-tags">
                 @for (c of collectionsFor(book); track c.id) {
-                  <span class="book-tag">{{ c.name }}</span>
+                  <span>{{ c.name }}</span>
                 }
               </div>
             }
-            <a class="read-link" [routerLink]="['/read', book.id]">
-              <mat-icon>auto_stories</mat-icon> {{ readingProgress(book) ? 'Continue' : 'Read' }}
-            </a>
           </div>
 
+          <input
+            #coverEdit
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            hidden
+            (change)="changeCover(book, $event)"
+          />
+
           <div class="book-actions">
-            <button mat-icon-button [matMenuTriggerFor]="bookMenu" aria-label="Book options">
-              <mat-icon>more_vert</mat-icon>
+            <button
+              mat-icon-button
+              class="favorite"
+              [class.active]="book.is_favorite"
+              [attr.aria-label]="book.is_favorite ? 'Remove favorite' : 'Add favorite'"
+              (click)="toggleFavorite(book, $event)"
+            >
+              <mat-icon>{{ book.is_favorite ? 'star' : 'star_border' }}</mat-icon>
             </button>
-            <mat-menu #bookMenu="matMenu" class="coll-menu">
+            <button mat-icon-button [matMenuTriggerFor]="bookMenu" aria-label="Book options">
+              <mat-icon>more_horiz</mat-icon>
+            </button>
+            <mat-menu #bookMenu="matMenu">
+              <a mat-menu-item [routerLink]="['/read', book.id]">
+                <mat-icon>auto_stories</mat-icon>
+                <span>Read</span>
+              </a>
               <button mat-menu-item (click)="openEdit(book)">
                 <mat-icon>edit</mat-icon>
                 <span>Edit details</span>
               </button>
-              <span class="coll-menu-cap">Collections</span>
+              <button mat-menu-item (click)="coverEdit.click()">
+                <mat-icon>photo_camera</mat-icon>
+                <span>Change cover</span>
+              </button>
+              <button mat-menu-item (click)="download(book)">
+                <mat-icon>download</mat-icon>
+                <span>Download</span>
+              </button>
+              <span class="menu-cap">Series</span>
               @if (!collections().length) {
-                <span class="coll-menu-empty">No collections yet</span>
+                <span class="menu-empty">No series yet</span>
               }
               @for (c of collections(); track c.id) {
                 <button mat-menu-item (click)="toggleBookCollection(book, c.id, $event)">
@@ -174,13 +175,11 @@
                   <span>{{ c.name }}</span>
                 </button>
               }
+              <button mat-menu-item class="danger-item" (click)="remove(book)">
+                <mat-icon>delete</mat-icon>
+                <span>Delete</span>
+              </button>
             </mat-menu>
-            <button mat-icon-button aria-label="Download" (click)="download(book)">
-              <mat-icon>download</mat-icon>
-            </button>
-            <button mat-icon-button class="danger" aria-label="Delete" (click)="remove(book)">
-              <mat-icon>delete</mat-icon>
-            </button>
           </div>
         </article>
       }
@@ -190,7 +189,7 @@
       [length]="total()"
       [pageSize]="pageSize()"
       [pageIndex]="page()"
-      [pageSizeOptions]="[12, 24, 48]"
+      [pageSizeOptions]="[24, 48, 96]"
       (page)="onPage($event)"
     />
   }

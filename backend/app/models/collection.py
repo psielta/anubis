@@ -4,6 +4,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     ForeignKey,
+    Integer,
     String,
     Table,
     UniqueConstraint,
@@ -24,6 +25,7 @@ book_collections = Table(
         ForeignKey("collections.id", ondelete="CASCADE"),
         primary_key=True,
     ),
+    Column("position", Integer, nullable=False, server_default="0"),
 )
 
 

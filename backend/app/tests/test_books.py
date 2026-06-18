@@ -745,6 +745,63 @@ async def test_assign_book_to_collections(client):
 
 
 @pytest.mark.asyncio
+async def test_import_with_collection_id_assigns_series(client):
+    _, token = await _token(client)
+    coll_id = await _create_collection(client, token, "Mechanics")
+
+    response = await client.post(
+        f"{API}/books",
+        headers=_auth_headers(token),
+        data={"title": "Dynamics", "collection_id": str(coll_id)},
+        files={"file": ("book.pdf", FAKE_PDF, "application/pdf")},
+    )
+
+    assert response.status_code == 201
+    assert response.json()["collection_ids"] == [coll_id]
+
+
+@pytest.mark.asyncio
+async def test_favorite_status_filters_and_title_sort(client):
+    _, token = await _token(client)
+    beta = (await _upload_pdf(client, token, "Beta")).json()["id"]
+    alpha = (await _upload_pdf(client, token, "Alpha")).json()["id"]
+
+    fav = await client.patch(
+        f"{API}/books/{alpha}",
+        headers=_auth_headers(token),
+        json={"is_favorite": True},
+    )
+    assert fav.status_code == 200
+    assert fav.json()["is_favorite"] is True
+
+    progress = await client.put(
+        f"{API}/books/{alpha}/progress",
+        headers=_auth_headers(token),
+        json={"last_page": 10, "page_count": 10},
+    )
+    assert progress.status_code == 200
+
+    favorites = await client.get(
+        f"{API}/books?status=favorites", headers=_auth_headers(token)
+    )
+    assert favorites.json()["items"][0]["id"] == alpha
+    assert favorites.json()["total"] == 1
+
+    plan = await client.get(
+        f"{API}/books?status=plan_to_read", headers=_auth_headers(token)
+    )
+    assert [item["id"] for item in plan.json()["items"]] == [beta]
+
+    completed = await client.get(
+        f"{API}/books?status=completed", headers=_auth_headers(token)
+    )
+    assert [item["id"] for item in completed.json()["items"]] == [alpha]
+
+    by_title = await client.get(f"{API}/books?sort=title", headers=_auth_headers(token))
+    assert [item["title"] for item in by_title.json()["items"]] == ["Alpha", "Beta"]
+
+
+@pytest.mark.asyncio
 async def test_filter_books_by_collection(client):
     _, token = await _token(client)
     a = (await _upload_pdf(client, token, "Alpha")).json()["id"]
@@ -761,6 +818,65 @@ async def test_filter_books_by_collection(client):
     )
     assert resp.json()["total"] == 1
     assert resp.json()["items"][0]["id"] == a
+
+
+@pytest.mark.asyncio
+async def test_collection_shelf_and_manual_order(client):
+    _, token = await _token(client)
+    coll_id = await _create_collection(client, token, "Geometry")
+    first = (await _upload_pdf(client, token, "First")).json()["id"]
+    second = (await _upload_pdf(client, token, "Second")).json()["id"]
+    third = (await _upload_pdf(client, token, "Third")).json()["id"]
+
+    for book_id in [first, second, third]:
+        resp = await client.put(
+            f"{API}/books/{book_id}/collections",
+            headers=_auth_headers(token),
+            json={"collection_ids": [coll_id]},
+        )
+        assert resp.status_code == 200
+
+    shelf = await client.get(f"{API}/collections/shelf", headers=_auth_headers(token))
+    assert shelf.status_code == 200
+    series = shelf.json()[0]
+    assert series["name"] == "Geometry"
+    assert series["book_count"] == 3
+    assert [item["id"] for item in series["items"]] == [first, second, third]
+
+    reorder = await client.put(
+        f"{API}/collections/{coll_id}/books/order",
+        headers=_auth_headers(token),
+        json={"book_ids": [third, first, second]},
+    )
+    assert reorder.status_code == 200
+
+    ordered = await client.get(
+        f"{API}/books?collection_id={coll_id}&sort=series&page_size=10",
+        headers=_auth_headers(token),
+    )
+    assert [item["id"] for item in ordered.json()["items"]] == [third, first, second]
+
+
+@pytest.mark.asyncio
+async def test_reorder_collection_isolated_per_user(client):
+    _, token1 = await _token(client)
+    coll_id = await _create_collection(client, token1, "Private")
+    book_id = (await _upload_pdf(client, token1, "Private Book")).json()["id"]
+    await client.put(
+        f"{API}/books/{book_id}/collections",
+        headers=_auth_headers(token1),
+        json={"collection_ids": [coll_id]},
+    )
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as other:
+        _, token2 = await _token(other)
+        response = await other.put(
+            f"{API}/collections/{coll_id}/books/order",
+            headers=_auth_headers(token2),
+            json={"book_ids": [book_id]},
+        )
+        assert response.status_code == 404
 
 
 @pytest.mark.asyncio

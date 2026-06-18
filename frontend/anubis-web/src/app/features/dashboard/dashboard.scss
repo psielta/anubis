@@ -1,8 +1,11 @@
 .dash {
   max-width: 960px;
+  margin-inline: auto;
+  padding: clamp(1.5rem, 3vw, 2.5rem);
   display: flex;
   flex-direction: column;
   gap: 2rem;
+  box-sizing: border-box;
 }
 
 // --- Hero -------------------------------------------------------------------

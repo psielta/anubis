@@ -9,7 +9,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
-import { Book } from '../../core/models/book.model';
+import { Book, BookSort, BookStatus } from '../../core/models/book.model';
 import { Collection } from '../../core/models/collection.model';
 import { LibraryService } from '../../core/services/library';
 import { NotificationsService } from '../../core/services/notifications';
@@ -19,6 +19,8 @@ import { UploadDialog } from './upload-dialog/upload-dialog';
 const MAX_COVER_MB = 5;
 const ACCEPTED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
 const SEARCH_DEBOUNCE_MS = 300;
+
+type ViewMode = 'grid' | 'list';
 
 @Component({
   selector: 'app-library',
@@ -42,20 +44,26 @@ export class Library implements OnInit, OnDestroy {
   private dialog = inject(MatDialog);
   private notify = inject(NotificationsService);
 
+  protected readonly statuses: { value: BookStatus; label: string }[] = [
+    { value: 'all', label: 'All' },
+    { value: 'favorites', label: 'Favorites' },
+    { value: 'plan_to_read', label: 'Plan to Read' },
+    { value: 'completed', label: 'Completed' },
+  ];
+
   protected readonly books = signal<Book[]>([]);
   protected readonly total = signal(0);
-  protected readonly page = signal(0); // 0-based, for the paginator
-  protected readonly pageSize = signal(12);
+  protected readonly page = signal(0);
+  protected readonly pageSize = signal(24);
   protected readonly search = signal('');
-  protected readonly activeCollectionId = signal<number | null>(null);
+  protected readonly status = signal<BookStatus>('all');
+  protected readonly sort = signal<BookSort>('date');
+  protected readonly viewMode = signal<ViewMode>('grid');
   protected readonly collections = signal<Collection[]>([]);
-  protected readonly creatingCollection = signal(false);
-  protected readonly editingCollectionId = signal<number | null>(null);
-
   protected readonly loading = signal(false);
   protected readonly error = signal<string | null>(null);
-
   protected readonly coverUrls = signal<Record<number, SafeUrl>>({});
+
   private coverRawUrls: Record<number, string> = {};
   private searchTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -69,9 +77,165 @@ export class Library implements OnInit, OnDestroy {
     for (const url of Object.values(this.coverRawUrls)) URL.revokeObjectURL(url);
   }
 
-  private errorText(err: unknown, fallback: string): string {
-    const detail = (err as { error?: { detail?: unknown } })?.error?.detail;
-    return typeof detail === 'string' && detail.trim() ? detail : fallback;
+  protected onSearch(event: Event) {
+    const value = (event.target as HTMLInputElement).value;
+    this.search.set(value);
+    if (this.searchTimer) clearTimeout(this.searchTimer);
+    this.searchTimer = setTimeout(() => {
+      this.page.set(0);
+      this.load();
+    }, SEARCH_DEBOUNCE_MS);
+  }
+
+  protected setStatus(status: BookStatus) {
+    if (this.status() === status) return;
+    this.status.set(status);
+    this.page.set(0);
+    this.load();
+  }
+
+  protected setSort(sort: BookSort) {
+    if (this.sort() === sort) return;
+    this.sort.set(sort);
+    this.page.set(0);
+    this.load();
+  }
+
+  protected setViewMode(mode: ViewMode) {
+    this.viewMode.set(mode);
+  }
+
+  protected onPage(event: PageEvent) {
+    this.page.set(event.pageIndex);
+    this.pageSize.set(event.pageSize);
+    this.load();
+  }
+
+  protected openUpload() {
+    const ref = this.dialog.open(UploadDialog, {
+      panelClass: 'anubis-dialog',
+      width: '520px',
+      autoFocus: false,
+    });
+    ref.afterClosed().subscribe((didUpload: boolean | undefined) => {
+      if (!didUpload) return;
+      this.search.set('');
+      this.status.set('all');
+      this.sort.set('date');
+      this.page.set(0);
+      this.load();
+      this.loadCollections();
+    });
+  }
+
+  protected openEdit(book: Book) {
+    const ref = this.dialog.open(EditBookDialog, {
+      panelClass: 'anubis-dialog',
+      width: '440px',
+      data: { book },
+      autoFocus: false,
+    });
+    ref.afterClosed().subscribe((updated: Book | undefined) => {
+      if (updated) this.patchBook(updated);
+    });
+  }
+
+  protected toggleFavorite(book: Book, event: Event) {
+    event.stopPropagation();
+    this.library.update(book.id, { is_favorite: !book.is_favorite }).subscribe({
+      next: (updated) => this.patchBook(updated),
+      error: (e) => this.reportError(e, 'Could not update favorite'),
+    });
+  }
+
+  protected toggleBookCollection(book: Book, collectionId: number, event: Event) {
+    event.stopPropagation();
+    const ids = book.collection_ids.includes(collectionId)
+      ? book.collection_ids.filter((id) => id !== collectionId)
+      : [...book.collection_ids, collectionId];
+    this.library.setBookCollections(book.id, ids).subscribe({
+      next: (updated) => {
+        this.patchBook(updated);
+        this.loadCollections();
+      },
+      error: (e) => this.reportError(e, 'Could not update series'),
+    });
+  }
+
+  protected changeCover(book: Book, event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0] ?? null;
+    if (!file || !this.validateImage(file, input)) return;
+
+    this.library.uploadCover(book.id, file).subscribe({
+      next: (updated) => {
+        this.patchBook(updated);
+        this.loadCover(book.id);
+        this.notify.success('Cover updated');
+      },
+      error: (e) => this.reportError(e, 'Cover upload failed'),
+    });
+    input.value = '';
+  }
+
+  protected download(book: Book) {
+    this.library.download(book.id).subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = book.original_filename;
+        anchor.click();
+        URL.revokeObjectURL(url);
+      },
+      error: (e) => this.reportError(e, 'Download failed'),
+    });
+  }
+
+  protected remove(book: Book) {
+    this.library.remove(book.id).subscribe({
+      next: () => {
+        const raw = this.coverRawUrls[book.id];
+        if (raw) {
+          URL.revokeObjectURL(raw);
+          delete this.coverRawUrls[book.id];
+        }
+        if (this.books().length === 1 && this.page() > 0) {
+          this.page.update((p) => p - 1);
+        }
+        this.load();
+        this.loadCollections();
+        this.notify.success('Book deleted');
+      },
+      error: (e) => this.reportError(e, 'Delete failed'),
+    });
+  }
+
+  protected collectionsFor(book: Book): Collection[] {
+    return this.collections().filter((c) => book.collection_ids.includes(c.id));
+  }
+
+  protected initials(title: string): string {
+    const words = title.trim().split(/\s+/).filter(Boolean);
+    if (words.length === 0) return '..';
+    if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+    return (words[0][0] + words[1][0]).toUpperCase();
+  }
+
+  protected sizeLabel(bytes: number): string {
+    if (!bytes) return '-';
+    const mb = bytes / (1024 * 1024);
+    if (mb >= 1) return `${mb.toFixed(1)} MB`;
+    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  }
+
+  protected readingProgress(book: Book): number | null {
+    if (!book.last_page || !book.page_count) return null;
+    return Math.min(100, Math.max(1, Math.round((100 * book.last_page) / book.page_count)));
+  }
+
+  protected sortLabel(): string {
+    return this.sort() === 'title' ? 'Title' : 'Date';
   }
 
   private load() {
@@ -80,7 +244,8 @@ export class Library implements OnInit, OnDestroy {
     this.library
       .list({
         search: this.search() || undefined,
-        collectionId: this.activeCollectionId(),
+        status: this.status(),
+        sort: this.sort(),
         page: this.page() + 1,
         pageSize: this.pageSize(),
       })
@@ -92,7 +257,7 @@ export class Library implements OnInit, OnDestroy {
           this.refreshCovers(result.items);
         },
         error: (e) => {
-          this.error.set(e?.error?.detail ?? 'Failed to load library');
+          this.error.set(this.errorText(e, 'Failed to load library'));
           this.loading.set(false);
         },
       });
@@ -105,113 +270,8 @@ export class Library implements OnInit, OnDestroy {
     });
   }
 
-  onSearch(event: Event) {
-    const value = (event.target as HTMLInputElement).value;
-    this.search.set(value);
-    if (this.searchTimer) clearTimeout(this.searchTimer);
-    this.searchTimer = setTimeout(() => {
-      this.page.set(0);
-      this.load();
-    }, SEARCH_DEBOUNCE_MS);
-  }
-
-  filterBy(collectionId: number | null) {
-    this.activeCollectionId.set(collectionId);
-    this.page.set(0);
-    this.load();
-  }
-
-  onPage(event: PageEvent) {
-    this.page.set(event.pageIndex);
-    this.pageSize.set(event.pageSize);
-    this.load();
-  }
-
-  startCreateCollection() {
-    this.creatingCollection.set(true);
-  }
-
-  createCollection(name: string) {
-    const trimmed = name.trim();
-    this.creatingCollection.set(false);
-    if (!trimmed) return;
-    this.library.createCollection(trimmed).subscribe({
-      next: () => {
-        this.loadCollections();
-        this.notify.success('Collection created');
-      },
-      error: (e) => {
-        const message = this.errorText(e, 'Could not create collection');
-        this.error.set(message);
-        this.notify.error(message);
-      },
-    });
-  }
-
-  startRename(collection: Collection, event: Event) {
-    event.stopPropagation();
-    this.editingCollectionId.set(collection.id);
-  }
-
-  renameCollection(collection: Collection, name: string) {
-    const trimmed = name.trim();
-    this.editingCollectionId.set(null);
-    if (!trimmed || trimmed === collection.name) return;
-    this.library.renameCollection(collection.id, trimmed).subscribe({
-      next: () => {
-        this.loadCollections();
-        this.notify.success('Collection renamed');
-      },
-      error: (e) => {
-        const message = this.errorText(e, 'Could not rename collection');
-        this.error.set(message);
-        this.notify.error(message);
-      },
-    });
-  }
-
-  deleteCollection(collection: Collection, event: Event) {
-    event.stopPropagation();
-    this.library.deleteCollection(collection.id).subscribe({
-      next: () => {
-        if (this.activeCollectionId() === collection.id) {
-          this.activeCollectionId.set(null);
-          this.page.set(0);
-          this.load();
-        }
-        this.loadCollections();
-        this.notify.success('Collection deleted');
-      },
-      error: (e) => {
-        const message = this.errorText(e, 'Could not delete collection');
-        this.error.set(message);
-        this.notify.error(message);
-      },
-    });
-  }
-
-  toggleBookCollection(book: Book, collectionId: number, event: Event) {
-    event.stopPropagation();
-    const ids = book.collection_ids.includes(collectionId)
-      ? book.collection_ids.filter((id) => id !== collectionId)
-      : [...book.collection_ids, collectionId];
-    this.library.setBookCollections(book.id, ids).subscribe({
-      next: (updated) => {
-        this.books.update((list) => list.map((b) => (b.id === book.id ? updated : b)));
-        this.loadCollections();
-        this.notify.success('Collections updated');
-      },
-      error: (e) => {
-        const message = this.errorText(e, 'Could not update collections');
-        this.error.set(message);
-        this.notify.error(message);
-      },
-    });
-  }
-
-  /** Collections a book belongs to (for the chips shown on its card). */
-  collectionsFor(book: Book): Collection[] {
-    return this.collections().filter((c) => book.collection_ids.includes(c.id));
+  private patchBook(updated: Book) {
+    this.books.update((list) => list.map((book) => (book.id === updated.id ? updated : book)));
   }
 
   private refreshCovers(books: Book[]) {
@@ -258,117 +318,14 @@ export class Library implements OnInit, OnDestroy {
     return true;
   }
 
-  openUpload() {
-    const ref = this.dialog.open(UploadDialog, {
-      panelClass: 'anubis-dialog',
-      width: '520px',
-      autoFocus: false,
-    });
-    ref.afterClosed().subscribe((didUpload: boolean | undefined) => {
-      if (!didUpload) return;
-      // Surface the freshly imported books at the top of the first page.
-      this.search.set('');
-      this.activeCollectionId.set(null);
-      this.page.set(0);
-      this.load();
-    });
+  private reportError(err: unknown, fallback: string) {
+    const message = this.errorText(err, fallback);
+    this.error.set(message);
+    this.notify.error(message);
   }
 
-  openEdit(book: Book) {
-    const ref = this.dialog.open(EditBookDialog, {
-      panelClass: 'anubis-dialog',
-      width: '440px',
-      data: { book },
-      autoFocus: false,
-    });
-    ref.afterClosed().subscribe((updated: Book | undefined) => {
-      if (updated) {
-        this.books.update((list) => list.map((b) => (b.id === updated.id ? updated : b)));
-      }
-    });
-  }
-
-  changeCover(book: Book, event: Event) {
-    const input = event.target as HTMLInputElement;
-    const file = input.files?.[0] ?? null;
-    if (!file || !this.validateImage(file, input)) return;
-
-    this.library.uploadCover(book.id, file).subscribe({
-      next: (updated) => {
-        this.books.update((books) => books.map((b) => (b.id === book.id ? updated : b)));
-        this.loadCover(book.id);
-        this.notify.success('Cover updated');
-      },
-      error: (e) => {
-        const message = this.errorText(e, 'Cover upload failed');
-        this.error.set(message);
-        this.notify.error(message);
-      },
-    });
-    input.value = '';
-  }
-
-  download(book: Book) {
-    this.library.download(book.id).subscribe({
-      next: (blob) => {
-        const url = URL.createObjectURL(blob);
-        const anchor = document.createElement('a');
-        anchor.href = url;
-        anchor.download = book.original_filename;
-        anchor.click();
-        URL.revokeObjectURL(url);
-      },
-      error: (e) => {
-        const message = this.errorText(e, 'Download failed');
-        this.error.set(message);
-        this.notify.error(message);
-      },
-    });
-  }
-
-  remove(book: Book) {
-    this.library.remove(book.id).subscribe({
-      next: () => {
-        const raw = this.coverRawUrls[book.id];
-        if (raw) {
-          URL.revokeObjectURL(raw);
-          delete this.coverRawUrls[book.id];
-        }
-        // Step back a page if we just emptied the last one.
-        if (this.books().length === 1 && this.page() > 0) {
-          this.page.update((p) => p - 1);
-        }
-        this.load();
-        this.loadCollections();
-        this.notify.success('Book deleted');
-      },
-      error: (e) => {
-        const message = this.errorText(e, 'Delete failed');
-        this.error.set(message);
-        this.notify.error(message);
-      },
-    });
-  }
-
-  /** First two significant letters of a title, for the cover-spine stand-in. */
-  initials(title: string): string {
-    const words = title.trim().split(/\s+/).filter(Boolean);
-    if (words.length === 0) return '·';
-    if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
-    return (words[0][0] + words[1][0]).toUpperCase();
-  }
-
-  /** Human-readable file size. */
-  sizeLabel(bytes: number): string {
-    if (!bytes) return '—';
-    const mb = bytes / (1024 * 1024);
-    if (mb >= 1) return `${mb.toFixed(1)} MB`;
-    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-  }
-
-  /** Reading progress percent (1-100), or null if the book hasn't been opened. */
-  readingProgress(book: Book): number | null {
-    if (!book.last_page || !book.page_count) return null;
-    return Math.min(100, Math.max(1, Math.round((100 * book.last_page) / book.page_count)));
+  private errorText(err: unknown, fallback: string): string {
+    const detail = (err as { error?: { detail?: unknown } })?.error?.detail;
+    return typeof detail === 'string' && detail.trim() ? detail : fallback;
   }
 }

@@ -27,6 +27,18 @@ export const routes: Routes = [
           import('./features/dashboard/dashboard').then((m) => m.Dashboard),
       },
       {
+        path: 'library/series/:id',
+        loadComponent: () =>
+          import('./features/library/series-detail/series-detail').then((m) => m.SeriesDetail),
+      },
+      {
+        path: 'library/series',
+        loadComponent: () =>
+          import('./features/library/series-library/series-library').then(
+            (m) => m.SeriesLibrary,
+          ),
+      },
+      {
         path: 'library',
         loadComponent: () => import('./features/library/library').then((m) => m.Library),
       },
