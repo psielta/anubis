@@ -80,7 +80,7 @@ export class Reader implements OnInit, OnDestroy {
 
   protected readonly panelWidth = this.prefs.panelWidth;
   protected readonly resizablePanelOpen = computed(
-    () => this.tocOpen() || this.notesOpen() || this.diagramsOpen(),
+    () => this.panelOpen() || this.tocOpen() || this.notesOpen() || this.diagramsOpen(),
   );
 
   private viewport = viewChild<ElementRef<HTMLDivElement>>('viewport');
@@ -105,7 +105,7 @@ export class Reader implements OnInit, OnDestroy {
 
   // AI study assistant
   protected readonly panelOpen = signal(false);
-  protected readonly aiScope = signal<'book' | 'chapter'>('book');
+  protected readonly aiScope = signal<'book' | 'chapter'>('chapter');
   protected readonly messages = signal<StudyMessage[]>([]);
   protected readonly thinking = signal('');
   protected readonly streamingAnswer = signal('');
@@ -452,6 +452,7 @@ export class Reader implements OnInit, OnDestroy {
     this.panelOpen.set(open);
     if (open) {
       // The right-docked panels are mutually exclusive.
+      this.aiScope.set('chapter');
       this.diagramsOpen.set(false);
       this.notesOpen.set(false);
       this.tocOpen.set(false);
@@ -487,6 +488,7 @@ export class Reader implements OnInit, OnDestroy {
     this.selectionText.set('');
     window.getSelection()?.removeAllRanges();
     if (!this.panelOpen()) {
+      this.aiScope.set('chapter');
       this.panelOpen.set(true);
       if (!this.historyLoaded) this.loadHistory();
     }
@@ -524,6 +526,10 @@ export class Reader implements OnInit, OnDestroy {
     return { from, to: Math.max(from, to) };
   }
 
+  effectiveAiScope(): 'book' | 'chapter' {
+    return this.aiScope() === 'chapter' && this.chapterRange() ? 'chapter' : 'book';
+  }
+
   send(kind: StudyKind, input?: HTMLInputElement) {
     if (this.aiBusy()) return;
     const selection = kind === 'chat' ? this.pendingSelection() : null;
@@ -542,6 +548,8 @@ export class Reader implements OnInit, OnDestroy {
         body.scope = 'chapter';
         body.page_from = range.from;
         body.page_to = range.to;
+      } else if (body.scope === 'chapter') {
+        body.scope = 'book';
       }
     } else if (body.scope === 'chapter') {
       const range = this.chapterRange();

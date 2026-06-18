@@ -2,6 +2,7 @@
   class="reader"
   #readerRoot
   [style.--dg-user-panel-w]="panelWidth() + 'px'"
+  [class.ai-open]="panelOpen()"
   [class.diagrams-open]="diagramsOpen()"
   [class.notes-open]="notesOpen()"
   [class.toc-open]="tocOpen()"
@@ -152,14 +153,14 @@
       <div class="ai-scope">
         <button
           class="scope-chip"
-          [class.active]="aiScope() === 'book'"
+          [class.active]="effectiveAiScope() === 'book'"
           (click)="aiScope.set('book')"
         >
           Whole book
         </button>
         <button
           class="scope-chip"
-          [class.active]="aiScope() === 'chapter'"
+          [class.active]="effectiveAiScope() === 'chapter'"
           [disabled]="!chapterRange()"
           (click)="aiScope.set('chapter')"
         >

@@ -128,7 +128,7 @@
   top: 56px;
   right: 0;
   bottom: 0;
-  width: min(440px, 94vw);
+  width: var(--dg-panel-w);
   display: flex;
   flex-direction: column;
   background: var(--anubis-surface);
@@ -451,7 +451,7 @@
   }
 }
 
-// --- Study diagrams + notes panels ------------------------------------------
+// --- Study side panels -------------------------------------------------------
 .diagrams-toggle.active,
 .notes-toggle.active,
 .toc-toggle.active {
@@ -487,6 +487,7 @@
     --dg-panel-w: clamp(320px, var(--dg-user-panel-w, 45vw), min(90vw, calc(100vw - 360px)));
   }
 
+  .reader.ai-open .reader-stage,
   .reader.diagrams-open .reader-stage,
   .reader.notes-open .reader-stage,
   .reader.toc-open .reader-stage {
