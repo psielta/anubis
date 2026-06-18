@@ -4,7 +4,13 @@ export interface TocEntry {
   depth: number;
 }
 
-export type ReaderPanel = 'assistant' | 'diagrams' | 'notes' | 'toc' | 'content_tree';
+export type ReaderPanel =
+  | 'assistant'
+  | 'diagrams'
+  | 'notes'
+  | 'sketches'
+  | 'toc'
+  | 'content_tree';
 export type ReaderSubView = 'list' | 'edit';
 
 export interface ReaderNotesState {
@@ -18,6 +24,13 @@ export interface ReaderDiagramsState {
   active_id: number | null;
 }
 
+export interface ReaderSketchesState {
+  view: ReaderSubView;
+  active_id: number | null;
+  active_group_id: number | null;
+  search: string;
+}
+
 export interface ReaderState {
   version: 1;
   zoom_pct: number;
@@ -25,6 +38,7 @@ export interface ReaderState {
   panel_width_px: number;
   notes: ReaderNotesState;
   diagrams: ReaderDiagramsState;
+  sketches: ReaderSketchesState;
 }
 
 export interface Book {

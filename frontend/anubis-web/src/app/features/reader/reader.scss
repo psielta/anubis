@@ -454,6 +454,7 @@
 // --- Study side panels -------------------------------------------------------
 .diagrams-toggle.active,
 .notes-toggle.active,
+.sketches-toggle.active,
 .toc-toggle.active,
 .content-tree-toggle.active {
   color: var(--anubis-gold-bright);
@@ -466,6 +467,7 @@
 
 .diagrams-panel,
 .notes-panel,
+.sketches-panel,
 .toc-panel,
 .content-tree-panel {
   position: absolute;
@@ -492,10 +494,16 @@
   .reader.ai-open .reader-stage,
   .reader.diagrams-open .reader-stage,
   .reader.notes-open .reader-stage,
+  .reader.sketches-open:not(.sketch-focus-open) .reader-stage,
   .reader.toc-open .reader-stage,
   .reader.content-tree-open .reader-stage {
     padding-inline-end: var(--dg-panel-w);
   }
+}
+
+.reader.sketch-focus-open .sketches-panel {
+  left: 0;
+  width: auto;
 }
 
 .panel-splitter {
@@ -813,6 +821,118 @@
   place-items: center;
   color: var(--anubis-ink-soft);
   font-size: 0.9rem;
+}
+
+// --- Study sketches ---------------------------------------------------------
+.sketch-save-status {
+  font-size: 0.78rem;
+  color: var(--anubis-ink-soft);
+  white-space: nowrap;
+
+  &.error {
+    color: var(--anubis-danger);
+  }
+}
+
+.sketch-list {
+  gap: 0.9rem;
+}
+
+.sketch-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.sketch-section-head {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.sketch-section-title {
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.55rem;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--anubis-ink);
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+
+  &:hover,
+  &.active {
+    color: var(--anubis-gold-deep);
+    border-color: var(--anubis-line);
+    background: rgba(200, 162, 76, 0.08);
+  }
+
+  span:not(.sketch-section-count) {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  mat-icon {
+    flex-shrink: 0;
+    color: var(--anubis-gold-deep);
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+}
+
+.sketch-section-count {
+  margin-inline-start: auto;
+  color: var(--anubis-ink-soft);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.sketch-edit-bar {
+  flex-wrap: wrap;
+}
+
+.sketch-group-select {
+  min-width: 12ch;
+  max-width: 18ch;
+  padding: 0.36rem 0.45rem;
+  font: inherit;
+  color: var(--anubis-ink);
+  background: var(--anubis-canvas);
+  border: 1px solid var(--anubis-line);
+  outline: none;
+
+  &:focus {
+    border-color: var(--anubis-gold-deep);
+  }
+}
+
+.sketch-canvas {
+  background: #fff;
+}
+
+.sketches-panel.sketch-focus {
+  .sketch-canvas {
+    min-height: 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .sketch-save-status {
+    display: none;
+  }
+
+  .sketch-group-select {
+    flex: 1 1 100%;
+    max-width: none;
+  }
 }
 
 // --- Editable table of contents --------------------------------------------

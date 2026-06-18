@@ -2,6 +2,7 @@ from app.models.book import Book
 from app.models.collection import Collection, book_collections
 from app.models.diagram import Diagram
 from app.models.note import Note
+from app.models.sketch import Sketch, SketchGroup
 from app.models.study import StudyMessage
 from app.models.user import User
 
@@ -10,6 +11,8 @@ __all__ = [
     "Collection",
     "Diagram",
     "Note",
+    "Sketch",
+    "SketchGroup",
     "StudyMessage",
     "User",
     "book_collections",

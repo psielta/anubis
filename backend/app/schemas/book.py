@@ -30,13 +30,23 @@ class ReaderDiagramsState(BaseModel):
     active_id: int | None = Field(default=None, ge=1)
 
 
+class ReaderSketchesState(BaseModel):
+    view: Literal["list", "edit"] = "list"
+    active_id: int | None = Field(default=None, ge=1)
+    active_group_id: int | None = Field(default=None, ge=1)
+    search: str = Field(default="", max_length=200)
+
+
 class ReaderState(BaseModel):
     version: Literal[1] = 1
     zoom_pct: int = Field(default=100, ge=50, le=300)
-    panel: Literal["assistant", "diagrams", "notes", "toc", "content_tree"] | None = None
+    panel: Literal[
+        "assistant", "diagrams", "notes", "sketches", "toc", "content_tree"
+    ] | None = None
     panel_width_px: int = Field(default=400, ge=320, le=2000)
     notes: ReaderNotesState = Field(default_factory=ReaderNotesState)
     diagrams: ReaderDiagramsState = Field(default_factory=ReaderDiagramsState)
+    sketches: ReaderSketchesState = Field(default_factory=ReaderSketchesState)
 
 
 class BookRead(BaseModel):

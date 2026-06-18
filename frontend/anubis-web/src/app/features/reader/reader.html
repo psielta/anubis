@@ -5,6 +5,8 @@
   [class.ai-open]="panelOpen()"
   [class.diagrams-open]="diagramsOpen()"
   [class.notes-open]="notesOpen()"
+  [class.sketches-open]="sketchesOpen()"
+  [class.sketch-focus-open]="sketchFocus()"
   [class.toc-open]="tocOpen()"
   [class.content-tree-open]="contentTreeOpen()"
 >
@@ -40,6 +42,15 @@
         aria-label="Study notes"
       >
         <mat-icon>edit_note</mat-icon>
+      </button>
+      <button
+        mat-icon-button
+        class="sketches-toggle"
+        [class.active]="sketchesOpen()"
+        (click)="toggleSketches()"
+        aria-label="Sketch notebook"
+      >
+        <mat-icon>gesture</mat-icon>
       </button>
       <button
         mat-icon-button
@@ -404,6 +415,194 @@
 
       @if (diagramsError()) {
         <p class="ai-error">{{ diagramsError() }}</p>
+      }
+    </aside>
+  }
+
+  @if (sketchesOpen()) {
+    <aside class="sketches-panel" [class.sketch-focus]="sketchFocus()">
+      <header class="dg-head">
+        @if (sketchView() === 'edit') {
+          <button mat-icon-button (click)="backToSketchList()" aria-label="Back to sketches">
+            <mat-icon>arrow_back</mat-icon>
+          </button>
+        }
+        <span class="dg-title"><mat-icon>gesture</mat-icon> Sketches</span>
+        <span class="ai-spacer"></span>
+        @if (sketchView() === 'edit') {
+          <span class="sketch-save-status" [class.error]="sketchSaveStatus() === 'error'">
+            {{
+              sketchSaveStatus() === 'saving'
+                ? 'Saving...'
+                : sketchSaveStatus() === 'saved'
+                  ? 'Saved'
+                  : sketchSaveStatus() === 'error'
+                    ? 'Not saved'
+                    : 'Unsaved'
+            }}
+          </span>
+          @if (activeSketch(); as currentSketch) {
+            <button
+              mat-icon-button
+              (click)="deleteSketch(currentSketch)"
+              aria-label="Delete sketch"
+            >
+              <mat-icon>delete</mat-icon>
+            </button>
+          }
+          <button
+            mat-icon-button
+            (click)="toggleSketchFocus()"
+            [attr.aria-label]="sketchFocus() ? 'Exit focus mode' : 'Focus mode'"
+          >
+            <mat-icon>{{ sketchFocus() ? 'fullscreen_exit' : 'fullscreen' }}</mat-icon>
+          </button>
+        }
+        <button mat-icon-button (click)="toggleSketches()" aria-label="Close">
+          <mat-icon>close</mat-icon>
+        </button>
+      </header>
+
+      @if (sketchView() === 'list') {
+        <div class="dg-list sketch-list">
+          <div class="dg-new">
+            <button class="dg-new-btn" (click)="newSketch()">
+              <mat-icon>add</mat-icon> New sketch
+            </button>
+            <button class="dg-new-btn" (click)="createSketchGroup()">
+              <mat-icon>create_new_folder</mat-icon> New group
+            </button>
+          </div>
+          @if (sketchList().length) {
+            <input
+              class="note-search"
+              type="search"
+              placeholder="Search sketches..."
+              aria-label="Search sketches"
+              [value]="sketchSearch()"
+              (input)="setSketchSearch($any($event.target).value)"
+            />
+          }
+          @if (!sketchList().length && !sketchGroups().length) {
+            <p class="dg-empty">
+              No sketches yet. Create a sketch to solve exercises beside this book.
+            </p>
+          } @else if (!filteredSketches().length) {
+            <p class="dg-empty">No sketches match your search.</p>
+          }
+
+          @for (section of sketchSections(); track section.group?.id ?? 0) {
+            <section class="sketch-section">
+              <div class="sketch-section-head">
+                <button
+                  class="sketch-section-title"
+                  [class.active]="selectedSketchGroupId() === (section.group?.id ?? null)"
+                  (click)="selectSketchGroup(section.group?.id ?? null)"
+                >
+                  <mat-icon>{{ section.group ? 'folder' : 'folder_open' }}</mat-icon>
+                  <span>{{ section.group?.name ?? 'Ungrouped' }}</span>
+                  <span class="sketch-section-count">{{ section.sketches.length }}</span>
+                </button>
+                @if (section.group; as group) {
+                  <button
+                    class="toc-icon"
+                    type="button"
+                    (click)="renameSketchGroup(group)"
+                    aria-label="Rename group"
+                  >
+                    <mat-icon>edit</mat-icon>
+                  </button>
+                  <button
+                    class="toc-icon danger"
+                    type="button"
+                    (click)="deleteSketchGroup(group)"
+                    aria-label="Delete group"
+                  >
+                    <mat-icon>delete</mat-icon>
+                  </button>
+                }
+                <button
+                  class="toc-icon"
+                  type="button"
+                  (click)="newSketch(section.group?.id ?? null)"
+                  aria-label="New sketch in group"
+                >
+                  <mat-icon>add</mat-icon>
+                </button>
+              </div>
+
+              @for (s of section.sketches; track s.id) {
+                <button class="dg-card" (click)="openSketch(s)">
+                  <mat-icon class="dg-card-icon">gesture</mat-icon>
+                  <span class="dg-card-main">
+                    <span class="dg-card-title">{{ s.title }}</span>
+                    <span class="dg-card-meta"
+                      >{{ sketchUpdatedLabel(s) }}
+                      @if (s.page) {
+                        Â· p. {{ s.page }}
+                      }
+                    </span>
+                  </span>
+                  <span
+                    class="dg-card-del"
+                    role="button"
+                    aria-label="Delete sketch"
+                    (click)="$event.stopPropagation(); deleteSketch(s)"
+                  >
+                    <mat-icon>delete</mat-icon>
+                  </span>
+                </button>
+              }
+            </section>
+          }
+        </div>
+      } @else {
+        <div class="dg-edit sketch-edit">
+          <div class="dg-edit-bar sketch-edit-bar">
+            <input
+              class="dg-name"
+              [value]="sketchTitle()"
+              (input)="setSketchTitle($any($event.target).value)"
+              placeholder="Sketch title"
+              maxlength="200"
+            />
+            <label class="dg-page">
+              p.
+              <input
+                type="number"
+                min="1"
+                class="dg-page-input"
+                [value]="sketchPage() ?? ''"
+                (input)="setSketchPage($any($event.target).valueAsNumber)"
+              />
+            </label>
+            <select
+              class="sketch-group-select"
+              [value]="sketchGroupId() ?? ''"
+              (change)="setSketchGroup($any($event.target).value)"
+              aria-label="Sketch group"
+            >
+              <option value="">Ungrouped</option>
+              @for (group of sketchGroups(); track group.id) {
+                <option [value]="group.id">{{ group.name }}</option>
+              }
+            </select>
+          </div>
+
+          @defer (on immediate) {
+            <app-excalidraw-canvas
+              class="dg-canvas sketch-canvas"
+              [initialScene]="activeSketch()?.content ?? null"
+              (sceneChange)="onSketchSceneChange($event)"
+            />
+          } @placeholder {
+            <div class="dg-loading">Loading canvas...</div>
+          }
+        </div>
+      }
+
+      @if (sketchesError()) {
+        <p class="ai-error">{{ sketchesError() }}</p>
       }
     </aside>
   }

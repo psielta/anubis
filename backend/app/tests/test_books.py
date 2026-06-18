@@ -424,6 +424,12 @@ def _reader_state_payload(**overrides):
         "panel_width_px": 520,
         "notes": {"view": "edit", "active_id": 123, "search": "chapter"},
         "diagrams": {"view": "list", "active_id": None},
+        "sketches": {
+            "view": "list",
+            "active_id": None,
+            "active_group_id": None,
+            "search": "",
+        },
     }
     payload.update(overrides)
     return payload
@@ -474,6 +480,14 @@ async def test_reader_state_accepts_content_tree_panel(client):
         _reader_state_payload(notes={"view": "edit", "active_id": 0, "search": ""}),
         _reader_state_payload(notes={"view": "list", "active_id": None, "search": "x" * 201}),
         _reader_state_payload(diagrams={"view": "edit", "active_id": 0}),
+        _reader_state_payload(
+            sketches={
+                "view": "edit",
+                "active_id": 0,
+                "active_group_id": None,
+                "search": "",
+            }
+        ),
     ],
 )
 async def test_reader_state_rejects_invalid_values(client, payload):

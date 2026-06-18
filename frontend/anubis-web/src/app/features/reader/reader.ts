@@ -13,6 +13,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MarkdownComponent } from 'ngx-markdown';
+import { forkJoin } from 'rxjs';
 import * as pdfjsLib from 'pdfjs-dist';
 import type {
   PDFDocumentProxy,
@@ -25,11 +26,13 @@ import { LibraryService } from '../../core/services/library';
 import { StudyService } from '../../core/services/study';
 import { DiagramsService } from '../../core/services/diagrams';
 import { NotesService } from '../../core/services/notes';
+import { SketchesService } from '../../core/services/sketches';
 import { TocService } from '../../core/services/toc';
 import { Book, ReaderPanel, ReaderState } from '../../core/models/book.model';
 import { StudyKind, StudyMessage, StudyRequest } from '../../core/models/study.model';
 import { Diagram, DiagramType } from '../../core/models/diagram.model';
 import { Note } from '../../core/models/note.model';
+import { Sketch, SketchGroup } from '../../core/models/sketch.model';
 import { ExcalidrawCanvas } from './excalidraw-canvas/excalidraw-canvas';
 import { MermaidPreview } from './mermaid-preview/mermaid-preview';
 import { NoteEditor } from './note-editor/note-editor';
@@ -57,8 +60,14 @@ interface TocItem {
   depth: number;
 }
 
+interface SketchSection {
+  group: SketchGroup | null;
+  sketches: Sketch[];
+}
+
 const SAVE_DEBOUNCE_MS = 1200;
 const READER_STATE_DEBOUNCE_MS = 800;
+const SKETCH_AUTOSAVE_MS = 1500;
 
 @Component({
   selector: 'app-reader',
@@ -82,6 +91,7 @@ export class Reader implements OnInit, OnDestroy {
   private study = inject(StudyService);
   private diagrams = inject(DiagramsService);
   private notes = inject(NotesService);
+  private sketches = inject(SketchesService);
   private tocService = inject(TocService);
   private prefs = inject(ReaderPrefsService);
   private notify = inject(NotificationsService);
@@ -93,7 +103,8 @@ export class Reader implements OnInit, OnDestroy {
       this.tocOpen() ||
       this.contentTreeOpen() ||
       this.notesOpen() ||
-      this.diagramsOpen(),
+      this.diagramsOpen() ||
+      (this.sketchesOpen() && !this.sketchFocus()),
   );
 
   private viewport = viewChild<ElementRef<HTMLDivElement>>('viewport');
@@ -172,6 +183,43 @@ export class Reader implements OnInit, OnDestroy {
     );
   });
 
+  // Study sketches (Excalidraw notebook)
+  protected readonly sketchesOpen = signal(false);
+  protected readonly sketchView = signal<'list' | 'edit'>('list');
+  protected readonly sketchList = signal<Sketch[]>([]);
+  protected readonly sketchGroups = signal<SketchGroup[]>([]);
+  protected readonly sketchesLoaded = signal(false);
+  protected readonly sketchesError = signal<string | null>(null);
+  protected readonly sketchSearch = signal('');
+  protected readonly selectedSketchGroupId = signal<number | null>(null);
+  protected readonly activeSketch = signal<Sketch | null>(null);
+  protected readonly sketchTitle = signal('');
+  protected readonly sketchContent = signal('');
+  protected readonly sketchPage = signal<number | null>(null);
+  protected readonly sketchGroupId = signal<number | null>(null);
+  protected readonly sketchSaving = signal(false);
+  protected readonly sketchSaveStatus = signal<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  protected readonly sketchFocus = signal(false);
+  protected readonly filteredSketches = computed(() => {
+    const q = this.sketchSearch().trim().toLowerCase();
+    const list = this.sketchList();
+    if (!q) return list;
+    return list.filter((s) => s.title.toLowerCase().includes(q));
+  });
+  protected readonly sketchSections = computed<SketchSection[]>(() => {
+    const sketches = this.filteredSketches();
+    const groups = this.sketchGroups();
+    const sections: SketchSection[] = groups.map((group) => ({
+      group,
+      sketches: sketches.filter((s) => s.group_id === group.id),
+    }));
+    const ungrouped = sketches.filter((s) => s.group_id == null);
+    if (ungrouped.length || !sections.length) {
+      sections.push({ group: null, sketches: ungrouped });
+    }
+    return sections;
+  });
+
   private bookId = 0;
   private data: ArrayBuffer | null = null;
   private initialized = false;
@@ -191,6 +239,11 @@ export class Reader implements OnInit, OnDestroy {
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private readerStateSaveEnabled = false;
   private readerStateTimer: ReturnType<typeof setTimeout> | null = null;
+  private sketchAutoSaveTimer: ReturnType<typeof setTimeout> | null = null;
+  private sketchSaveQueued = false;
+  private sketchLastSaved:
+    | { title: string; content: string; page: number | null; group_id: number | null }
+    | null = null;
 
   ngOnInit() {
     this.bookId = Number(this.route.snapshot.paramMap.get('id'));
@@ -221,6 +274,7 @@ export class Reader implements OnInit, OnDestroy {
   ngOnDestroy() {
     if (this.saveTimer) clearTimeout(this.saveTimer);
     this.flushProgress();
+    this.flushSketchAutosave();
     if (this.readerStateTimer) clearTimeout(this.readerStateTimer);
     this.flushReaderState();
     this.aiController?.abort();
@@ -536,10 +590,12 @@ export class Reader implements OnInit, OnDestroy {
     this.zoomPct.set(this.clampZoom(state.zoom_pct));
     this.prefs.setPanelWidth(state.panel_width_px);
     this.noteSearch.set(state.notes.search ?? '');
+    this.sketchSearch.set(state.sketches?.search ?? '');
 
     this.panelOpen.set(false);
     this.diagramsOpen.set(false);
     this.notesOpen.set(false);
+    this.sketchesOpen.set(false);
     this.tocOpen.set(false);
     this.contentTreeOpen.set(false);
 
@@ -556,6 +612,10 @@ export class Reader implements OnInit, OnDestroy {
       case 'notes':
         this.notesOpen.set(true);
         this.restoreNotesState(state);
+        break;
+      case 'sketches':
+        this.sketchesOpen.set(true);
+        this.restoreSketchesState(state);
         break;
       case 'toc':
         this.tocOpen.set(true);
@@ -577,6 +637,7 @@ export class Reader implements OnInit, OnDestroy {
     if (this.panelOpen()) return 'assistant';
     if (this.diagramsOpen()) return 'diagrams';
     if (this.notesOpen()) return 'notes';
+    if (this.sketchesOpen()) return 'sketches';
     if (this.tocOpen()) return 'toc';
     if (this.contentTreeOpen()) return 'content_tree';
     return null;
@@ -585,6 +646,7 @@ export class Reader implements OnInit, OnDestroy {
   private buildReaderState(): ReaderState {
     const activeNote = this.activeNote();
     const activeDiagram = this.activeDiagram();
+    const activeSketch = this.activeSketch();
     return {
       version: 1,
       zoom_pct: this.zoomPct(),
@@ -598,6 +660,12 @@ export class Reader implements OnInit, OnDestroy {
       diagrams: {
         view: activeDiagram && this.diagramView() === 'edit' ? 'edit' : 'list',
         active_id: activeDiagram?.id ?? null,
+      },
+      sketches: {
+        view: activeSketch && this.sketchView() === 'edit' ? 'edit' : 'list',
+        active_id: activeSketch?.id ?? null,
+        active_group_id: this.selectedSketchGroupId(),
+        search: this.sketchSearch(),
       },
     };
   }
@@ -624,6 +692,13 @@ export class Reader implements OnInit, OnDestroy {
     this.scheduleReaderStateSave();
   }
 
+  private closeSketchesPanel() {
+    if (!this.sketchesOpen()) return;
+    this.flushSketchAutosave();
+    this.sketchFocus.set(false);
+    this.sketchesOpen.set(false);
+  }
+
   togglePanel() {
     const open = !this.panelOpen();
     this.panelOpen.set(open);
@@ -632,6 +707,7 @@ export class Reader implements OnInit, OnDestroy {
       this.aiScope.set('chapter');
       this.diagramsOpen.set(false);
       this.notesOpen.set(false);
+      this.closeSketchesPanel();
       this.tocOpen.set(false);
       this.contentTreeOpen.set(false);
       if (!this.historyLoaded) this.loadHistory();
@@ -668,6 +744,11 @@ export class Reader implements OnInit, OnDestroy {
     window.getSelection()?.removeAllRanges();
     if (!this.panelOpen()) {
       this.aiScope.set('chapter');
+      this.diagramsOpen.set(false);
+      this.notesOpen.set(false);
+      this.closeSketchesPanel();
+      this.tocOpen.set(false);
+      this.contentTreeOpen.set(false);
       this.panelOpen.set(true);
       if (!this.historyLoaded) this.loadHistory();
       this.scheduleReaderStateSave();
@@ -808,6 +889,7 @@ export class Reader implements OnInit, OnDestroy {
       this.panelOpen.set(false);
       this.diagramsOpen.set(false);
       this.notesOpen.set(false);
+      this.closeSketchesPanel();
       this.contentTreeOpen.set(false);
       this.tocDraft.set(this.cloneToc(this.toc()));
       this.tocError.set(null);
@@ -999,6 +1081,7 @@ export class Reader implements OnInit, OnDestroy {
       this.panelOpen.set(false);
       this.diagramsOpen.set(false);
       this.notesOpen.set(false);
+      this.closeSketchesPanel();
       this.tocOpen.set(false);
       this.contentTreeError.set(null);
     }
@@ -1073,6 +1156,7 @@ export class Reader implements OnInit, OnDestroy {
     if (open) {
       this.panelOpen.set(false);
       this.notesOpen.set(false);
+      this.closeSketchesPanel();
       this.tocOpen.set(false);
       this.contentTreeOpen.set(false);
       if (!this.diagramsLoaded()) this.loadDiagrams();
@@ -1219,6 +1303,363 @@ export class Reader implements OnInit, OnDestroy {
     });
   }
 
+  // --- Study sketches (Excalidraw notebook) --------------------------------
+  toggleSketches() {
+    const open = !this.sketchesOpen();
+    if (!open) {
+      this.closeSketchesPanel();
+      this.scheduleReaderStateSave();
+      return;
+    }
+
+    this.sketchesOpen.set(true);
+    this.panelOpen.set(false);
+    this.diagramsOpen.set(false);
+    this.notesOpen.set(false);
+    this.tocOpen.set(false);
+    this.contentTreeOpen.set(false);
+    this.sketchesError.set(null);
+    if (!this.sketchesLoaded()) this.loadSketches();
+    this.scheduleReaderStateSave();
+  }
+
+  private loadSketches(afterLoad?: () => void) {
+    forkJoin({
+      groups: this.sketches.listGroups(this.bookId),
+      sketches: this.sketches.list(this.bookId),
+    }).subscribe({
+      next: ({ groups, sketches }) => {
+        this.sketchGroups.set(groups);
+        this.sketchList.set(sketches);
+        this.sketchesLoaded.set(true);
+        afterLoad?.();
+      },
+      error: (err) => {
+        const message = this.errorText(err, 'Could not load sketches');
+        this.sketchesError.set(message);
+        this.notify.error(message);
+      },
+    });
+  }
+
+  private restoreSketchesState(state: ReaderState) {
+    const sketchState = state.sketches;
+    this.selectedSketchGroupId.set(sketchState?.active_group_id ?? null);
+    const activeId = sketchState?.view === 'edit' ? sketchState.active_id : null;
+    this.loadSketches(() => {
+      if (!this.sketchesOpen()) return;
+      if (!activeId) {
+        this.sketchView.set('list');
+        return;
+      }
+      const sketch = this.sketchList().find((s) => s.id === activeId);
+      if (sketch) {
+        this.setActiveSketch(sketch);
+      } else {
+        this.sketches.get(this.bookId, activeId).subscribe({
+          next: (item) => {
+            if (!this.sketchesOpen()) return;
+            this.sketchList.update((list) => [item, ...list.filter((s) => s.id !== item.id)]);
+            this.setActiveSketch(item);
+          },
+          error: () => this.sketchView.set('list'),
+        });
+      }
+    });
+  }
+
+  createSketchGroup() {
+    const name = window.prompt('Group name')?.trim();
+    if (!name) return;
+    this.sketches.createGroup(this.bookId, { name }).subscribe({
+      next: (group) => {
+        this.sketchGroups.update((groups) => [...groups, group]);
+        this.selectedSketchGroupId.set(group.id);
+        this.scheduleReaderStateSave();
+        this.notify.success('Group created');
+      },
+      error: (err) => {
+        const message = this.errorText(err, 'Could not create group');
+        this.sketchesError.set(message);
+        this.notify.error(message);
+      },
+    });
+  }
+
+  renameSketchGroup(group: SketchGroup) {
+    const name = window.prompt('Group name', group.name)?.trim();
+    if (!name || name === group.name) return;
+    this.sketches.updateGroup(this.bookId, group.id, { name }).subscribe({
+      next: (saved) => {
+        this.sketchGroups.update((groups) =>
+          groups.map((item) => (item.id === saved.id ? saved : item)),
+        );
+        this.notify.success('Group renamed');
+      },
+      error: (err) => {
+        const message = this.errorText(err, 'Could not rename group');
+        this.sketchesError.set(message);
+        this.notify.error(message);
+      },
+    });
+  }
+
+  deleteSketchGroup(group: SketchGroup) {
+    const ok = window.confirm(`Delete "${group.name}"? Sketches will move to Ungrouped.`);
+    if (!ok) return;
+    this.sketches.removeGroup(this.bookId, group.id).subscribe({
+      next: () => {
+        this.sketchGroups.update((groups) => groups.filter((item) => item.id !== group.id));
+        this.sketchList.update((items) =>
+          items.map((item) =>
+            item.group_id === group.id ? { ...item, group_id: null } : item,
+          ),
+        );
+        if (this.selectedSketchGroupId() === group.id) this.selectedSketchGroupId.set(null);
+        if (this.sketchGroupId() === group.id) {
+          this.sketchGroupId.set(null);
+          this.scheduleSketchAutosave();
+        }
+        this.scheduleReaderStateSave();
+        this.notify.success('Group deleted');
+      },
+      error: (err) => {
+        const message = this.errorText(err, 'Could not delete group');
+        this.sketchesError.set(message);
+        this.notify.error(message);
+      },
+    });
+  }
+
+  newSketch(groupId?: number | null) {
+    if (this.sketchSaving()) return;
+    const targetGroupId = groupId === undefined ? this.selectedSketchGroupId() : groupId;
+    this.flushSketchAutosave();
+    this.sketchSaving.set(true);
+    this.sketchSaveStatus.set('saving');
+    this.sketchesError.set(null);
+    this.sketches
+      .create(this.bookId, {
+        title: 'Untitled sketch',
+        content: '',
+        group_id: targetGroupId,
+        page: this.currentPage(),
+      })
+      .subscribe({
+        next: (saved) => {
+          this.sketchSaving.set(false);
+          this.sketchSaveStatus.set('saved');
+          this.sketchList.update((list) => [saved, ...list.filter((s) => s.id !== saved.id)]);
+          this.setActiveSketch(saved);
+          this.scheduleReaderStateSave();
+          this.notify.success('Sketch created');
+        },
+        error: (err) => {
+          const message = this.errorText(err, 'Could not create sketch');
+          this.sketchSaving.set(false);
+          this.sketchSaveStatus.set('error');
+          this.sketchesError.set(message);
+          this.notify.error(message);
+        },
+      });
+  }
+
+  openSketch(sketch: Sketch) {
+    if (this.activeSketch()?.id !== sketch.id) this.flushSketchAutosave();
+    this.setActiveSketch(sketch);
+    this.scheduleReaderStateSave();
+  }
+
+  private setActiveSketch(sketch: Sketch) {
+    this.activeSketch.set(sketch);
+    this.sketchTitle.set(sketch.title);
+    this.sketchContent.set(sketch.content);
+    this.sketchPage.set(sketch.page);
+    this.sketchGroupId.set(sketch.group_id);
+    this.selectedSketchGroupId.set(sketch.group_id);
+    this.sketchLastSaved = {
+      title: sketch.title,
+      content: sketch.content,
+      page: sketch.page,
+      group_id: sketch.group_id,
+    };
+    this.sketchSaveStatus.set('saved');
+    this.sketchesError.set(null);
+    this.sketchView.set('edit');
+  }
+
+  backToSketchList() {
+    this.flushSketchAutosave();
+    this.sketchFocus.set(false);
+    this.sketchView.set('list');
+    this.scheduleReaderStateSave();
+  }
+
+  setSketchSearch(value: string) {
+    this.sketchSearch.set(value);
+    this.scheduleReaderStateSave();
+  }
+
+  selectSketchGroup(groupId: number | null) {
+    this.selectedSketchGroupId.set(groupId);
+    this.scheduleReaderStateSave();
+  }
+
+  setSketchTitle(value: string) {
+    this.sketchTitle.set(value);
+    this.scheduleSketchAutosave();
+  }
+
+  setSketchPage(value: number) {
+    this.sketchPage.set(value && value > 0 ? value : null);
+    this.scheduleSketchAutosave();
+  }
+
+  setSketchGroup(value: string) {
+    const groupId = value ? Number(value) : null;
+    this.sketchGroupId.set(groupId != null && Number.isFinite(groupId) ? groupId : null);
+    this.selectedSketchGroupId.set(this.sketchGroupId());
+    this.scheduleSketchAutosave();
+    this.scheduleReaderStateSave();
+  }
+
+  onSketchSceneChange(json: string) {
+    this.sketchContent.set(json);
+    this.scheduleSketchAutosave();
+  }
+
+  toggleSketchFocus() {
+    this.sketchFocus.update((value) => !value);
+  }
+
+  sketchUpdatedLabel(sketch: Sketch): string {
+    return new Date(sketch.updated_at).toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  }
+
+  sketchGroupName(groupId: number | null): string {
+    if (groupId == null) return 'Ungrouped';
+    return this.sketchGroups().find((group) => group.id === groupId)?.name ?? 'Ungrouped';
+  }
+
+  deleteSketch(sketch: Sketch) {
+    this.sketches.remove(this.bookId, sketch.id).subscribe({
+      next: () => {
+        this.sketchList.update((list) => list.filter((s) => s.id !== sketch.id));
+        if (this.activeSketch()?.id === sketch.id) {
+          this.activeSketch.set(null);
+          this.sketchLastSaved = null;
+          this.sketchFocus.set(false);
+          this.sketchView.set('list');
+          this.sketchSaveStatus.set('idle');
+        }
+        this.scheduleReaderStateSave();
+        this.notify.success('Sketch deleted');
+      },
+      error: (err) => {
+        const message = this.errorText(err, 'Could not delete sketch');
+        this.sketchesError.set(message);
+        this.notify.error(message);
+      },
+    });
+  }
+
+  private scheduleSketchAutosave() {
+    if (!this.activeSketch()) return;
+    this.sketchSaveStatus.set('idle');
+    if (this.sketchAutoSaveTimer) clearTimeout(this.sketchAutoSaveTimer);
+    this.sketchAutoSaveTimer = setTimeout(() => {
+      this.sketchAutoSaveTimer = null;
+      this.flushSketchAutosave();
+    }, SKETCH_AUTOSAVE_MS);
+  }
+
+  private currentSketchPayload() {
+    let content = this.sketchContent();
+    if (this.sketchesOpen() && this.sketchView() === 'edit') {
+      const fresh = this.excalidrawCanvas()?.getScene();
+      if (fresh != null) content = fresh;
+    }
+    return {
+      title: this.sketchTitle().trim(),
+      content,
+      page: this.sketchPage(),
+      group_id: this.sketchGroupId(),
+    };
+  }
+
+  private flushSketchAutosave() {
+    if (this.sketchAutoSaveTimer) {
+      clearTimeout(this.sketchAutoSaveTimer);
+      this.sketchAutoSaveTimer = null;
+    }
+    const sketch = this.activeSketch();
+    if (!sketch) return;
+    if (this.sketchSaving()) {
+      this.sketchSaveQueued = true;
+      return;
+    }
+
+    const payload = this.currentSketchPayload();
+    if (!payload.title) {
+      this.sketchSaveStatus.set('error');
+      this.sketchesError.set('Sketch title cannot be empty');
+      return;
+    }
+    if (
+      this.sketchLastSaved &&
+      payload.title === this.sketchLastSaved.title &&
+      payload.content === this.sketchLastSaved.content &&
+      payload.page === this.sketchLastSaved.page &&
+      payload.group_id === this.sketchLastSaved.group_id
+    ) {
+      this.sketchSaveStatus.set('saved');
+      return;
+    }
+
+    this.sketchSaving.set(true);
+    this.sketchSaveStatus.set('saving');
+    this.sketchesError.set(null);
+    this.sketches.update(this.bookId, sketch.id, payload).subscribe({
+      next: (saved) => {
+        const queued = this.sketchSaveQueued;
+        const stillActive = this.activeSketch()?.id === saved.id;
+        if (stillActive) {
+          this.activeSketch.set(saved);
+          if (!queued) this.sketchContent.set(saved.content);
+        }
+        this.sketchList.update((list) => [saved, ...list.filter((s) => s.id !== saved.id)]);
+        if (stillActive) {
+          this.sketchLastSaved = {
+            title: saved.title,
+            content: saved.content,
+            page: saved.page,
+            group_id: saved.group_id,
+          };
+        }
+        this.sketchSaving.set(false);
+        if (stillActive) this.sketchSaveStatus.set('saved');
+        this.scheduleReaderStateSave();
+        if (queued && stillActive) {
+          this.sketchSaveQueued = false;
+          this.scheduleSketchAutosave();
+        } else if (queued) {
+          this.sketchSaveQueued = false;
+        }
+      },
+      error: (err) => {
+        const message = this.errorText(err, 'Could not save sketch');
+        this.sketchSaving.set(false);
+        this.sketchSaveStatus.set('error');
+        this.sketchesError.set(message);
+        this.notify.error(message);
+      },
+    });
+  }
+
   // --- Study notes (Markdown) ----------------------------------------------
   toggleNotes() {
     const open = !this.notesOpen();
@@ -1226,6 +1667,7 @@ export class Reader implements OnInit, OnDestroy {
     if (open) {
       this.panelOpen.set(false);
       this.diagramsOpen.set(false);
+      this.closeSketchesPanel();
       this.tocOpen.set(false);
       this.contentTreeOpen.set(false);
       if (!this.notesLoaded()) this.loadNotes();
