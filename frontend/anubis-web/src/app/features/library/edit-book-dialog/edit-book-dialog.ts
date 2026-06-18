@@ -6,6 +6,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { Book } from '../../../core/models/book.model';
 import { LibraryService } from '../../../core/services/library';
+import { NotificationsService } from '../../../core/services/notifications';
 
 export interface EditBookData {
   book: Book;
@@ -19,6 +20,7 @@ export interface EditBookData {
 })
 export class EditBookDialog {
   private library = inject(LibraryService);
+  private notify = inject(NotificationsService);
   private dialogRef = inject<MatDialogRef<EditBookDialog, Book>>(MatDialogRef);
   private data = inject<EditBookData>(MAT_DIALOG_DATA);
 
@@ -32,6 +34,11 @@ export class EditBookDialog {
     this.dialogRef.close();
   }
 
+  private errorText(err: unknown, fallback: string): string {
+    const detail = (err as { error?: { detail?: unknown } })?.error?.detail;
+    return typeof detail === 'string' && detail.trim() ? detail : fallback;
+  }
+
   save() {
     const title = this.editTitle().trim();
     if (!title) return; // title is required
@@ -42,10 +49,13 @@ export class EditBookDialog {
     this.library.update(this.book.id, { title, author: author || null }).subscribe({
       next: (updated) => {
         this.savingEdit.set(false);
+        this.notify.success('Book updated');
         this.dialogRef.close(updated);
       },
       error: (e) => {
-        this.error.set(e?.error?.detail ?? 'Could not update book');
+        const message = this.errorText(e, 'Could not update book');
+        this.error.set(message);
+        this.notify.error(message);
         this.savingEdit.set(false);
       },
     });

@@ -4,6 +4,29 @@ export interface TocEntry {
   depth: number;
 }
 
+export type ReaderPanel = 'assistant' | 'diagrams' | 'notes' | 'toc';
+export type ReaderSubView = 'list' | 'edit';
+
+export interface ReaderNotesState {
+  view: ReaderSubView;
+  active_id: number | null;
+  search: string;
+}
+
+export interface ReaderDiagramsState {
+  view: ReaderSubView;
+  active_id: number | null;
+}
+
+export interface ReaderState {
+  version: 1;
+  zoom_pct: number;
+  panel: ReaderPanel | null;
+  panel_width_px: number;
+  notes: ReaderNotesState;
+  diagrams: ReaderDiagramsState;
+}
+
 export interface Book {
   id: number;
   title: string;
@@ -16,6 +39,7 @@ export interface Book {
   last_page: number | null;
   page_count: number | null;
   toc: TocEntry[] | null;
+  reader_state: ReaderState | null;
   collection_ids: number[];
   created_at: string;
 }

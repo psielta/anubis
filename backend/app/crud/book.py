@@ -87,6 +87,15 @@ async def set_toc(
     return book
 
 
+async def set_reader_state(
+    db: AsyncSession, book: Book, *, reader_state: dict
+) -> Book:
+    book.reader_state = reader_state
+    await db.commit()
+    await db.refresh(book)
+    return book
+
+
 async def update_details(
     db: AsyncSession,
     book: Book,

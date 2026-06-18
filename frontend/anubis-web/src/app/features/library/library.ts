@@ -12,6 +12,7 @@ import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { Book } from '../../core/models/book.model';
 import { Collection } from '../../core/models/collection.model';
 import { LibraryService } from '../../core/services/library';
+import { NotificationsService } from '../../core/services/notifications';
 import { EditBookDialog } from './edit-book-dialog/edit-book-dialog';
 import { UploadDialog } from './upload-dialog/upload-dialog';
 
@@ -39,6 +40,7 @@ export class Library implements OnInit, OnDestroy {
   private library = inject(LibraryService);
   private sanitizer = inject(DomSanitizer);
   private dialog = inject(MatDialog);
+  private notify = inject(NotificationsService);
 
   protected readonly books = signal<Book[]>([]);
   protected readonly total = signal(0);
@@ -65,6 +67,11 @@ export class Library implements OnInit, OnDestroy {
   ngOnDestroy() {
     if (this.searchTimer) clearTimeout(this.searchTimer);
     for (const url of Object.values(this.coverRawUrls)) URL.revokeObjectURL(url);
+  }
+
+  private errorText(err: unknown, fallback: string): string {
+    const detail = (err as { error?: { detail?: unknown } })?.error?.detail;
+    return typeof detail === 'string' && detail.trim() ? detail : fallback;
   }
 
   private load() {
@@ -129,8 +136,15 @@ export class Library implements OnInit, OnDestroy {
     this.creatingCollection.set(false);
     if (!trimmed) return;
     this.library.createCollection(trimmed).subscribe({
-      next: () => this.loadCollections(),
-      error: (e) => this.error.set(e?.error?.detail ?? 'Could not create collection'),
+      next: () => {
+        this.loadCollections();
+        this.notify.success('Collection created');
+      },
+      error: (e) => {
+        const message = this.errorText(e, 'Could not create collection');
+        this.error.set(message);
+        this.notify.error(message);
+      },
     });
   }
 
@@ -144,8 +158,15 @@ export class Library implements OnInit, OnDestroy {
     this.editingCollectionId.set(null);
     if (!trimmed || trimmed === collection.name) return;
     this.library.renameCollection(collection.id, trimmed).subscribe({
-      next: () => this.loadCollections(),
-      error: (e) => this.error.set(e?.error?.detail ?? 'Could not rename collection'),
+      next: () => {
+        this.loadCollections();
+        this.notify.success('Collection renamed');
+      },
+      error: (e) => {
+        const message = this.errorText(e, 'Could not rename collection');
+        this.error.set(message);
+        this.notify.error(message);
+      },
     });
   }
 
@@ -159,8 +180,13 @@ export class Library implements OnInit, OnDestroy {
           this.load();
         }
         this.loadCollections();
+        this.notify.success('Collection deleted');
       },
-      error: (e) => this.error.set(e?.error?.detail ?? 'Could not delete collection'),
+      error: (e) => {
+        const message = this.errorText(e, 'Could not delete collection');
+        this.error.set(message);
+        this.notify.error(message);
+      },
     });
   }
 
@@ -173,8 +199,13 @@ export class Library implements OnInit, OnDestroy {
       next: (updated) => {
         this.books.update((list) => list.map((b) => (b.id === book.id ? updated : b)));
         this.loadCollections();
+        this.notify.success('Collections updated');
       },
-      error: (e) => this.error.set(e?.error?.detail ?? 'Could not update collections'),
+      error: (e) => {
+        const message = this.errorText(e, 'Could not update collections');
+        this.error.set(message);
+        this.notify.error(message);
+      },
     });
   }
 
@@ -210,12 +241,16 @@ export class Library implements OnInit, OnDestroy {
 
   private validateImage(file: File, input: HTMLInputElement): boolean {
     if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
-      this.error.set('Cover must be a PNG, JPEG or WebP image');
+      const message = 'Cover must be a PNG, JPEG or WebP image';
+      this.error.set(message);
+      this.notify.error(message);
       input.value = '';
       return false;
     }
     if (file.size > MAX_COVER_MB * 1024 * 1024) {
-      this.error.set(`Cover exceeds ${MAX_COVER_MB} MB limit`);
+      const message = `Cover exceeds ${MAX_COVER_MB} MB limit`;
+      this.error.set(message);
+      this.notify.error(message);
       input.value = '';
       return false;
     }
@@ -262,8 +297,13 @@ export class Library implements OnInit, OnDestroy {
       next: (updated) => {
         this.books.update((books) => books.map((b) => (b.id === book.id ? updated : b)));
         this.loadCover(book.id);
+        this.notify.success('Cover updated');
       },
-      error: (e) => this.error.set(e?.error?.detail ?? 'Cover upload failed'),
+      error: (e) => {
+        const message = this.errorText(e, 'Cover upload failed');
+        this.error.set(message);
+        this.notify.error(message);
+      },
     });
     input.value = '';
   }
@@ -278,7 +318,11 @@ export class Library implements OnInit, OnDestroy {
         anchor.click();
         URL.revokeObjectURL(url);
       },
-      error: (e) => this.error.set(e?.error?.detail ?? 'Download failed'),
+      error: (e) => {
+        const message = this.errorText(e, 'Download failed');
+        this.error.set(message);
+        this.notify.error(message);
+      },
     });
   }
 
@@ -296,8 +340,13 @@ export class Library implements OnInit, OnDestroy {
         }
         this.load();
         this.loadCollections();
+        this.notify.success('Book deleted');
       },
-      error: (e) => this.error.set(e?.error?.detail ?? 'Delete failed'),
+      error: (e) => {
+        const message = this.errorText(e, 'Delete failed');
+        this.error.set(message);
+        this.notify.error(message);
+      },
     });
   }
 

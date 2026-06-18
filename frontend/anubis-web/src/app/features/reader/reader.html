@@ -393,7 +393,7 @@
               placeholder="Search notes…"
               aria-label="Search notes"
               [value]="noteSearch()"
-              (input)="noteSearch.set($any($event.target).value)"
+              (input)="setNoteSearch($any($event.target).value)"
             />
           }
           @if (!noteList().length) {

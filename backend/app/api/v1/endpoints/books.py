@@ -17,6 +17,7 @@ from app.schemas.book import (
     BookUpdate,
     CollectionsUpdate,
     ProgressUpdate,
+    ReaderState,
     TocUpdate,
 )
 from app.services import covers, metadata
@@ -274,6 +275,23 @@ async def update_progress(
     last_page = min(payload.last_page, payload.page_count)
     book = await book_crud.set_progress(
         db, book, last_page=last_page, page_count=payload.page_count
+    )
+    return await _book_read(db, book)
+
+
+@router.put("/{book_id}/reader-state", response_model=BookRead)
+async def update_reader_state(
+    book_id: int,
+    current_user: CurrentUser,
+    db: DbSession,
+    payload: ReaderState,
+) -> BookRead:
+    book = await book_crud.get_for_user(db, current_user.id, book_id)
+    if book is None:
+        raise HTTPException(404, "Book not found")
+
+    book = await book_crud.set_reader_state(
+        db, book, reader_state=payload.model_dump(mode="json")
     )
     return await _book_read(db, book)
 

@@ -7,6 +7,7 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { Subscription } from 'rxjs';
 import { UploadItem, UploadStatus } from '../../../core/models/book.model';
 import { LibraryService } from '../../../core/services/library';
+import { NotificationsService } from '../../../core/services/notifications';
 
 const MAX_UPLOAD_MB = 250;
 const ACCEPTED_EXTENSIONS = ['.pdf'];
@@ -19,6 +20,7 @@ const ACCEPTED_EXTENSIONS = ['.pdf'];
 })
 export class UploadDialog implements OnDestroy {
   private library = inject(LibraryService);
+  private notify = inject(NotificationsService);
   private dialogRef = inject<MatDialogRef<UploadDialog, boolean>>(MatDialogRef);
 
   protected readonly queue = signal<UploadItem[]>([]);
@@ -49,6 +51,11 @@ export class UploadDialog implements OnDestroy {
 
   close() {
     this.dialogRef.close(this.didUpload);
+  }
+
+  private errorText(err: unknown, fallback: string): string {
+    const detail = (err as { error?: { detail?: unknown } })?.error?.detail;
+    return typeof detail === 'string' && detail.trim() ? detail : fallback;
   }
 
   onFilesSelected(event: Event) {
@@ -111,11 +118,15 @@ export class UploadDialog implements OnDestroy {
     for (const file of Array.from(files)) {
       const ext = '.' + (file.name.split('.').pop()?.toLowerCase() ?? '');
       if (!ACCEPTED_EXTENSIONS.includes(ext)) {
-        this.error.set(`${file.name}: only PDF files are supported`);
+        const message = `${file.name}: only PDF files are supported`;
+        this.error.set(message);
+        this.notify.error(message);
         continue;
       }
       if (file.size > MAX_UPLOAD_MB * 1024 * 1024) {
-        this.error.set(`${file.name}: exceeds ${MAX_UPLOAD_MB} MB limit`);
+        const message = `${file.name}: exceeds ${MAX_UPLOAD_MB} MB limit`;
+        this.error.set(message);
+        this.notify.error(message);
         continue;
       }
       additions.push({ id: ++this.uploadSeq, file, status: 'queued', progress: 0 });
@@ -147,13 +158,16 @@ export class UploadDialog implements OnDestroy {
             progress: 100,
             book: event.body ?? undefined,
           });
+          this.notify.success(`${next.file.name} imported`);
         }
       },
       error: (e) => {
+        const message = this.errorText(e, 'Upload failed');
         this.patchItem(next.id, {
           status: 'error',
-          error: e?.error?.detail ?? 'Upload failed',
+          error: message,
         });
+        this.notify.error(message);
         this.running = false;
         this.pump();
       },

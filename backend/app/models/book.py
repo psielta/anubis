@@ -29,6 +29,7 @@ class Book(Base):
     last_page: Mapped[int | None] = mapped_column(default=None)
     page_count: Mapped[int | None] = mapped_column(default=None)
     toc: Mapped[list[dict] | None] = mapped_column(JSONB, default=None)
+    reader_state: Mapped[dict | None] = mapped_column(JSONB, default=None)
     ai_file_name: Mapped[str | None] = mapped_column(String(256), default=None)
     ai_file_expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None

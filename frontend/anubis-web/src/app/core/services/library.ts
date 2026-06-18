@@ -2,7 +2,7 @@ import { HttpClient, HttpEvent, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { Book, BookPage } from '../models/book.model';
+import { Book, BookPage, ReaderState } from '../models/book.model';
 import { Collection } from '../models/collection.model';
 
 export interface BookQuery {
@@ -92,6 +92,10 @@ export class LibraryService {
       last_page: lastPage,
       page_count: pageCount,
     });
+  }
+
+  saveReaderState(id: number, state: ReaderState): Observable<Book> {
+    return this.http.put<Book>(`${this.base}/books/${id}/reader-state`, state);
   }
 
   remove(id: number): Observable<void> {

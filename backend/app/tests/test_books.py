@@ -413,6 +413,107 @@ async def test_progress_isolated_per_user(client):
         assert resp.status_code == 404
 
 
+# --- PUT /books/{id}/reader-state -----------------------------------------
+
+
+def _reader_state_payload(**overrides):
+    payload = {
+        "version": 1,
+        "zoom_pct": 150,
+        "panel": "notes",
+        "panel_width_px": 520,
+        "notes": {"view": "edit", "active_id": 123, "search": "chapter"},
+        "diagrams": {"view": "list", "active_id": None},
+    }
+    payload.update(overrides)
+    return payload
+
+
+@pytest.mark.asyncio
+async def test_reader_state_save_and_get(client):
+    _, token = await _token(client)
+    book_id = (await _upload_pdf(client, token)).json()["id"]
+    state = _reader_state_payload()
+
+    response = await client.put(
+        f"{API}/books/{book_id}/reader-state",
+        headers=_auth_headers(token),
+        json=state,
+    )
+    assert response.status_code == 200
+    assert response.json()["reader_state"] == state
+
+    book = await client.get(f"{API}/books/{book_id}", headers=_auth_headers(token))
+    assert book.status_code == 200
+    assert book.json()["reader_state"] == state
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "payload",
+    [
+        _reader_state_payload(zoom_pct=49),
+        _reader_state_payload(panel="bad"),
+        _reader_state_payload(panel_width_px=319),
+        _reader_state_payload(notes={"view": "edit", "active_id": 0, "search": ""}),
+        _reader_state_payload(notes={"view": "list", "active_id": None, "search": "x" * 201}),
+        _reader_state_payload(diagrams={"view": "edit", "active_id": 0}),
+    ],
+)
+async def test_reader_state_rejects_invalid_values(client, payload):
+    _, token = await _token(client)
+    book_id = (await _upload_pdf(client, token)).json()["id"]
+
+    response = await client.put(
+        f"{API}/books/{book_id}/reader-state",
+        headers=_auth_headers(token),
+        json=payload,
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_reader_state_isolated_per_user(client):
+    _, token1 = await _token(client)
+    book_id = (await _upload_pdf(client, token1)).json()["id"]
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as other:
+        _, token2 = await _token(other)
+        resp = await other.put(
+            f"{API}/books/{book_id}/reader-state",
+            headers=_auth_headers(token2),
+            json=_reader_state_payload(),
+        )
+        assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_progress_preserves_reader_state(client):
+    _, token = await _token(client)
+    book_id = (await _upload_pdf(client, token)).json()["id"]
+    state = _reader_state_payload(
+        panel="assistant",
+        notes={"view": "list", "active_id": None, "search": ""},
+    )
+
+    state_response = await client.put(
+        f"{API}/books/{book_id}/reader-state",
+        headers=_auth_headers(token),
+        json=state,
+    )
+    assert state_response.status_code == 200
+
+    response = await client.put(
+        f"{API}/books/{book_id}/progress",
+        headers=_auth_headers(token),
+        json={"last_page": 3, "page_count": 10},
+    )
+    assert response.status_code == 200
+    assert response.json()["last_page"] == 3
+    assert response.json()["reader_state"] == state
+
+
 # --- PUT /books/{id}/toc --------------------------------------------------
 
 

@@ -25,7 +25,7 @@ import { StudyService } from '../../core/services/study';
 import { DiagramsService } from '../../core/services/diagrams';
 import { NotesService } from '../../core/services/notes';
 import { TocService } from '../../core/services/toc';
-import { Book } from '../../core/models/book.model';
+import { Book, ReaderPanel, ReaderState } from '../../core/models/book.model';
 import { StudyKind, StudyMessage, StudyRequest } from '../../core/models/study.model';
 import { Diagram, DiagramType } from '../../core/models/diagram.model';
 import { Note } from '../../core/models/note.model';
@@ -34,6 +34,7 @@ import { MermaidPreview } from './mermaid-preview/mermaid-preview';
 import { NoteEditor } from './note-editor/note-editor';
 import { ReaderPrefsService } from '../../core/services/reader-prefs';
 import { PanelResizerDirective } from './panel-resizer.directive';
+import { NotificationsService } from '../../core/services/notifications';
 
 // Served as a static asset (see angular.json); must be an absolute URL so
 // production nginx does not fall through to the SPA index.html.
@@ -52,6 +53,7 @@ interface TocItem {
 }
 
 const SAVE_DEBOUNCE_MS = 1200;
+const READER_STATE_DEBOUNCE_MS = 800;
 
 @Component({
   selector: 'app-reader',
@@ -77,6 +79,7 @@ export class Reader implements OnInit, OnDestroy {
   private notes = inject(NotesService);
   private tocService = inject(TocService);
   private prefs = inject(ReaderPrefsService);
+  private notify = inject(NotificationsService);
 
   protected readonly panelWidth = this.prefs.panelWidth;
   protected readonly resizablePanelOpen = computed(
@@ -170,6 +173,8 @@ export class Reader implements OnInit, OnDestroy {
   private canSave = false;
   private lastSavedPage = 0;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
+  private readerStateSaveEnabled = false;
+  private readerStateTimer: ReturnType<typeof setTimeout> | null = null;
 
   ngOnInit() {
     this.bookId = Number(this.route.snapshot.paramMap.get('id'));
@@ -186,6 +191,7 @@ export class Reader implements OnInit, OnDestroy {
         }
         this.resumePage = book.last_page && book.last_page > 1 ? book.last_page : null;
         this.lastSavedPage = book.last_page ?? 0;
+        this.applySavedReaderState(book.reader_state);
         this.loadFile(this.bookId);
       },
       error: () => this.fail('Book not found'),
@@ -199,6 +205,8 @@ export class Reader implements OnInit, OnDestroy {
   ngOnDestroy() {
     if (this.saveTimer) clearTimeout(this.saveTimer);
     this.flushProgress();
+    if (this.readerStateTimer) clearTimeout(this.readerStateTimer);
+    this.flushReaderState();
     this.aiController?.abort();
     this.observer?.disconnect();
     this.loadingTask?.destroy();
@@ -207,6 +215,11 @@ export class Reader implements OnInit, OnDestroy {
   private fail(message: string) {
     this.error.set(message);
     this.loading.set(false);
+  }
+
+  private errorText(err: unknown, fallback: string): string {
+    const detail = (err as { error?: { detail?: unknown } })?.error?.detail;
+    return typeof detail === 'string' && detail.trim() ? detail : fallback;
   }
 
   private loadFile(id: number) {
@@ -243,6 +256,7 @@ export class Reader implements OnInit, OnDestroy {
       const saved = this.book()?.toc;
       if (saved?.length) {
         this.toc.set(this.cloneToc(saved));
+        if (this.tocOpen()) this.tocDraft.set(this.cloneToc(saved));
         this.tocCustom.set(true);
       } else {
         this.tocCustom.set(false);
@@ -324,7 +338,9 @@ export class Reader implements OnInit, OnDestroy {
 
   /** Build the table of contents from the PDF's outline (bookmarks), if any. */
   private async loadOutline() {
-    this.toc.set(await this.extractOutline());
+    const outline = await this.extractOutline();
+    this.toc.set(outline);
+    if (this.tocOpen()) this.tocDraft.set(this.cloneToc(outline));
   }
 
   private async extractOutline(): Promise<TocItem[]> {
@@ -423,6 +439,7 @@ export class Reader implements OnInit, OnDestroy {
     const el = this.viewport()?.nativeElement;
     if (!el) return;
     const keep = this.currentPage();
+    this.scheduleReaderStateSave();
     void this.buildPages(el).then(() => this.scrollToPage(el, keep));
   }
 
@@ -442,9 +459,96 @@ export class Reader implements OnInit, OnDestroy {
     this.library.saveProgress(this.bookId, page, total).subscribe({ error: () => {} });
   }
 
+  private applySavedReaderState(state: ReaderState | null) {
+    if (!state) {
+      this.readerStateSaveEnabled = true;
+      return;
+    }
+
+    this.zoomPct.set(this.clampZoom(state.zoom_pct));
+    this.prefs.setPanelWidth(state.panel_width_px);
+    this.noteSearch.set(state.notes.search ?? '');
+
+    this.panelOpen.set(false);
+    this.diagramsOpen.set(false);
+    this.notesOpen.set(false);
+    this.tocOpen.set(false);
+
+    switch (state.panel) {
+      case 'assistant':
+        this.aiScope.set('chapter');
+        this.panelOpen.set(true);
+        if (!this.historyLoaded) this.loadHistory();
+        break;
+      case 'diagrams':
+        this.diagramsOpen.set(true);
+        this.restoreDiagramsState(state);
+        break;
+      case 'notes':
+        this.notesOpen.set(true);
+        this.restoreNotesState(state);
+        break;
+      case 'toc':
+        this.tocOpen.set(true);
+        this.tocDraft.set(this.cloneToc(this.toc()));
+        break;
+    }
+
+    this.readerStateSaveEnabled = true;
+  }
+
+  private clampZoom(value: number): number {
+    return Math.max(50, Math.min(300, Math.round(value)));
+  }
+
+  private openPanelName(): ReaderPanel | null {
+    if (this.panelOpen()) return 'assistant';
+    if (this.diagramsOpen()) return 'diagrams';
+    if (this.notesOpen()) return 'notes';
+    if (this.tocOpen()) return 'toc';
+    return null;
+  }
+
+  private buildReaderState(): ReaderState {
+    const activeNote = this.activeNote();
+    const activeDiagram = this.activeDiagram();
+    return {
+      version: 1,
+      zoom_pct: this.zoomPct(),
+      panel: this.openPanelName(),
+      panel_width_px: this.panelWidth(),
+      notes: {
+        view: activeNote && this.noteView() === 'edit' ? 'edit' : 'list',
+        active_id: activeNote?.id ?? null,
+        search: this.noteSearch(),
+      },
+      diagrams: {
+        view: activeDiagram && this.diagramView() === 'edit' ? 'edit' : 'list',
+        active_id: activeDiagram?.id ?? null,
+      },
+    };
+  }
+
+  private scheduleReaderStateSave() {
+    if (!this.readerStateSaveEnabled || !this.bookId) return;
+    if (this.readerStateTimer) clearTimeout(this.readerStateTimer);
+    this.readerStateTimer = setTimeout(() => {
+      this.readerStateTimer = null;
+      this.flushReaderState();
+    }, READER_STATE_DEBOUNCE_MS);
+  }
+
+  private flushReaderState() {
+    if (!this.readerStateSaveEnabled || !this.bookId) return;
+    this.library.saveReaderState(this.bookId, this.buildReaderState()).subscribe({
+      error: () => {},
+    });
+  }
+
   // --- AI study assistant --------------------------------------------------
   protected onPanelResize(width: number) {
     this.prefs.setPanelWidth(width);
+    this.scheduleReaderStateSave();
   }
 
   togglePanel() {
@@ -458,6 +562,7 @@ export class Reader implements OnInit, OnDestroy {
       this.tocOpen.set(false);
       if (!this.historyLoaded) this.loadHistory();
     }
+    this.scheduleReaderStateSave();
   }
 
   captureSelection() {
@@ -491,6 +596,7 @@ export class Reader implements OnInit, OnDestroy {
       this.aiScope.set('chapter');
       this.panelOpen.set(true);
       if (!this.historyLoaded) this.loadHistory();
+      this.scheduleReaderStateSave();
     }
   }
 
@@ -601,6 +707,7 @@ export class Reader implements OnInit, OnDestroy {
         },
         onError: (message) => {
           this.aiError.set(message);
+          this.notify.error(message);
           this.aiBusy.set(false);
           this.pendingQuestion.set(null);
         },
@@ -611,8 +718,11 @@ export class Reader implements OnInit, OnDestroy {
 
   clearHistory() {
     this.study.clear(this.bookId).subscribe({
-      next: () => this.messages.set([]),
-      error: () => {},
+      next: () => {
+        this.messages.set([]);
+        this.notify.success('Study history cleared');
+      },
+      error: (err) => this.notify.error(this.errorText(err, 'Could not clear study history')),
     });
   }
 
@@ -627,6 +737,7 @@ export class Reader implements OnInit, OnDestroy {
       this.tocDraft.set(this.cloneToc(this.toc()));
       this.tocError.set(null);
     }
+    this.scheduleReaderStateSave();
   }
 
   private blockEnd(list: TocItem[], index: number): number {
@@ -778,10 +889,12 @@ export class Reader implements OnInit, OnDestroy {
     this.tocError.set(null);
     this.tocService.save(this.bookId, items).subscribe({
       next: (book) => {
-        void this.applySavedToc(book);
+        void this.applySavedToc(book).then(() => this.notify.success('Contents saved'));
       },
       error: (err) => {
-        this.tocError.set(err?.error?.detail ?? 'Could not save contents');
+        const message = this.errorText(err, 'Could not save contents');
+        this.tocError.set(message);
+        this.notify.error(message);
         this.tocSaving.set(false);
       },
     });
@@ -813,15 +926,45 @@ export class Reader implements OnInit, OnDestroy {
       this.tocOpen.set(false);
       if (!this.diagramsLoaded()) this.loadDiagrams();
     }
+    this.scheduleReaderStateSave();
   }
 
-  private loadDiagrams() {
+  private loadDiagrams(afterLoad?: () => void) {
     this.diagrams.list(this.bookId).subscribe({
       next: (items) => {
         this.diagramList.set(items);
         this.diagramsLoaded.set(true);
+        afterLoad?.();
       },
-      error: () => this.diagramsError.set('Could not load diagrams'),
+      error: (err) => {
+        const message = this.errorText(err, 'Could not load diagrams');
+        this.diagramsError.set(message);
+        this.notify.error(message);
+      },
+    });
+  }
+
+  private restoreDiagramsState(state: ReaderState) {
+    const activeId = state.diagrams.view === 'edit' ? state.diagrams.active_id : null;
+    this.loadDiagrams(() => {
+      if (!this.diagramsOpen()) return;
+      if (!activeId) {
+        this.diagramView.set('list');
+        return;
+      }
+      const diagram = this.diagramList().find((d) => d.id === activeId);
+      if (diagram) {
+        this.setActiveDiagram(diagram);
+      } else {
+        this.diagrams.get(this.bookId, activeId).subscribe({
+          next: (item) => {
+            if (!this.diagramsOpen()) return;
+            this.diagramList.update((list) => [item, ...list.filter((d) => d.id !== item.id)]);
+            this.setActiveDiagram(item);
+          },
+          error: () => this.diagramView.set('list'),
+        });
+      }
     });
   }
 
@@ -833,9 +976,15 @@ export class Reader implements OnInit, OnDestroy {
     this.draftPage.set(this.currentPage());
     this.diagramsError.set(null);
     this.diagramView.set('edit');
+    this.scheduleReaderStateSave();
   }
 
   openDiagram(diagram: Diagram) {
+    this.setActiveDiagram(diagram);
+    this.scheduleReaderStateSave();
+  }
+
+  private setActiveDiagram(diagram: Diagram) {
     this.activeDiagram.set(diagram);
     this.draftType.set(diagram.type);
     this.draftTitle.set(diagram.title);
@@ -847,6 +996,7 @@ export class Reader implements OnInit, OnDestroy {
 
   backToDiagramList() {
     this.diagramView.set('list');
+    this.scheduleReaderStateSave();
   }
 
   setDraftPage(value: number) {
@@ -887,9 +1037,13 @@ export class Reader implements OnInit, OnDestroy {
         this.draftContent.set(saved.content);
         this.diagramList.update((list) => [saved, ...list.filter((d) => d.id !== saved.id)]);
         this.diagramSaving.set(false);
+        this.scheduleReaderStateSave();
+        this.notify.success('Diagram saved');
       },
       error: (err) => {
-        this.diagramsError.set(err?.error?.detail ?? 'Could not save diagram');
+        const message = this.errorText(err, 'Could not save diagram');
+        this.diagramsError.set(message);
+        this.notify.error(message);
         this.diagramSaving.set(false);
       },
     });
@@ -903,8 +1057,14 @@ export class Reader implements OnInit, OnDestroy {
           this.activeDiagram.set(null);
           this.diagramView.set('list');
         }
+        this.scheduleReaderStateSave();
+        this.notify.success('Diagram deleted');
       },
-      error: (err) => this.diagramsError.set(err?.error?.detail ?? 'Could not delete diagram'),
+      error: (err) => {
+        const message = this.errorText(err, 'Could not delete diagram');
+        this.diagramsError.set(message);
+        this.notify.error(message);
+      },
     });
   }
 
@@ -918,15 +1078,45 @@ export class Reader implements OnInit, OnDestroy {
       this.tocOpen.set(false);
       if (!this.notesLoaded()) this.loadNotes();
     }
+    this.scheduleReaderStateSave();
   }
 
-  private loadNotes() {
+  private loadNotes(afterLoad?: () => void) {
     this.notes.list(this.bookId).subscribe({
       next: (items) => {
         this.noteList.set(items);
         this.notesLoaded.set(true);
+        afterLoad?.();
       },
-      error: () => this.notesError.set('Could not load notes'),
+      error: (err) => {
+        const message = this.errorText(err, 'Could not load notes');
+        this.notesError.set(message);
+        this.notify.error(message);
+      },
+    });
+  }
+
+  private restoreNotesState(state: ReaderState) {
+    const activeId = state.notes.view === 'edit' ? state.notes.active_id : null;
+    this.loadNotes(() => {
+      if (!this.notesOpen()) return;
+      if (!activeId) {
+        this.noteView.set('list');
+        return;
+      }
+      const note = this.noteList().find((n) => n.id === activeId);
+      if (note) {
+        this.setActiveNote(note);
+      } else {
+        this.notes.get(this.bookId, activeId).subscribe({
+          next: (item) => {
+            if (!this.notesOpen()) return;
+            this.noteList.update((list) => [item, ...list.filter((n) => n.id !== item.id)]);
+            this.setActiveNote(item);
+          },
+          error: () => this.noteView.set('list'),
+        });
+      }
     });
   }
 
@@ -937,9 +1127,15 @@ export class Reader implements OnInit, OnDestroy {
     this.notePage.set(this.currentPage());
     this.notesError.set(null);
     this.noteView.set('edit');
+    this.scheduleReaderStateSave();
   }
 
   openNote(note: Note) {
+    this.setActiveNote(note);
+    this.scheduleReaderStateSave();
+  }
+
+  private setActiveNote(note: Note) {
     this.activeNote.set(note);
     this.noteTitle.set(note.title);
     this.noteContent.set(note.content);
@@ -954,6 +1150,12 @@ export class Reader implements OnInit, OnDestroy {
 
   backToNoteList() {
     this.noteView.set('list');
+    this.scheduleReaderStateSave();
+  }
+
+  setNoteSearch(value: string) {
+    this.noteSearch.set(value);
+    this.scheduleReaderStateSave();
   }
 
   setNotePage(value: number) {
@@ -1002,9 +1204,13 @@ export class Reader implements OnInit, OnDestroy {
         this.activeNote.set(saved);
         this.noteList.update((list) => [saved, ...list.filter((n) => n.id !== saved.id)]);
         this.noteSaving.set(false);
+        this.scheduleReaderStateSave();
+        this.notify.success('Note saved');
       },
       error: (err) => {
-        this.notesError.set(err?.error?.detail ?? 'Could not save note');
+        const message = this.errorText(err, 'Could not save note');
+        this.notesError.set(message);
+        this.notify.error(message);
         this.noteSaving.set(false);
       },
     });
@@ -1018,8 +1224,14 @@ export class Reader implements OnInit, OnDestroy {
           this.activeNote.set(null);
           this.noteView.set('list');
         }
+        this.scheduleReaderStateSave();
+        this.notify.success('Note deleted');
       },
-      error: (err) => this.notesError.set(err?.error?.detail ?? 'Could not delete note'),
+      error: (err) => {
+        const message = this.errorText(err, 'Could not delete note');
+        this.notesError.set(message);
+        this.notify.error(message);
+      },
     });
   }
 }
