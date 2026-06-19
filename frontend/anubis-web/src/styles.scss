@@ -139,6 +139,147 @@ a {
   font-variant-numeric: tabular-nums;
 }
 
+// Reader command palette. The styles live globally to avoid growing the reader
+// component stylesheet, which is already close to Angular's component budget.
+.reader .command-palette-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: min(10vh, 5rem) 1rem 1rem;
+  background: rgba(12, 12, 18, 0.76);
+}
+
+.reader .command-palette {
+  width: min(720px, 100%);
+  max-height: min(72vh, 620px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--anubis-ink);
+  background: var(--anubis-surface);
+  border: 1px solid rgba(200, 162, 76, 0.55);
+  box-shadow: 0 24px 80px -34px rgba(0, 0, 0, 0.85);
+}
+
+.reader .command-palette-head {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.65rem 0.75rem;
+  background: linear-gradient(180deg, var(--anubis-surface), var(--anubis-canvas));
+  border-block-end: 1px solid var(--anubis-line);
+
+  mat-icon {
+    flex-shrink: 0;
+    color: var(--anubis-gold-deep);
+  }
+}
+
+.reader .command-palette-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.35rem 0;
+  font: inherit;
+  font-size: 1rem;
+  color: var(--anubis-ink);
+  background: transparent;
+  border: none;
+  outline: none;
+}
+
+.reader .command-palette-input::placeholder {
+  color: var(--anubis-ink-soft);
+}
+
+.reader .command-palette-close {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  color: var(--anubis-ink-soft);
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+
+  &:hover {
+    color: var(--anubis-gold-deep);
+    border-color: var(--anubis-line);
+  }
+
+  mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+}
+
+.reader .command-palette-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.55rem;
+}
+
+.reader .command-palette-group {
+  padding: 0.45rem 0.55rem;
+  font-family: 'Cinzel', serif;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--anubis-gold-deep);
+}
+
+.reader .command-palette-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  padding-block: 0.55rem;
+  padding-inline-end: 0.6rem;
+  text-align: start;
+  font: inherit;
+  color: var(--anubis-ink);
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+
+  &.selected,
+  &:hover {
+    background: rgba(200, 162, 76, 0.14);
+    border-color: rgba(200, 162, 76, 0.45);
+  }
+}
+
+.reader .command-palette-main {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 0.65rem;
+}
+
+.reader .command-palette-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reader .command-palette-meta {
+  flex-shrink: 0;
+  font-size: 0.78rem;
+  color: var(--anubis-ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.reader .command-palette-empty {
+  margin: 0;
+  padding: 0.75rem;
+  color: var(--anubis-ink-soft);
+}
+
 // Dialog surfaces (upload queue + edit details) live in a CDK overlay, so they
 // are styled globally. Honour the Anubis light "parchment" surface with a gold
 // hairline; corners are already squared by the --mat-sys-corner-* flattening.

@@ -70,6 +70,16 @@
       >
         <mat-icon>schema</mat-icon>
       </button>
+      <button
+        mat-icon-button
+        class="command-palette-toggle"
+        (click)="openCommandPalette()"
+        [disabled]="loading() || !!error()"
+        aria-label="Find in contents"
+        title="Ctrl+K"
+      >
+        <mat-icon>travel_explore</mat-icon>
+      </button>
       @if (toc().length) {
         <button mat-icon-button [matMenuTriggerFor]="tocMenu" aria-label="Table of contents">
           <mat-icon>list</mat-icon>
@@ -154,6 +164,67 @@
     >
       <mat-icon>auto_awesome</mat-icon> Ask about this
     </button>
+  }
+
+  @if (commandPaletteOpen()) {
+    <div class="command-palette-overlay" (click)="closeCommandPalette()">
+      <section
+        class="command-palette"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Find in contents"
+        (click)="$event.stopPropagation()"
+      >
+        <header class="command-palette-head">
+          <mat-icon>travel_explore</mat-icon>
+          <input
+            #commandPaletteInput
+            class="command-palette-input"
+            type="search"
+            placeholder="Search contents or page..."
+            [value]="commandPaletteQuery()"
+            (input)="setCommandPaletteQuery($any($event.target).value)"
+            (keydown)="onCommandPaletteInputKeydown($event)"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <button
+            type="button"
+            class="command-palette-close"
+            (click)="closeCommandPalette()"
+            aria-label="Close"
+          >
+            <mat-icon>close</mat-icon>
+          </button>
+        </header>
+
+        <div class="command-palette-list" role="listbox" aria-label="Reader commands">
+          @if (!commandPaletteCommands().length) {
+            <p class="command-palette-empty">No matching contents or valid page.</p>
+          }
+          @for (section of commandPaletteSections(); track section.title) {
+            <div class="command-palette-group">{{ section.title }}</div>
+            @for (command of section.items; track command.id) {
+              <button
+                type="button"
+                class="command-palette-item"
+                [class.selected]="isCommandPaletteSelected(command)"
+                [style.padding-inline-start.px]="12 + command.depth * 18"
+                (mouseenter)="selectCommandPaletteCommand(command)"
+                (click)="runCommandPaletteCommand(command)"
+                role="option"
+                [attr.aria-selected]="isCommandPaletteSelected(command)"
+              >
+                <span class="command-palette-main">
+                  <span class="command-palette-label">{{ command.label }}</span>
+                  <span class="command-palette-meta">{{ command.meta }}</span>
+                </span>
+              </button>
+            }
+          }
+        </div>
+      </section>
+    </div>
   }
 
   @if (panelOpen()) {

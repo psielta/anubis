@@ -8,6 +8,7 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { DOCUMENT } from '@angular/common';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -65,6 +66,21 @@ interface SketchSection {
   sketches: Sketch[];
 }
 
+interface ReaderCommand {
+  id: string;
+  group: string;
+  label: string;
+  meta: string;
+  page: number;
+  depth: number;
+  search: string;
+}
+
+interface ReaderCommandSection {
+  title: string;
+  items: ReaderCommand[];
+}
+
 const SAVE_DEBOUNCE_MS = 1200;
 const READER_STATE_DEBOUNCE_MS = 800;
 const SKETCH_AUTOSAVE_MS = 1500;
@@ -87,6 +103,7 @@ const SKETCH_AUTOSAVE_MS = 1500;
 })
 export class Reader implements OnInit, OnDestroy {
   private route = inject(ActivatedRoute);
+  private document = inject(DOCUMENT);
   private library = inject(LibraryService);
   private study = inject(StudyService);
   private diagrams = inject(DiagramsService);
@@ -108,6 +125,7 @@ export class Reader implements OnInit, OnDestroy {
   );
 
   private viewport = viewChild<ElementRef<HTMLDivElement>>('viewport');
+  private commandPaletteInput = viewChild<ElementRef<HTMLInputElement>>('commandPaletteInput');
   private excalidrawCanvas = viewChild(ExcalidrawCanvas);
   private noteEditor = viewChild(NoteEditor);
 
@@ -131,6 +149,15 @@ export class Reader implements OnInit, OnDestroy {
   protected readonly contentTreeError = signal<string | null>(null);
   protected readonly contentTreeMermaid = computed(() =>
     this.buildContentTreeMermaid(this.book()?.title ?? 'Book', this.toc()),
+  );
+  protected readonly commandPaletteOpen = signal(false);
+  protected readonly commandPaletteQuery = signal('');
+  protected readonly commandPaletteSelected = signal(0);
+  protected readonly commandPaletteSections = computed<ReaderCommandSection[]>(() =>
+    this.buildCommandPaletteSections(this.commandPaletteQuery(), this.toc(), this.pageCount()),
+  );
+  protected readonly commandPaletteCommands = computed<ReaderCommand[]>(() =>
+    this.commandPaletteSections().flatMap((section) => section.items),
   );
 
   // AI study assistant
@@ -244,6 +271,8 @@ export class Reader implements OnInit, OnDestroy {
   private sketchLastSaved:
     | { title: string; content: string; page: number | null; group_id: number | null }
     | null = null;
+  private readonly commandPaletteKeydown = (event: KeyboardEvent) =>
+    this.handleCommandPaletteKeydown(event);
 
   ngOnInit() {
     this.bookId = Number(this.route.snapshot.paramMap.get('id'));
@@ -251,6 +280,7 @@ export class Reader implements OnInit, OnDestroy {
       this.fail('Invalid book');
       return;
     }
+    this.document.addEventListener('keydown', this.commandPaletteKeydown);
     this.library.get(this.bookId).subscribe({
       next: (book) => {
         this.book.set(book);
@@ -272,6 +302,7 @@ export class Reader implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.document.removeEventListener('keydown', this.commandPaletteKeydown);
     if (this.saveTimer) clearTimeout(this.saveTimer);
     this.flushProgress();
     this.flushSketchAutosave();
@@ -442,6 +473,165 @@ export class Reader implements OnInit, OnDestroy {
   goToPage(page: number) {
     const el = this.viewport()?.nativeElement;
     if (el) this.scrollToPage(el, page);
+  }
+
+  openCommandPalette() {
+    if (this.loading() || this.error()) return;
+    this.commandPaletteQuery.set('');
+    this.commandPaletteSelected.set(0);
+    this.commandPaletteOpen.set(true);
+    requestAnimationFrame(() => this.commandPaletteInput()?.nativeElement.focus());
+  }
+
+  closeCommandPalette() {
+    this.commandPaletteOpen.set(false);
+  }
+
+  setCommandPaletteQuery(value: string) {
+    this.commandPaletteQuery.set(value);
+    this.commandPaletteSelected.set(0);
+  }
+
+  onCommandPaletteInputKeydown(event: KeyboardEvent) {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      this.moveCommandPaletteSelection(1);
+      return;
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      this.moveCommandPaletteSelection(-1);
+      return;
+    }
+
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      this.runSelectedCommand();
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      this.closeCommandPalette();
+    }
+  }
+
+  selectCommandPaletteCommand(command: ReaderCommand) {
+    const index = this.commandPaletteCommands().findIndex((item) => item.id === command.id);
+    if (index >= 0) this.commandPaletteSelected.set(index);
+  }
+
+  isCommandPaletteSelected(command: ReaderCommand): boolean {
+    return this.commandPaletteCommands()[this.commandPaletteSelected()]?.id === command.id;
+  }
+
+  runCommandPaletteCommand(command: ReaderCommand) {
+    this.closeCommandPalette();
+    this.goToPage(command.page);
+  }
+
+  private runSelectedCommand() {
+    const command = this.commandPaletteCommands()[this.commandPaletteSelected()];
+    if (command) this.runCommandPaletteCommand(command);
+  }
+
+  private moveCommandPaletteSelection(delta: -1 | 1) {
+    const total = this.commandPaletteCommands().length;
+    if (!total) {
+      this.commandPaletteSelected.set(0);
+      return;
+    }
+    const next = (this.commandPaletteSelected() + delta + total) % total;
+    this.commandPaletteSelected.set(next);
+  }
+
+  private buildCommandPaletteSections(
+    query: string,
+    items: TocItem[],
+    pageCount: number,
+  ): ReaderCommandSection[] {
+    const normalizedQuery = this.normalizeCommandQuery(query);
+    const sections: ReaderCommandSection[] = [];
+    const pageCommand = this.pageCommandForQuery(query, pageCount);
+    if (pageCommand) {
+      sections.push({ title: 'Pages', items: [pageCommand] });
+    }
+
+    const contents = items
+      .filter((item): item is TocItem & { page: number } => item.page != null && item.page > 0)
+      .map((item, index) => this.tocCommand(item, index))
+      .filter((command) => !normalizedQuery || command.search.includes(normalizedQuery));
+
+    if (contents.length) {
+      sections.push({ title: 'Contents', items: contents });
+    }
+
+    return sections;
+  }
+
+  private tocCommand(item: TocItem & { page: number }, index: number): ReaderCommand {
+    const title = item.title.trim() || 'Untitled section';
+    const depth = Math.max(0, Math.min(item.depth, 4));
+    const meta = `p. ${item.page}`;
+    return {
+      id: `toc-${index}-${item.page}`,
+      group: 'Contents',
+      label: title,
+      meta,
+      page: item.page,
+      depth,
+      search: this.normalizeCommandQuery(`${title} ${meta} ${item.page}`),
+    };
+  }
+
+  private pageCommandForQuery(query: string, pageCount: number): ReaderCommand | null {
+    const page = Number(query.trim());
+    if (!Number.isInteger(page) || page < 1 || page > pageCount) return null;
+    return {
+      id: `page-${page}`,
+      group: 'Pages',
+      label: `Go to page ${page}`,
+      meta: `${page} / ${pageCount}`,
+      page,
+      depth: 0,
+      search: String(page),
+    };
+  }
+
+  private normalizeCommandQuery(value: string): string {
+    return value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .toLowerCase();
+  }
+
+  private handleCommandPaletteKeydown(event: KeyboardEvent) {
+    if (event.defaultPrevented) return;
+
+    if (event.key === 'Escape' && this.commandPaletteOpen()) {
+      event.preventDefault();
+      this.closeCommandPalette();
+      return;
+    }
+
+    const key = event.key.toLowerCase();
+    const isOpenShortcut =
+      (event.ctrlKey || event.metaKey) && (key === 'k' || event.code === 'KeyK');
+    if (!isOpenShortcut || this.shouldIgnoreCommandPaletteShortcut(event.target)) return;
+
+    event.preventDefault();
+    this.openCommandPalette();
+  }
+
+  private shouldIgnoreCommandPaletteShortcut(target: EventTarget | null): boolean {
+    if (!(target instanceof Element)) return false;
+    const editable = target.closest(
+      'input, textarea, select, [contenteditable="true"], app-note-editor, app-excalidraw-canvas',
+    );
+    if (editable) return true;
+    return target instanceof HTMLElement && target.isContentEditable;
   }
 
   /** Build the table of contents from the PDF's outline (bookmarks), if any. */
