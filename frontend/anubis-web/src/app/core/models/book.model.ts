@@ -9,6 +9,7 @@ export type ReaderPanel =
   | 'diagrams'
   | 'notes'
   | 'sketches'
+  | 'latex'
   | 'toc'
   | 'content_tree';
 export type ReaderSubView = 'list' | 'edit';
@@ -31,6 +32,13 @@ export interface ReaderSketchesState {
   search: string;
 }
 
+export interface ReaderLatexState {
+  view: ReaderSubView;
+  active_id: number | null;
+  active_group_id: number | null;
+  search: string;
+}
+
 export interface ReaderState {
   version: 1;
   zoom_pct: number;
@@ -39,6 +47,7 @@ export interface ReaderState {
   notes: ReaderNotesState;
   diagrams: ReaderDiagramsState;
   sketches: ReaderSketchesState;
+  latex: ReaderLatexState;
 }
 
 export interface Book {

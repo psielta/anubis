@@ -1,0 +1,124 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.latex-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px;
+  border-bottom: 1px solid var(--anubis-line);
+  background: var(--anubis-surface);
+}
+
+.latex-toolbar-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding-right: 6px;
+  border-right: 1px solid var(--anubis-line);
+
+  &:last-child {
+    border-right: none;
+    padding-right: 0;
+  }
+}
+
+.latex-key {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--anubis-line);
+  background: var(--anubis-canvas);
+  color: var(--anubis-ink);
+  font-family: 'Spectral', serif;
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    border-color 0.12s ease,
+    color 0.12s ease;
+
+  &:hover {
+    border-color: var(--anubis-gold);
+    color: var(--anubis-gold-deep);
+  }
+
+  &:active {
+    background: var(--anubis-surface);
+  }
+}
+
+.latex-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.latex-source {
+  flex: 1 1 40%;
+  min-height: 120px;
+  width: 100%;
+  resize: none;
+  border: none;
+  border-bottom: 1px solid var(--anubis-line);
+  padding: 10px 12px;
+  background: var(--anubis-surface);
+  color: var(--anubis-ink);
+  font-family: ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.9rem;
+  line-height: 1.5;
+
+  &:focus {
+    outline: none;
+  }
+}
+
+.latex-preview {
+  flex: 1 1 60%;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px 12px;
+  background: var(--anubis-canvas);
+  color: var(--anubis-ink);
+}
+
+.latex-block {
+  margin: 0 0 12px;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+.latex-block-error {
+  color: var(--anubis-danger);
+  font-family: ui-monospace, 'Consolas', monospace;
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+}
+
+.latex-preview-empty {
+  margin: 0;
+  color: var(--anubis-ink-soft);
+  font-style: italic;
+}
+
+/* Focus mode (parent toggles the host class): source and preview side by side. */
+:host.latex-editor-focus .latex-body {
+  flex-direction: row;
+}
+
+:host.latex-editor-focus .latex-source {
+  flex-basis: 50%;
+  border-bottom: none;
+  border-right: 1px solid var(--anubis-line);
+}
+
+:host.latex-editor-focus .latex-preview {
+  flex-basis: 50%;
+}

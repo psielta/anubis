@@ -7,6 +7,8 @@
   [class.notes-open]="notesOpen()"
   [class.sketches-open]="sketchesOpen()"
   [class.sketch-focus-open]="sketchFocus()"
+  [class.latex-open]="latexOpen()"
+  [class.latex-focus-open]="latexFocus()"
   [class.toc-open]="tocOpen()"
   [class.content-tree-open]="contentTreeOpen()"
 >
@@ -55,6 +57,16 @@
         [attr.title]="'Sketch notebook (' + shortcuts.sketches + ')'"
       >
         <mat-icon>gesture</mat-icon>
+      </button>
+      <button
+        mat-icon-button
+        class="latex-toggle"
+        [class.active]="latexOpen()"
+        (click)="toggleLatex()"
+        [attr.aria-label]="'Cadernos LaTeX (' + shortcuts.latex + ')'"
+        [attr.title]="'Cadernos LaTeX (' + shortcuts.latex + ')'"
+      >
+        <mat-icon>functions</mat-icon>
       </button>
       <button
         mat-icon-button
@@ -690,6 +702,193 @@
 
       @if (sketchesError()) {
         <p class="ai-error">{{ sketchesError() }}</p>
+      }
+    </aside>
+  }
+
+  @if (latexOpen()) {
+    <aside class="latex-panel" [class.latex-focus]="latexFocus()">
+      <header class="dg-head">
+        @if (latexView() === 'edit') {
+          <button mat-icon-button (click)="backToLatexList()" aria-label="Voltar aos cadernos">
+            <mat-icon>arrow_back</mat-icon>
+          </button>
+        }
+        <span class="dg-title"><mat-icon>functions</mat-icon> Cadernos LaTeX</span>
+        <kbd class="shortcut-key">{{ shortcuts.latex }}</kbd>
+        <span class="ai-spacer"></span>
+        @if (latexView() === 'edit') {
+          <span class="sketch-save-status" [class.error]="latexSaveStatus() === 'error'">
+            {{
+              latexSaveStatus() === 'saving'
+                ? 'Salvando...'
+                : latexSaveStatus() === 'saved'
+                  ? 'Salvo'
+                  : latexSaveStatus() === 'error'
+                    ? 'Não salvo'
+                    : 'Sem salvar'
+            }}
+          </span>
+          @if (activeLatex(); as currentNotebook) {
+            <button
+              mat-icon-button
+              (click)="deleteLatex(currentNotebook)"
+              aria-label="Excluir caderno"
+            >
+              <mat-icon>delete</mat-icon>
+            </button>
+          }
+          <button
+            mat-icon-button
+            (click)="toggleLatexFocus()"
+            [attr.aria-label]="latexFocus() ? 'Sair do modo foco' : 'Modo foco'"
+          >
+            <mat-icon>{{ latexFocus() ? 'fullscreen_exit' : 'fullscreen' }}</mat-icon>
+          </button>
+        }
+        <button mat-icon-button (click)="toggleLatex()" aria-label="Fechar">
+          <mat-icon>close</mat-icon>
+        </button>
+      </header>
+
+      @if (latexView() === 'list') {
+        <div class="dg-list sketch-list">
+          <div class="dg-new">
+            <button class="dg-new-btn" (click)="newLatex()">
+              <mat-icon>add</mat-icon> Novo caderno
+            </button>
+            <button class="dg-new-btn" (click)="createLatexGroup()">
+              <mat-icon>create_new_folder</mat-icon> Novo grupo
+            </button>
+          </div>
+          @if (latexList().length) {
+            <input
+              class="note-search"
+              type="search"
+              placeholder="Buscar cadernos..."
+              aria-label="Buscar cadernos"
+              [value]="latexSearch()"
+              (input)="setLatexSearch($any($event.target).value)"
+            />
+          }
+          @if (!latexList().length && !latexGroups().length) {
+            <p class="dg-empty">
+              Nenhum caderno ainda. Crie um caderno para resolver exercícios em LaTeX ao lado deste
+              livro.
+            </p>
+          } @else if (!filteredLatex().length) {
+            <p class="dg-empty">Nenhum caderno corresponde à busca.</p>
+          }
+
+          @for (section of latexSections(); track section.group?.id ?? 0) {
+            <section class="sketch-section">
+              <div class="sketch-section-head">
+                <button
+                  class="sketch-section-title"
+                  [class.active]="selectedLatexGroupId() === (section.group?.id ?? null)"
+                  (click)="selectLatexGroup(section.group?.id ?? null)"
+                >
+                  <mat-icon>{{ section.group ? 'folder' : 'folder_open' }}</mat-icon>
+                  <span>{{ section.group?.name ?? 'Sem grupo' }}</span>
+                  <span class="sketch-section-count">{{ section.notebooks.length }}</span>
+                </button>
+                @if (section.group; as group) {
+                  <button
+                    class="toc-icon"
+                    type="button"
+                    (click)="renameLatexGroup(group)"
+                    aria-label="Renomear grupo"
+                  >
+                    <mat-icon>edit</mat-icon>
+                  </button>
+                  <button
+                    class="toc-icon danger"
+                    type="button"
+                    (click)="deleteLatexGroup(group)"
+                    aria-label="Excluir grupo"
+                  >
+                    <mat-icon>delete</mat-icon>
+                  </button>
+                }
+                <button
+                  class="toc-icon"
+                  type="button"
+                  (click)="newLatex(section.group?.id ?? null)"
+                  aria-label="Novo caderno no grupo"
+                >
+                  <mat-icon>add</mat-icon>
+                </button>
+              </div>
+
+              @for (n of section.notebooks; track n.id) {
+                <button class="dg-card" (click)="openLatex(n)">
+                  <mat-icon class="dg-card-icon">functions</mat-icon>
+                  <span class="dg-card-main">
+                    <span class="dg-card-title">{{ n.title }}</span>
+                    <span class="dg-card-meta"
+                      >{{ latexUpdatedLabel(n) }}
+                      @if (n.page) {
+                        · p. {{ n.page }}
+                      }
+                    </span>
+                  </span>
+                  <span
+                    class="dg-card-del"
+                    role="button"
+                    aria-label="Excluir caderno"
+                    (click)="$event.stopPropagation(); deleteLatex(n)"
+                  >
+                    <mat-icon>delete</mat-icon>
+                  </span>
+                </button>
+              }
+            </section>
+          }
+        </div>
+      } @else {
+        <div class="dg-edit sketch-edit latex-edit">
+          <div class="dg-edit-bar sketch-edit-bar">
+            <input
+              class="dg-name"
+              [value]="latexTitle()"
+              (input)="setLatexTitle($any($event.target).value)"
+              placeholder="Título do caderno"
+              maxlength="200"
+            />
+            <label class="dg-page">
+              p.
+              <input
+                type="number"
+                min="1"
+                class="dg-page-input"
+                [value]="latexPage() ?? ''"
+                (input)="setLatexPage($any($event.target).valueAsNumber)"
+              />
+            </label>
+            <select
+              class="sketch-group-select"
+              [value]="latexGroupId() ?? ''"
+              (change)="setLatexGroup($any($event.target).value)"
+              aria-label="Grupo do caderno"
+            >
+              <option value="">Sem grupo</option>
+              @for (group of latexGroups(); track group.id) {
+                <option [value]="group.id">{{ group.name }}</option>
+              }
+            </select>
+          </div>
+
+          <app-latex-editor
+            class="latex-editor-host"
+            [initialSource]="activeLatex()?.content ?? ''"
+            [focus]="latexFocus()"
+            (sourceChange)="onLatexSourceChange($event)"
+          />
+        </div>
+      }
+
+      @if (latexError()) {
+        <p class="ai-error">{{ latexError() }}</p>
       }
     </aside>
   }

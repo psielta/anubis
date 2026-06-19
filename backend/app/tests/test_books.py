@@ -430,6 +430,12 @@ def _reader_state_payload(**overrides):
             "active_group_id": None,
             "search": "",
         },
+        "latex": {
+            "view": "list",
+            "active_id": None,
+            "active_group_id": None,
+            "search": "",
+        },
     }
     payload.update(overrides)
     return payload

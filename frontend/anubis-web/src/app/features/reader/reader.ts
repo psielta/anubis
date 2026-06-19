@@ -28,15 +28,18 @@ import { StudyService } from '../../core/services/study';
 import { DiagramsService } from '../../core/services/diagrams';
 import { NotesService } from '../../core/services/notes';
 import { SketchesService } from '../../core/services/sketches';
+import { LatexNotebooksService } from '../../core/services/latex-notebooks';
 import { TocService } from '../../core/services/toc';
 import { Book, ReaderPanel, ReaderState } from '../../core/models/book.model';
 import { StudyKind, StudyMessage, StudyRequest } from '../../core/models/study.model';
 import { Diagram, DiagramType } from '../../core/models/diagram.model';
 import { Note } from '../../core/models/note.model';
 import { Sketch, SketchGroup } from '../../core/models/sketch.model';
+import { LatexNotebook, LatexNotebookGroup } from '../../core/models/latex-notebook.model';
 import { ExcalidrawCanvas } from './excalidraw-canvas/excalidraw-canvas';
 import { MermaidPreview } from './mermaid-preview/mermaid-preview';
 import { NoteEditor } from './note-editor/note-editor';
+import { LatexEditor } from './latex-editor/latex-editor';
 import { ReaderPrefsService } from '../../core/services/reader-prefs';
 import { PanelResizerDirective } from './panel-resizer.directive';
 import { NotificationsService } from '../../core/services/notifications';
@@ -64,6 +67,11 @@ interface TocItem {
 interface SketchSection {
   group: SketchGroup | null;
   sketches: Sketch[];
+}
+
+interface LatexSection {
+  group: LatexNotebookGroup | null;
+  notebooks: LatexNotebook[];
 }
 
 interface ReaderCommand {
@@ -94,6 +102,7 @@ type ReaderShortcutAction =
   | 'diagrams'
   | 'notes'
   | 'sketches'
+  | 'latex'
   | 'contents'
   | 'contentTree'
   | 'commandPalette';
@@ -101,6 +110,7 @@ type ReaderShortcutAction =
 const SAVE_DEBOUNCE_MS = 1200;
 const READER_STATE_DEBOUNCE_MS = 800;
 const SKETCH_AUTOSAVE_MS = 1500;
+const LATEX_AUTOSAVE_MS = 1500;
 
 @Component({
   selector: 'app-reader',
@@ -113,6 +123,7 @@ const SKETCH_AUTOSAVE_MS = 1500;
     ExcalidrawCanvas,
     MermaidPreview,
     NoteEditor,
+    LatexEditor,
     PanelResizerDirective,
   ],
   templateUrl: './reader.html',
@@ -128,6 +139,7 @@ export class Reader implements OnInit, OnDestroy {
   private diagrams = inject(DiagramsService);
   private notes = inject(NotesService);
   private sketches = inject(SketchesService);
+  private latexNotebooks = inject(LatexNotebooksService);
   private tocService = inject(TocService);
   private prefs = inject(ReaderPrefsService);
   private notify = inject(NotificationsService);
@@ -140,13 +152,15 @@ export class Reader implements OnInit, OnDestroy {
       this.contentTreeOpen() ||
       this.notesOpen() ||
       this.diagramsOpen() ||
-      (this.sketchesOpen() && !this.sketchFocus()),
+      (this.sketchesOpen() && !this.sketchFocus()) ||
+      (this.latexOpen() && !this.latexFocus()),
   );
 
   private viewport = viewChild<ElementRef<HTMLDivElement>>('viewport');
   private commandPaletteInput = viewChild<ElementRef<HTMLInputElement>>('commandPaletteInput');
   private excalidrawCanvas = viewChild(ExcalidrawCanvas);
   private noteEditor = viewChild(NoteEditor);
+  private latexEditor = viewChild(LatexEditor);
 
   protected readonly book = signal<Book | null>(null);
   protected readonly loading = signal(true);
@@ -187,6 +201,7 @@ export class Reader implements OnInit, OnDestroy {
     diagrams: 'Alt+Shift+D',
     notes: 'Alt+Shift+N',
     sketches: 'Alt+Shift+S',
+    latex: 'Alt+Shift+L',
     contents: 'Alt+Shift+C',
     contentTree: 'Alt+Shift+M',
     commandPalette: 'Ctrl+K',
@@ -280,6 +295,43 @@ export class Reader implements OnInit, OnDestroy {
     return sections;
   });
 
+  // LaTeX notebooks (math worksheets)
+  protected readonly latexOpen = signal(false);
+  protected readonly latexView = signal<'list' | 'edit'>('list');
+  protected readonly latexList = signal<LatexNotebook[]>([]);
+  protected readonly latexGroups = signal<LatexNotebookGroup[]>([]);
+  protected readonly latexLoaded = signal(false);
+  protected readonly latexError = signal<string | null>(null);
+  protected readonly latexSearch = signal('');
+  protected readonly selectedLatexGroupId = signal<number | null>(null);
+  protected readonly activeLatex = signal<LatexNotebook | null>(null);
+  protected readonly latexTitle = signal('');
+  protected readonly latexContent = signal('');
+  protected readonly latexPage = signal<number | null>(null);
+  protected readonly latexGroupId = signal<number | null>(null);
+  protected readonly latexSaving = signal(false);
+  protected readonly latexSaveStatus = signal<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  protected readonly latexFocus = signal(false);
+  protected readonly filteredLatex = computed(() => {
+    const q = this.latexSearch().trim().toLowerCase();
+    const list = this.latexList();
+    if (!q) return list;
+    return list.filter((n) => n.title.toLowerCase().includes(q));
+  });
+  protected readonly latexSections = computed<LatexSection[]>(() => {
+    const notebooks = this.filteredLatex();
+    const groups = this.latexGroups();
+    const sections: LatexSection[] = groups.map((group) => ({
+      group,
+      notebooks: notebooks.filter((n) => n.group_id === group.id),
+    }));
+    const ungrouped = notebooks.filter((n) => n.group_id == null);
+    if (ungrouped.length || !sections.length) {
+      sections.push({ group: null, notebooks: ungrouped });
+    }
+    return sections;
+  });
+
   private bookId = 0;
   private data: ArrayBuffer | null = null;
   private initialized = false;
@@ -303,6 +355,14 @@ export class Reader implements OnInit, OnDestroy {
   private sketchAutoSaveTimer: ReturnType<typeof setTimeout> | null = null;
   private sketchSaveQueued = false;
   private sketchLastSaved: {
+    title: string;
+    content: string;
+    page: number | null;
+    group_id: number | null;
+  } | null = null;
+  private latexAutoSaveTimer: ReturnType<typeof setTimeout> | null = null;
+  private latexSaveQueued = false;
+  private latexLastSaved: {
     title: string;
     content: string;
     page: number | null;
@@ -342,6 +402,7 @@ export class Reader implements OnInit, OnDestroy {
     if (this.saveTimer) clearTimeout(this.saveTimer);
     this.flushProgress();
     this.flushSketchAutosave();
+    this.flushLatexAutosave();
     if (this.readerStateTimer) clearTimeout(this.readerStateTimer);
     this.flushReaderState();
     this.aiController?.abort();
@@ -714,6 +775,8 @@ export class Reader implements OnInit, OnDestroy {
         return 'notes';
       case 'KeyS':
         return 'sketches';
+      case 'KeyL':
+        return 'latex';
       case 'KeyC':
         return 'contents';
       case 'KeyM':
@@ -740,6 +803,9 @@ export class Reader implements OnInit, OnDestroy {
       case 'sketches':
         this.toggleSketches();
         break;
+      case 'latex':
+        this.toggleLatex();
+        break;
       case 'contents':
         this.toggleToc();
         break;
@@ -755,7 +821,7 @@ export class Reader implements OnInit, OnDestroy {
   private shouldIgnoreReaderShortcut(target: EventTarget | null): boolean {
     if (!(target instanceof Element)) return false;
     const editable = target.closest(
-      'input, textarea, select, [contenteditable="true"], app-note-editor, app-excalidraw-canvas',
+      'input, textarea, select, [contenteditable="true"], app-note-editor, app-excalidraw-canvas, app-latex-editor',
     );
     if (editable) return true;
     return target instanceof HTMLElement && target.isContentEditable;
@@ -1147,11 +1213,13 @@ export class Reader implements OnInit, OnDestroy {
     this.prefs.setPanelWidth(state.panel_width_px);
     this.noteSearch.set(state.notes.search ?? '');
     this.sketchSearch.set(state.sketches?.search ?? '');
+    this.latexSearch.set(state.latex?.search ?? '');
 
     this.panelOpen.set(false);
     this.diagramsOpen.set(false);
     this.notesOpen.set(false);
     this.sketchesOpen.set(false);
+    this.latexOpen.set(false);
     this.tocOpen.set(false);
     this.contentTreeOpen.set(false);
 
@@ -1172,6 +1240,10 @@ export class Reader implements OnInit, OnDestroy {
       case 'sketches':
         this.sketchesOpen.set(true);
         this.restoreSketchesState(state);
+        break;
+      case 'latex':
+        this.latexOpen.set(true);
+        this.restoreLatexState(state);
         break;
       case 'toc':
         this.tocOpen.set(true);
@@ -1194,6 +1266,7 @@ export class Reader implements OnInit, OnDestroy {
     if (this.diagramsOpen()) return 'diagrams';
     if (this.notesOpen()) return 'notes';
     if (this.sketchesOpen()) return 'sketches';
+    if (this.latexOpen()) return 'latex';
     if (this.tocOpen()) return 'toc';
     if (this.contentTreeOpen()) return 'content_tree';
     return null;
@@ -1203,6 +1276,7 @@ export class Reader implements OnInit, OnDestroy {
     const activeNote = this.activeNote();
     const activeDiagram = this.activeDiagram();
     const activeSketch = this.activeSketch();
+    const activeLatex = this.activeLatex();
     return {
       version: 1,
       zoom_pct: this.zoomPct(),
@@ -1222,6 +1296,12 @@ export class Reader implements OnInit, OnDestroy {
         active_id: activeSketch?.id ?? null,
         active_group_id: this.selectedSketchGroupId(),
         search: this.sketchSearch(),
+      },
+      latex: {
+        view: activeLatex && this.latexView() === 'edit' ? 'edit' : 'list',
+        active_id: activeLatex?.id ?? null,
+        active_group_id: this.selectedLatexGroupId(),
+        search: this.latexSearch(),
       },
     };
   }
@@ -1255,6 +1335,13 @@ export class Reader implements OnInit, OnDestroy {
     this.sketchesOpen.set(false);
   }
 
+  private closeLatexPanel() {
+    if (!this.latexOpen()) return;
+    this.flushLatexAutosave();
+    this.latexFocus.set(false);
+    this.latexOpen.set(false);
+  }
+
   togglePanel() {
     const open = !this.panelOpen();
     this.panelOpen.set(open);
@@ -1264,6 +1351,7 @@ export class Reader implements OnInit, OnDestroy {
       this.diagramsOpen.set(false);
       this.notesOpen.set(false);
       this.closeSketchesPanel();
+      this.closeLatexPanel();
       this.tocOpen.set(false);
       this.contentTreeOpen.set(false);
       if (!this.historyLoaded) this.loadHistory();
@@ -1337,6 +1425,7 @@ export class Reader implements OnInit, OnDestroy {
       this.diagramsOpen.set(false);
       this.notesOpen.set(false);
       this.closeSketchesPanel();
+      this.closeLatexPanel();
       this.tocOpen.set(false);
       this.contentTreeOpen.set(false);
       this.panelOpen.set(true);
@@ -1481,6 +1570,7 @@ export class Reader implements OnInit, OnDestroy {
       this.diagramsOpen.set(false);
       this.notesOpen.set(false);
       this.closeSketchesPanel();
+      this.closeLatexPanel();
       this.contentTreeOpen.set(false);
       this.tocDraft.set(this.cloneToc(this.toc()));
       this.tocError.set(null);
@@ -1671,6 +1761,7 @@ export class Reader implements OnInit, OnDestroy {
       this.diagramsOpen.set(false);
       this.notesOpen.set(false);
       this.closeSketchesPanel();
+      this.closeLatexPanel();
       this.tocOpen.set(false);
       this.contentTreeError.set(null);
     }
@@ -1788,6 +1879,7 @@ export class Reader implements OnInit, OnDestroy {
       this.panelOpen.set(false);
       this.notesOpen.set(false);
       this.closeSketchesPanel();
+      this.closeLatexPanel();
       this.tocOpen.set(false);
       this.contentTreeOpen.set(false);
       if (!this.diagramsLoaded()) this.loadDiagrams();
@@ -1949,6 +2041,7 @@ export class Reader implements OnInit, OnDestroy {
     this.notesOpen.set(false);
     this.tocOpen.set(false);
     this.contentTreeOpen.set(false);
+    this.closeLatexPanel();
     this.sketchesError.set(null);
     if (!this.sketchesLoaded()) this.loadSketches();
     this.scheduleReaderStateSave();
@@ -2289,6 +2382,362 @@ export class Reader implements OnInit, OnDestroy {
     });
   }
 
+  // --- LaTeX notebooks (math worksheets) -----------------------------------
+  toggleLatex() {
+    const open = !this.latexOpen();
+    if (!open) {
+      this.closeLatexPanel();
+      this.scheduleReaderStateSave();
+      return;
+    }
+
+    this.latexOpen.set(true);
+    this.panelOpen.set(false);
+    this.diagramsOpen.set(false);
+    this.notesOpen.set(false);
+    this.closeSketchesPanel();
+    this.tocOpen.set(false);
+    this.contentTreeOpen.set(false);
+    this.latexError.set(null);
+    if (!this.latexLoaded()) this.loadLatex();
+    this.scheduleReaderStateSave();
+  }
+
+  private loadLatex(afterLoad?: () => void) {
+    forkJoin({
+      groups: this.latexNotebooks.listGroups(this.bookId),
+      notebooks: this.latexNotebooks.list(this.bookId),
+    }).subscribe({
+      next: ({ groups, notebooks }) => {
+        this.latexGroups.set(groups);
+        this.latexList.set(notebooks);
+        this.latexLoaded.set(true);
+        afterLoad?.();
+      },
+      error: (err) => {
+        const message = this.errorText(err, 'Não foi possível carregar os cadernos LaTeX');
+        this.latexError.set(message);
+        this.notify.error(message);
+      },
+    });
+  }
+
+  private restoreLatexState(state: ReaderState) {
+    const latexState = state.latex;
+    this.selectedLatexGroupId.set(latexState?.active_group_id ?? null);
+    const activeId = latexState?.view === 'edit' ? latexState.active_id : null;
+    this.loadLatex(() => {
+      if (!this.latexOpen()) return;
+      if (!activeId) {
+        this.latexView.set('list');
+        return;
+      }
+      const notebook = this.latexList().find((n) => n.id === activeId);
+      if (notebook) {
+        this.setActiveLatex(notebook);
+      } else {
+        this.latexNotebooks.get(this.bookId, activeId).subscribe({
+          next: (item) => {
+            if (!this.latexOpen()) return;
+            this.latexList.update((list) => [item, ...list.filter((n) => n.id !== item.id)]);
+            this.setActiveLatex(item);
+          },
+          error: () => this.latexView.set('list'),
+        });
+      }
+    });
+  }
+
+  createLatexGroup() {
+    const name = window.prompt('Nome do grupo')?.trim();
+    if (!name) return;
+    this.latexNotebooks.createGroup(this.bookId, { name }).subscribe({
+      next: (group) => {
+        this.latexGroups.update((groups) => [...groups, group]);
+        this.selectedLatexGroupId.set(group.id);
+        this.scheduleReaderStateSave();
+        this.notify.success('Grupo criado');
+      },
+      error: (err) => {
+        const message = this.errorText(err, 'Não foi possível criar o grupo');
+        this.latexError.set(message);
+        this.notify.error(message);
+      },
+    });
+  }
+
+  renameLatexGroup(group: LatexNotebookGroup) {
+    const name = window.prompt('Nome do grupo', group.name)?.trim();
+    if (!name || name === group.name) return;
+    this.latexNotebooks.updateGroup(this.bookId, group.id, { name }).subscribe({
+      next: (saved) => {
+        this.latexGroups.update((groups) =>
+          groups.map((item) => (item.id === saved.id ? saved : item)),
+        );
+        this.notify.success('Grupo renomeado');
+      },
+      error: (err) => {
+        const message = this.errorText(err, 'Não foi possível renomear o grupo');
+        this.latexError.set(message);
+        this.notify.error(message);
+      },
+    });
+  }
+
+  deleteLatexGroup(group: LatexNotebookGroup) {
+    const ok = window.confirm(`Excluir "${group.name}"? Os cadernos voltam para Sem grupo.`);
+    if (!ok) return;
+    this.latexNotebooks.removeGroup(this.bookId, group.id).subscribe({
+      next: () => {
+        this.latexGroups.update((groups) => groups.filter((item) => item.id !== group.id));
+        this.latexList.update((items) =>
+          items.map((item) => (item.group_id === group.id ? { ...item, group_id: null } : item)),
+        );
+        if (this.selectedLatexGroupId() === group.id) this.selectedLatexGroupId.set(null);
+        if (this.latexGroupId() === group.id) {
+          this.latexGroupId.set(null);
+          this.scheduleLatexAutosave();
+        }
+        this.scheduleReaderStateSave();
+        this.notify.success('Grupo excluído');
+      },
+      error: (err) => {
+        const message = this.errorText(err, 'Não foi possível excluir o grupo');
+        this.latexError.set(message);
+        this.notify.error(message);
+      },
+    });
+  }
+
+  newLatex(groupId?: number | null) {
+    if (this.latexSaving()) return;
+    const targetGroupId = groupId === undefined ? this.selectedLatexGroupId() : groupId;
+    this.flushLatexAutosave();
+    this.latexSaving.set(true);
+    this.latexSaveStatus.set('saving');
+    this.latexError.set(null);
+    this.latexNotebooks
+      .create(this.bookId, {
+        title: 'Caderno sem título',
+        content: '',
+        group_id: targetGroupId,
+        page: this.currentDisplayPageValue(),
+      })
+      .subscribe({
+        next: (saved) => {
+          this.latexSaving.set(false);
+          this.latexSaveStatus.set('saved');
+          this.latexList.update((list) => [saved, ...list.filter((n) => n.id !== saved.id)]);
+          this.setActiveLatex(saved);
+          this.scheduleReaderStateSave();
+          this.notify.success('Caderno criado');
+        },
+        error: (err) => {
+          const message = this.errorText(err, 'Não foi possível criar o caderno');
+          this.latexSaving.set(false);
+          this.latexSaveStatus.set('error');
+          this.latexError.set(message);
+          this.notify.error(message);
+        },
+      });
+  }
+
+  openLatex(notebook: LatexNotebook) {
+    if (this.activeLatex()?.id !== notebook.id) this.flushLatexAutosave();
+    this.setActiveLatex(notebook);
+    this.scheduleReaderStateSave();
+  }
+
+  private setActiveLatex(notebook: LatexNotebook) {
+    this.activeLatex.set(notebook);
+    this.latexTitle.set(notebook.title);
+    this.latexContent.set(notebook.content);
+    this.latexPage.set(notebook.page);
+    this.latexGroupId.set(notebook.group_id);
+    this.selectedLatexGroupId.set(notebook.group_id);
+    this.latexLastSaved = {
+      title: notebook.title,
+      content: notebook.content,
+      page: notebook.page,
+      group_id: notebook.group_id,
+    };
+    this.latexSaveStatus.set('saved');
+    this.latexError.set(null);
+    this.latexView.set('edit');
+  }
+
+  backToLatexList() {
+    this.flushLatexAutosave();
+    this.latexFocus.set(false);
+    this.latexView.set('list');
+    this.scheduleReaderStateSave();
+  }
+
+  setLatexSearch(value: string) {
+    this.latexSearch.set(value);
+    this.scheduleReaderStateSave();
+  }
+
+  selectLatexGroup(groupId: number | null) {
+    this.selectedLatexGroupId.set(groupId);
+    this.scheduleReaderStateSave();
+  }
+
+  setLatexTitle(value: string) {
+    this.latexTitle.set(value);
+    this.scheduleLatexAutosave();
+  }
+
+  setLatexPage(value: number) {
+    this.latexPage.set(value && value > 0 ? value : null);
+    this.scheduleLatexAutosave();
+  }
+
+  setLatexGroup(value: string) {
+    const groupId = value ? Number(value) : null;
+    this.latexGroupId.set(groupId != null && Number.isFinite(groupId) ? groupId : null);
+    this.selectedLatexGroupId.set(this.latexGroupId());
+    this.scheduleLatexAutosave();
+    this.scheduleReaderStateSave();
+  }
+
+  onLatexSourceChange(source: string) {
+    this.latexContent.set(source);
+    this.scheduleLatexAutosave();
+  }
+
+  toggleLatexFocus() {
+    this.latexFocus.update((value) => !value);
+  }
+
+  latexUpdatedLabel(notebook: LatexNotebook): string {
+    return new Date(notebook.updated_at).toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  }
+
+  latexGroupName(groupId: number | null): string {
+    if (groupId == null) return 'Sem grupo';
+    return this.latexGroups().find((group) => group.id === groupId)?.name ?? 'Sem grupo';
+  }
+
+  deleteLatex(notebook: LatexNotebook) {
+    this.latexNotebooks.remove(this.bookId, notebook.id).subscribe({
+      next: () => {
+        this.latexList.update((list) => list.filter((n) => n.id !== notebook.id));
+        if (this.activeLatex()?.id === notebook.id) {
+          this.activeLatex.set(null);
+          this.latexLastSaved = null;
+          this.latexFocus.set(false);
+          this.latexView.set('list');
+          this.latexSaveStatus.set('idle');
+        }
+        this.scheduleReaderStateSave();
+        this.notify.success('Caderno excluído');
+      },
+      error: (err) => {
+        const message = this.errorText(err, 'Não foi possível excluir o caderno');
+        this.latexError.set(message);
+        this.notify.error(message);
+      },
+    });
+  }
+
+  private scheduleLatexAutosave() {
+    if (!this.activeLatex()) return;
+    this.latexSaveStatus.set('idle');
+    if (this.latexAutoSaveTimer) clearTimeout(this.latexAutoSaveTimer);
+    this.latexAutoSaveTimer = setTimeout(() => {
+      this.latexAutoSaveTimer = null;
+      this.flushLatexAutosave();
+    }, LATEX_AUTOSAVE_MS);
+  }
+
+  private currentLatexPayload() {
+    let content = this.latexContent();
+    if (this.latexOpen() && this.latexView() === 'edit') {
+      const fresh = this.latexEditor()?.getSource();
+      if (fresh != null) content = fresh;
+    }
+    return {
+      title: this.latexTitle().trim(),
+      content,
+      page: this.latexPage(),
+      group_id: this.latexGroupId(),
+    };
+  }
+
+  private flushLatexAutosave() {
+    if (this.latexAutoSaveTimer) {
+      clearTimeout(this.latexAutoSaveTimer);
+      this.latexAutoSaveTimer = null;
+    }
+    const notebook = this.activeLatex();
+    if (!notebook) return;
+    if (this.latexSaving()) {
+      this.latexSaveQueued = true;
+      return;
+    }
+
+    const payload = this.currentLatexPayload();
+    if (!payload.title) {
+      this.latexSaveStatus.set('error');
+      this.latexError.set('O título do caderno não pode ficar vazio');
+      return;
+    }
+    if (
+      this.latexLastSaved &&
+      payload.title === this.latexLastSaved.title &&
+      payload.content === this.latexLastSaved.content &&
+      payload.page === this.latexLastSaved.page &&
+      payload.group_id === this.latexLastSaved.group_id
+    ) {
+      this.latexSaveStatus.set('saved');
+      return;
+    }
+
+    this.latexSaving.set(true);
+    this.latexSaveStatus.set('saving');
+    this.latexError.set(null);
+    this.latexNotebooks.update(this.bookId, notebook.id, payload).subscribe({
+      next: (saved) => {
+        const queued = this.latexSaveQueued;
+        const stillActive = this.activeLatex()?.id === saved.id;
+        if (stillActive) {
+          this.activeLatex.set(saved);
+          if (!queued) this.latexContent.set(saved.content);
+        }
+        this.latexList.update((list) => [saved, ...list.filter((n) => n.id !== saved.id)]);
+        if (stillActive) {
+          this.latexLastSaved = {
+            title: saved.title,
+            content: saved.content,
+            page: saved.page,
+            group_id: saved.group_id,
+          };
+        }
+        this.latexSaving.set(false);
+        if (stillActive) this.latexSaveStatus.set('saved');
+        this.scheduleReaderStateSave();
+        if (queued && stillActive) {
+          this.latexSaveQueued = false;
+          this.scheduleLatexAutosave();
+        } else if (queued) {
+          this.latexSaveQueued = false;
+        }
+      },
+      error: (err) => {
+        const message = this.errorText(err, 'Não foi possível salvar o caderno');
+        this.latexSaving.set(false);
+        this.latexSaveStatus.set('error');
+        this.latexError.set(message);
+        this.notify.error(message);
+      },
+    });
+  }
+
   // --- Study notes (Markdown) ----------------------------------------------
   toggleNotes() {
     const open = !this.notesOpen();
@@ -2297,6 +2746,7 @@ export class Reader implements OnInit, OnDestroy {
       this.panelOpen.set(false);
       this.diagramsOpen.set(false);
       this.closeSketchesPanel();
+      this.closeLatexPanel();
       this.tocOpen.set(false);
       this.contentTreeOpen.set(false);
       if (!this.notesLoaded()) this.loadNotes();

@@ -490,6 +490,7 @@
 .diagrams-panel,
 .notes-panel,
 .sketches-panel,
+.latex-panel,
 .toc-panel,
 .content-tree-panel {
   position: absolute;
@@ -517,6 +518,7 @@
   .reader.diagrams-open .reader-stage,
   .reader.notes-open .reader-stage,
   .reader.sketches-open:not(.sketch-focus-open) .reader-stage,
+  .reader.latex-open:not(.latex-focus-open) .reader-stage,
   .reader.toc-open .reader-stage,
   .reader.content-tree-open .reader-stage {
     padding-inline-end: var(--dg-panel-w);
@@ -524,6 +526,11 @@
 }
 
 .reader.sketch-focus-open .sketches-panel {
+  left: 0;
+  width: auto;
+}
+
+.reader.latex-focus-open .latex-panel {
   left: 0;
   width: auto;
 }
@@ -944,6 +951,11 @@
   .sketch-canvas {
     min-height: 0;
   }
+}
+
+.latex-edit .latex-editor-host {
+  flex: 1;
+  min-height: 0;
 }
 
 @media (max-width: 720px) {

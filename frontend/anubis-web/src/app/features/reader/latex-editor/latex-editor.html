@@ -1,0 +1,30 @@
+<div class="latex-toolbar">
+  @for (group of groups; track group.name) {
+    <div class="latex-toolbar-group">
+      @for (item of group.items; track item.snippet) {
+        <button
+          type="button"
+          class="latex-key"
+          [title]="item.title"
+          [attr.aria-label]="item.title"
+          (click)="insert(item)"
+        >
+          {{ item.label }}
+        </button>
+      }
+    </div>
+  }
+</div>
+
+<div class="latex-body">
+  <textarea
+    #source
+    class="latex-source"
+    spellcheck="false"
+    autocapitalize="off"
+    autocomplete="off"
+    placeholder="Escreva LaTeX aqui, ex.: x^{\frac12} = \frac12"
+    (input)="onInput()"
+  ></textarea>
+  <div #preview class="latex-preview" aria-live="polite"></div>
+</div>

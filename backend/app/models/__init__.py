@@ -1,6 +1,7 @@
 from app.models.book import Book
 from app.models.collection import Collection, book_collections
 from app.models.diagram import Diagram
+from app.models.latex_notebook import LatexNotebook, LatexNotebookGroup
 from app.models.note import Note
 from app.models.sketch import Sketch, SketchGroup
 from app.models.study import StudyMessage
@@ -10,6 +11,8 @@ __all__ = [
     "Book",
     "Collection",
     "Diagram",
+    "LatexNotebook",
+    "LatexNotebookGroup",
     "Note",
     "Sketch",
     "SketchGroup",
