@@ -82,6 +82,13 @@ interface ReaderCommandSection {
   items: ReaderCommand[];
 }
 
+interface PdfTextItemLike {
+  str: string;
+  transform: unknown[];
+  width: number;
+  height: number;
+}
+
 type ReaderShortcutAction =
   | 'assistant'
   | 'diagrams'
@@ -147,6 +154,8 @@ export class Reader implements OnInit, OnDestroy {
   protected readonly pageCount = signal(0);
   protected readonly currentPage = signal(1);
   protected readonly pageLabels = signal<string[]>([]);
+  protected readonly detectedPageLabels = signal<(string | null)[]>([]);
+  protected readonly pageNumberOffset = signal<number | null>(null);
   protected readonly currentPageReadout = computed(() => this.pageReadout(this.currentPage()));
   protected readonly zoomPct = signal(100);
   protected readonly toc = signal<TocItem[]>([]);
@@ -280,6 +289,7 @@ export class Reader implements OnInit, OnDestroy {
   private observer: IntersectionObserver | null = null;
   private pages: PdfPage[] = [];
   private visible = new Set<number>();
+  private printedPageIndexPromise: Promise<void> | null = null;
 
   // Reading progress
   private resumePage: number | null = null;
@@ -382,6 +392,8 @@ export class Reader implements OnInit, OnDestroy {
       this.pdfDoc = await this.loadingTask.promise;
       this.pageCount.set(this.pdfDoc.numPages);
       await this.loadPageLabels();
+      await this.estimatePrintedPageOffset();
+      void this.buildDetectedPageLabelIndex();
 
       const first = await this.pdfDoc.getPage(1);
       const unscaled = first.getViewport({ scale: 1 });
@@ -440,10 +452,6 @@ export class Reader implements OnInit, OnDestroy {
             this.releasePage(num);
           }
         }
-        if (this.visible.size) {
-          this.currentPage.set(Math.min(...this.visible));
-          this.scheduleSave();
-        }
       },
       { root: el, rootMargin: '300px 0px', threshold: 0.01 },
     );
@@ -470,6 +478,7 @@ export class Reader implements OnInit, OnDestroy {
       });
       this.observer.observe(wrap);
     }
+    this.updateCurrentPageFromScroll(el);
   }
 
   private releaseAllPages() {
@@ -503,7 +512,10 @@ export class Reader implements OnInit, OnDestroy {
   private scrollToPage(el: HTMLElement, num: number) {
     const page = this.clampPage(num);
     const wrap = el.querySelector<HTMLElement>(`.pdf-page[data-page="${page}"]`);
-    if (wrap) el.scrollTop = Math.max(0, wrap.offsetTop - 12);
+    if (!wrap) return;
+    el.scrollTop = Math.max(0, wrap.offsetTop - 12);
+    this.updateCurrentPageFromScroll(el);
+    requestAnimationFrame(() => this.updateCurrentPageFromScroll(el));
   }
 
   goToPage(page: number, preferLabel = true) {
@@ -747,6 +759,8 @@ export class Reader implements OnInit, OnDestroy {
   private async loadPageLabels() {
     if (!this.pdfDoc) {
       this.pageLabels.set([]);
+      this.detectedPageLabels.set([]);
+      this.pageNumberOffset.set(null);
       return;
     }
     try {
@@ -755,6 +769,150 @@ export class Reader implements OnInit, OnDestroy {
     } catch {
       this.pageLabels.set([]);
     }
+  }
+
+  private async estimatePrintedPageOffset() {
+    if (!this.pdfDoc || this.pageLabels().length) {
+      this.detectedPageLabels.set([]);
+      this.pageNumberOffset.set(null);
+      return;
+    }
+
+    const total = this.pdfDoc.numPages;
+    this.detectedPageLabels.set(Array.from({ length: total }, () => null));
+    const samples = new Set<number>();
+    for (let page = 1; page <= Math.min(total, 28); page++) samples.add(page);
+    for (const page of [40, 60, 100, 150, 200, 300]) {
+      if (page <= total) samples.add(page);
+    }
+
+    const offsets: number[] = [];
+    const labels = this.detectedPageLabels().slice();
+    for (const page of [...samples].sort((a, b) => a - b)) {
+      const detected = await this.detectPrintedPageNumber(page);
+      if (detected == null) continue;
+      labels[page - 1] = String(detected);
+      const offset = detected - page;
+      if (Math.abs(offset) <= 80) offsets.push(offset);
+    }
+
+    this.detectedPageLabels.set(labels);
+    this.pageNumberOffset.set(this.mostFrequentOffset(offsets));
+  }
+
+  private mostFrequentOffset(offsets: number[]): number | null {
+    if (!offsets.length) return null;
+    const counts = new Map<number, number>();
+    for (const offset of offsets) counts.set(offset, (counts.get(offset) ?? 0) + 1);
+    const ranked = [...counts.entries()].sort(
+      ([aOffset, aCount], [bOffset, bCount]) =>
+        bCount - aCount || Math.abs(aOffset) - Math.abs(bOffset),
+    );
+    const [offset, count] = ranked[0];
+    return count >= 2 ? offset : null;
+  }
+
+  private async buildDetectedPageLabelIndex() {
+    if (!this.pdfDoc || this.pageLabels().length) return;
+    if (this.printedPageIndexPromise) return this.printedPageIndexPromise;
+
+    this.printedPageIndexPromise = (async () => {
+      const total = this.pdfDoc?.numPages ?? 0;
+      const labels = this.detectedPageLabels().slice();
+      for (let page = 1; page <= total; page++) {
+        if (!labels[page - 1]) {
+          const detected = await this.detectPrintedPageNumber(page);
+          if (detected != null) labels[page - 1] = String(detected);
+        }
+        if (page % 16 === 0 || page === total) {
+          this.detectedPageLabels.set(labels.slice());
+          await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        }
+      }
+    })();
+
+    try {
+      await this.printedPageIndexPromise;
+    } finally {
+      this.printedPageIndexPromise = null;
+    }
+  }
+
+  private async detectPrintedPageNumber(physicalPage: number): Promise<number | null> {
+    if (!this.pdfDoc) return null;
+    try {
+      const page = await this.pdfDoc.getPage(physicalPage);
+      const viewport = page.getViewport({ scale: 1 });
+      const content = await page.getTextContent();
+      let best: { value: number; score: number } | null = null;
+      for (const [index, item] of content.items.entries()) {
+        if (!this.isPdfTextItem(item)) continue;
+        const candidate = this.printedPageCandidate(
+          item,
+          index,
+          content.items.length,
+          viewport.width,
+          viewport.height,
+          physicalPage,
+        );
+        if (!candidate) continue;
+        if (!best || candidate.score > best.score) best = candidate;
+      }
+      return best && best.score >= 100 ? best.value : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private isPdfTextItem(item: unknown): item is PdfTextItemLike {
+    const value = item as Partial<PdfTextItemLike>;
+    return (
+      typeof value.str === 'string' &&
+      Array.isArray(value.transform) &&
+      typeof value.width === 'number' &&
+      typeof value.height === 'number'
+    );
+  }
+
+  private printedPageCandidate(
+    item: PdfTextItemLike,
+    index: number,
+    totalItems: number,
+    viewportWidth: number,
+    viewportHeight: number,
+    physicalPage: number,
+  ): { value: number; score: number } | null {
+    const text = item.str.trim();
+    const pure = /^\d{1,4}$/.test(text);
+    const headerText = /^(\d{1,4})\s+[A-ZÀ-Ú]/u.exec(text);
+    const valueText = pure ? text : headerText?.[1];
+    if (!valueText) return null;
+
+    const value = Number(valueText);
+    if (!Number.isInteger(value) || value < 1 || value > this.pageCount() + 150) return null;
+
+    const x = Number(item.transform[4] ?? 0);
+    const y = Number(item.transform[5] ?? 0);
+    if (x < -80 || x > viewportWidth + 120) return null;
+
+    const nearVerticalEdge = y < 85 || y > viewportHeight - 85;
+    if (!nearVerticalEdge) return null;
+    if (!pure && x > 170) return null;
+
+    const nearHorizontalEdge = x < 170 || x + item.width > viewportWidth - 170;
+    const nearDocumentOrderEdge = index < 14 || index > totalItems - 8;
+    const delta = Math.abs(value - physicalPage);
+
+    let score = y < 85 ? 45 : 20;
+    if (nearHorizontalEdge) score += 25;
+    if (nearDocumentOrderEdge) score += 25;
+    score += pure ? 10 : 15;
+    if (delta <= 120) score += 20;
+    if (delta <= 40) score += 20;
+    if (delta <= 15) score += 10;
+    if (delta > 180) score -= 80;
+
+    return { value, score };
   }
 
   private clampPage(page: number): number {
@@ -772,8 +930,12 @@ export class Reader implements OnInit, OnDestroy {
   }
 
   private pageLabelForPhysicalPage(page: number): string | null {
-    const label = this.pageLabels()[page - 1]?.trim();
-    return label || null;
+    const embedded = this.pageLabels()[page - 1]?.trim();
+    if (embedded) return embedded;
+    const detected = this.detectedPageLabels()[page - 1]?.trim();
+    if (detected) return detected;
+    const offset = this.pageNumberOffset();
+    return offset == null ? null : String(page + offset);
   }
 
   displayTocPage(page: number): string {
@@ -804,6 +966,22 @@ export class Reader implements OnInit, OnDestroy {
       if (label === target) return index + 1;
       if (targetNumber && this.normalizedNumericPageLabel(label) === targetNumber) {
         return index + 1;
+      }
+    }
+    const detected = this.detectedPageLabels();
+    for (let index = 0; index < detected.length; index++) {
+      const detectedLabel = detected[index];
+      const label = detectedLabel ? this.normalizePageLabel(detectedLabel) : '';
+      if (label === target) return index + 1;
+      if (targetNumber && this.normalizedNumericPageLabel(label) === targetNumber) {
+        return index + 1;
+      }
+    }
+    if (targetNumber) {
+      const offset = this.pageNumberOffset();
+      if (offset != null) {
+        const page = Number(targetNumber) - offset;
+        if (Number.isInteger(page) && page >= 1 && page <= this.pageCount()) return page;
       }
     }
     return null;
@@ -1103,6 +1281,40 @@ export class Reader implements OnInit, OnDestroy {
     this.selectionText.set(text);
     this.selButtonTop.set(Math.max(8, rect.bottom + 6));
     this.selButtonLeft.set(Math.max(8, Math.min(rect.left, window.innerWidth - 190)));
+  }
+
+  onReaderScroll() {
+    this.hideSelectionButton();
+    this.updateCurrentPageFromScroll();
+  }
+
+  private updateCurrentPageFromScroll(
+    el: HTMLElement | undefined = this.viewport()?.nativeElement,
+  ) {
+    if (!el || !this.pages.length) return;
+    const anchor = el.scrollTop + Math.min(160, el.clientHeight * 0.28);
+    let best = this.pages[0];
+    let bestDistance = Number.POSITIVE_INFINITY;
+
+    for (const page of this.pages) {
+      const top = page.wrap.offsetTop;
+      const bottom = top + page.wrap.offsetHeight;
+      if (anchor >= top && anchor < bottom) {
+        best = page;
+        break;
+      }
+
+      const distance = anchor < top ? top - anchor : anchor - bottom;
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = page;
+      }
+    }
+
+    if (best.num !== this.currentPage()) {
+      this.currentPage.set(best.num);
+    }
+    this.scheduleSave();
   }
 
   hideSelectionButton() {
