@@ -1089,19 +1089,62 @@ export class Reader implements OnInit, OnDestroy {
   }
 
   private buildContentTreeMermaid(bookTitle: string, items: TocItem[]): string {
-    const lines = ['flowchart TD', `  root["${this.mermaidLabel(bookTitle)}"]`];
-    const stack = ['root'];
+    const lines = [
+      'flowchart TB',
+      `  root["${this.wrappedMermaidLabel(bookTitle, 34)}"]`,
+      '  classDef root fill:#15151d,color:#e8cf88,stroke:#c8a24c,stroke-width:1px;',
+      '  classDef depth0 fill:#fbf6ea,color:#2a2520,stroke:#c8a24c,stroke-width:1px;',
+      '  classDef depth1 fill:#efe5cd,color:#2a2520,stroke:#e0d2ab,stroke-width:1px;',
+      '  classDef depth2 fill:#ffffff,color:#2a2520,stroke:#e0d2ab,stroke-width:1px;',
+      '  class root root;',
+    ];
+    let previous = 'root';
     items.forEach((item, index) => {
       const depth = Math.max(0, Math.min(2, Math.round(item.depth)));
       const id = `toc_${index}`;
-      const title = item.page ? `${item.title} (p. ${item.page})` : item.title;
-      const parent = stack[depth] ?? 'root';
-      lines.push(`  ${id}["${this.mermaidLabel(title)}"]`);
-      lines.push(`  ${parent} --> ${id}`);
-      stack[depth + 1] = id;
-      stack.length = depth + 2;
+      const prefix = this.contentTreePrefix(depth);
+      const title = item.page
+        ? `${prefix}${item.title} (p. ${item.page})`
+        : `${prefix}${item.title}`;
+      lines.push(`  ${id}["${this.wrappedMermaidLabel(title, 42)}"]`);
+      lines.push(`  ${previous} --> ${id}`);
+      lines.push(`  class ${id} depth${depth};`);
+      previous = id;
     });
     return lines.join('\n');
+  }
+
+  private contentTreePrefix(depth: number): string {
+    if (depth === 1) return '|-- ';
+    if (depth >= 2) return '|  |-- ';
+    return '';
+  }
+
+  private wrappedMermaidLabel(value: string, maxLine = 42): string {
+    const normalized = value.replace(/\s+/g, ' ').trim();
+    if (!normalized) return '';
+    const lines: string[] = [];
+    let line = '';
+    for (let word of normalized.split(' ')) {
+      while (word.length > maxLine) {
+        if (line) {
+          lines.push(line);
+          line = '';
+        }
+        lines.push(word.slice(0, maxLine));
+        word = word.slice(maxLine);
+      }
+      if (!word) continue;
+      const next = line ? `${line} ${word}` : word;
+      if (next.length <= maxLine) {
+        line = next;
+      } else {
+        lines.push(line);
+        line = word;
+      }
+    }
+    if (line) lines.push(line);
+    return lines.map((part) => this.mermaidLabel(part)).join('<br/>');
   }
 
   private mermaidLabel(value: string): string {
