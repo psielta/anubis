@@ -29,7 +29,11 @@
   width: 40px;
   height: 40px;
   flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--anubis-gold-bright);
+  cursor: pointer;
 }
 
 .reader-title {
@@ -57,10 +61,27 @@
 }
 
 .reader-pages {
+  min-width: 11ch;
   margin-inline-start: 0.5rem;
   padding-inline-start: 0.75rem;
   border-inline-start: 1px solid rgba(200, 162, 76, 0.25);
   color: var(--anubis-gold-bright);
+}
+
+.shortcut-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 20px;
+  padding: 0.12rem 0.35rem;
+  font: inherit;
+  font-size: 0.66rem;
+  line-height: 1;
+  color: var(--anubis-gold-deep);
+  background: rgba(200, 162, 76, 0.12);
+  border: 1px solid rgba(200, 162, 76, 0.35);
+  border-radius: 3px;
+  white-space: nowrap;
 }
 
 // --- Stage -----------------------------------------------------------------

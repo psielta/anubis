@@ -8,8 +8,8 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { DOCUMENT } from '@angular/common';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { DOCUMENT, Location } from '@angular/common';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
@@ -72,6 +72,7 @@ interface ReaderCommand {
   label: string;
   meta: string;
   page: number;
+  preferLabel: boolean;
   depth: number;
   search: string;
 }
@@ -80,6 +81,15 @@ interface ReaderCommandSection {
   title: string;
   items: ReaderCommand[];
 }
+
+type ReaderShortcutAction =
+  | 'assistant'
+  | 'diagrams'
+  | 'notes'
+  | 'sketches'
+  | 'contents'
+  | 'contentTree'
+  | 'commandPalette';
 
 const SAVE_DEBOUNCE_MS = 1200;
 const READER_STATE_DEBOUNCE_MS = 800;
@@ -103,6 +113,8 @@ const SKETCH_AUTOSAVE_MS = 1500;
 })
 export class Reader implements OnInit, OnDestroy {
   private route = inject(ActivatedRoute);
+  private router = inject(Router);
+  private location = inject(Location);
   private document = inject(DOCUMENT);
   private library = inject(LibraryService);
   private study = inject(StudyService);
@@ -134,6 +146,8 @@ export class Reader implements OnInit, OnDestroy {
   protected readonly error = signal<string | null>(null);
   protected readonly pageCount = signal(0);
   protected readonly currentPage = signal(1);
+  protected readonly pageLabels = signal<string[]>([]);
+  protected readonly currentPageReadout = computed(() => this.pageReadout(this.currentPage()));
   protected readonly zoomPct = signal(100);
   protected readonly toc = signal<TocItem[]>([]);
   protected readonly tocOpen = signal(false);
@@ -159,6 +173,15 @@ export class Reader implements OnInit, OnDestroy {
   protected readonly commandPaletteCommands = computed<ReaderCommand[]>(() =>
     this.commandPaletteSections().flatMap((section) => section.items),
   );
+  protected readonly shortcuts = {
+    assistant: 'Alt+Shift+A',
+    diagrams: 'Alt+Shift+D',
+    notes: 'Alt+Shift+N',
+    sketches: 'Alt+Shift+S',
+    contents: 'Alt+Shift+C',
+    contentTree: 'Alt+Shift+M',
+    commandPalette: 'Alt+Shift+K',
+  } as const;
 
   // AI study assistant
   protected readonly panelOpen = signal(false);
@@ -268,11 +291,13 @@ export class Reader implements OnInit, OnDestroy {
   private readerStateTimer: ReturnType<typeof setTimeout> | null = null;
   private sketchAutoSaveTimer: ReturnType<typeof setTimeout> | null = null;
   private sketchSaveQueued = false;
-  private sketchLastSaved:
-    | { title: string; content: string; page: number | null; group_id: number | null }
-    | null = null;
-  private readonly commandPaletteKeydown = (event: KeyboardEvent) =>
-    this.handleCommandPaletteKeydown(event);
+  private sketchLastSaved: {
+    title: string;
+    content: string;
+    page: number | null;
+    group_id: number | null;
+  } | null = null;
+  private readonly readerKeydown = (event: KeyboardEvent) => this.handleReaderKeydown(event);
 
   ngOnInit() {
     this.bookId = Number(this.route.snapshot.paramMap.get('id'));
@@ -280,7 +305,7 @@ export class Reader implements OnInit, OnDestroy {
       this.fail('Invalid book');
       return;
     }
-    this.document.addEventListener('keydown', this.commandPaletteKeydown);
+    this.document.addEventListener('keydown', this.readerKeydown);
     this.library.get(this.bookId).subscribe({
       next: (book) => {
         this.book.set(book);
@@ -302,7 +327,7 @@ export class Reader implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
-    this.document.removeEventListener('keydown', this.commandPaletteKeydown);
+    this.document.removeEventListener('keydown', this.readerKeydown);
     if (this.saveTimer) clearTimeout(this.saveTimer);
     this.flushProgress();
     this.flushSketchAutosave();
@@ -321,6 +346,15 @@ export class Reader implements OnInit, OnDestroy {
   private errorText(err: unknown, fallback: string): string {
     const detail = (err as { error?: { detail?: unknown } })?.error?.detail;
     return typeof detail === 'string' && detail.trim() ? detail : fallback;
+  }
+
+  goBack() {
+    const state = this.location.getState() as { navigationId?: number } | null;
+    if ((state?.navigationId ?? 0) > 1) {
+      this.location.back();
+      return;
+    }
+    void this.router.navigateByUrl('/library');
   }
 
   private loadFile(id: number) {
@@ -347,6 +381,7 @@ export class Reader implements OnInit, OnDestroy {
       this.loadingTask = pdfjsLib.getDocument({ data });
       this.pdfDoc = await this.loadingTask.promise;
       this.pageCount.set(this.pdfDoc.numPages);
+      await this.loadPageLabels();
 
       const first = await this.pdfDoc.getPage(1);
       const unscaled = first.getViewport({ scale: 1 });
@@ -466,13 +501,18 @@ export class Reader implements OnInit, OnDestroy {
   }
 
   private scrollToPage(el: HTMLElement, num: number) {
-    const wrap = el.querySelector<HTMLElement>(`.pdf-page[data-page="${num}"]`);
+    const page = this.clampPage(num);
+    const wrap = el.querySelector<HTMLElement>(`.pdf-page[data-page="${page}"]`);
     if (wrap) el.scrollTop = Math.max(0, wrap.offsetTop - 12);
   }
 
-  goToPage(page: number) {
+  goToPage(page: number, preferLabel = true) {
     const el = this.viewport()?.nativeElement;
-    if (el) this.scrollToPage(el, page);
+    if (el) this.scrollToPage(el, this.resolveNavigationPage(page, preferLabel));
+  }
+
+  goToTocPage(page: number) {
+    this.goToPage(page, this.tocCustom());
   }
 
   openCommandPalette() {
@@ -528,7 +568,7 @@ export class Reader implements OnInit, OnDestroy {
 
   runCommandPaletteCommand(command: ReaderCommand) {
     this.closeCommandPalette();
-    this.goToPage(command.page);
+    this.goToPage(command.page, command.preferLabel);
   }
 
   private runSelectedCommand() {
@@ -573,20 +613,42 @@ export class Reader implements OnInit, OnDestroy {
   private tocCommand(item: TocItem & { page: number }, index: number): ReaderCommand {
     const title = item.title.trim() || 'Untitled section';
     const depth = Math.max(0, Math.min(item.depth, 4));
-    const meta = `p. ${item.page}`;
+    const preferLabel = this.tocCustom();
+    const targetPage = this.resolveNavigationPage(item.page, preferLabel);
+    const displayPage = this.displayTocPage(item.page);
+    const meta =
+      targetPage !== item.page ? `p. ${displayPage} · PDF ${targetPage}` : `p. ${displayPage}`;
     return {
       id: `toc-${index}-${item.page}`,
       group: 'Contents',
       label: title,
       meta,
       page: item.page,
+      preferLabel,
       depth,
-      search: this.normalizeCommandQuery(`${title} ${meta} ${item.page}`),
+      search: this.normalizeCommandQuery(`${title} ${meta} ${item.page} ${targetPage}`),
     };
   }
 
   private pageCommandForQuery(query: string, pageCount: number): ReaderCommand | null {
-    const page = Number(query.trim());
+    const raw = query.trim();
+    if (!raw) return null;
+
+    const labeledPage = this.pageLabelToPhysicalPage(raw);
+    if (labeledPage) {
+      return {
+        id: `page-label-${this.normalizePageLabel(raw)}-${labeledPage}`,
+        group: 'Pages',
+        label: `Go to page ${raw}`,
+        meta: labeledPage === Number(raw) ? `${labeledPage} / ${pageCount}` : `PDF ${labeledPage}`,
+        page: labeledPage,
+        preferLabel: false,
+        depth: 0,
+        search: this.normalizeCommandQuery(`${raw} ${labeledPage}`),
+      };
+    }
+
+    const page = Number(raw);
     if (!Number.isInteger(page) || page < 1 || page > pageCount) return null;
     return {
       id: `page-${page}`,
@@ -594,6 +656,7 @@ export class Reader implements OnInit, OnDestroy {
       label: `Go to page ${page}`,
       meta: `${page} / ${pageCount}`,
       page,
+      preferLabel: false,
       depth: 0,
       search: String(page),
     };
@@ -607,7 +670,7 @@ export class Reader implements OnInit, OnDestroy {
       .toLowerCase();
   }
 
-  private handleCommandPaletteKeydown(event: KeyboardEvent) {
+  private handleReaderKeydown(event: KeyboardEvent) {
     if (event.defaultPrevented) return;
 
     if (event.key === 'Escape' && this.commandPaletteOpen()) {
@@ -616,22 +679,142 @@ export class Reader implements OnInit, OnDestroy {
       return;
     }
 
-    const key = event.key.toLowerCase();
-    const isOpenShortcut =
-      (event.ctrlKey || event.metaKey) && (key === 'k' || event.code === 'KeyK');
-    if (!isOpenShortcut || this.shouldIgnoreCommandPaletteShortcut(event.target)) return;
+    const action = this.readerShortcutAction(event);
+    if (!action || this.shouldIgnoreReaderShortcut(event.target)) return;
 
     event.preventDefault();
-    this.openCommandPalette();
+    this.runReaderShortcut(action);
   }
 
-  private shouldIgnoreCommandPaletteShortcut(target: EventTarget | null): boolean {
+  private readerShortcutAction(event: KeyboardEvent): ReaderShortcutAction | null {
+    if (!event.altKey || !event.shiftKey || event.ctrlKey || event.metaKey) return null;
+    switch (event.code) {
+      case 'KeyA':
+        return 'assistant';
+      case 'KeyD':
+        return 'diagrams';
+      case 'KeyN':
+        return 'notes';
+      case 'KeyS':
+        return 'sketches';
+      case 'KeyC':
+        return 'contents';
+      case 'KeyM':
+        return 'contentTree';
+      case 'KeyK':
+        return 'commandPalette';
+      default:
+        return null;
+    }
+  }
+
+  private runReaderShortcut(action: ReaderShortcutAction) {
+    if (this.loading() || this.error()) return;
+    switch (action) {
+      case 'assistant':
+        this.togglePanel();
+        break;
+      case 'diagrams':
+        this.toggleDiagrams();
+        break;
+      case 'notes':
+        this.toggleNotes();
+        break;
+      case 'sketches':
+        this.toggleSketches();
+        break;
+      case 'contents':
+        this.toggleToc();
+        break;
+      case 'contentTree':
+        this.toggleContentTree();
+        break;
+      case 'commandPalette':
+        this.openCommandPalette();
+        break;
+    }
+  }
+
+  private shouldIgnoreReaderShortcut(target: EventTarget | null): boolean {
     if (!(target instanceof Element)) return false;
     const editable = target.closest(
       'input, textarea, select, [contenteditable="true"], app-note-editor, app-excalidraw-canvas',
     );
     if (editable) return true;
     return target instanceof HTMLElement && target.isContentEditable;
+  }
+
+  private async loadPageLabels() {
+    if (!this.pdfDoc) {
+      this.pageLabels.set([]);
+      return;
+    }
+    try {
+      const labels = await this.pdfDoc.getPageLabels();
+      this.pageLabels.set(labels ?? []);
+    } catch {
+      this.pageLabels.set([]);
+    }
+  }
+
+  private clampPage(page: number): number {
+    const total = this.pageCount();
+    if (!total) return Math.max(1, Math.round(page));
+    return Math.max(1, Math.min(total, Math.round(page)));
+  }
+
+  private resolveNavigationPage(page: number, preferLabel: boolean): number {
+    if (preferLabel) {
+      const labeledPage = this.pageLabelToPhysicalPage(page);
+      if (labeledPage) return labeledPage;
+    }
+    return this.clampPage(page);
+  }
+
+  private pageLabelForPhysicalPage(page: number): string | null {
+    const label = this.pageLabels()[page - 1]?.trim();
+    return label || null;
+  }
+
+  displayTocPage(page: number): string {
+    if (this.tocCustom()) return String(page);
+    return this.pageLabelForPhysicalPage(page) ?? String(page);
+  }
+
+  private pageReadout(page: number): string {
+    const total = this.pageCount();
+    const label = this.pageLabelForPhysicalPage(page);
+    if (label && label !== String(page)) return `${label} (PDF ${page} / ${total})`;
+    return `${page} / ${total}`;
+  }
+
+  private currentDisplayPageValue(): number {
+    const label = this.pageLabelForPhysicalPage(this.currentPage());
+    const page = Number(label);
+    return Number.isInteger(page) && page > 0 ? page : this.currentPage();
+  }
+
+  private pageLabelToPhysicalPage(value: string | number): number | null {
+    const target = this.normalizePageLabel(value);
+    if (!target) return null;
+    const targetNumber = this.normalizedNumericPageLabel(target);
+    const labels = this.pageLabels();
+    for (let index = 0; index < labels.length; index++) {
+      const label = this.normalizePageLabel(labels[index]);
+      if (label === target) return index + 1;
+      if (targetNumber && this.normalizedNumericPageLabel(label) === targetNumber) {
+        return index + 1;
+      }
+    }
+    return null;
+  }
+
+  private normalizePageLabel(value: string | number): string {
+    return String(value).trim().toLowerCase();
+  }
+
+  private normalizedNumericPageLabel(value: string): string | null {
+    return /^\d+$/.test(value) ? String(Number(value)) : null;
   }
 
   /** Build the table of contents from the PDF's outline (bookmarks), if any. */
@@ -961,18 +1144,19 @@ export class Reader implements OnInit, OnDestroy {
 
   /** Page span of the current chapter, derived from the PDF outline. */
   chapterRange(): { from: number; to: number } | null {
-    const entries = this.toc().filter((t) => t.page != null);
+    const preferLabel = this.tocCustom();
+    const entries = this.toc()
+      .map((entry) =>
+        entry.page == null ? null : this.resolveNavigationPage(entry.page, preferLabel),
+      )
+      .filter((page): page is number => page != null);
     if (!entries.length) return null;
     const page = this.currentPage();
-    let from = entries[0].page as number;
-    for (const e of entries) {
-      const p = e.page as number;
+    let from = entries[0];
+    for (const p of entries) {
       if (p <= page && p >= from) from = p;
     }
-    const later = entries
-      .map((e) => e.page as number)
-      .filter((p) => p > from)
-      .sort((a, b) => a - b);
+    const later = entries.filter((p) => p > from).sort((a, b) => a - b);
     const to = later.length ? later[0] - 1 : this.pageCount();
     return { from, to: Math.max(from, to) };
   }
@@ -1130,15 +1314,13 @@ export class Reader implements OnInit, OnDestroy {
 
   setTocPage(index: number, value: number) {
     const page = Number.isFinite(value) && value > 0 ? value : null;
-    this.tocDraft.update((list) =>
-      list.map((item, i) => (i === index ? { ...item, page } : item)),
-    );
+    this.tocDraft.update((list) => list.map((item, i) => (i === index ? { ...item, page } : item)));
   }
 
   addTocEntry() {
     this.tocDraft.update((list) => [
       ...list,
-      { title: 'New section', page: this.currentPage(), depth: 0 },
+      { title: 'New section', page: this.currentDisplayPageValue(), depth: 0 },
     ]);
     this.tocError.set(null);
   }
@@ -1293,9 +1475,8 @@ export class Reader implements OnInit, OnDestroy {
       const depth = Math.max(0, Math.min(2, Math.round(item.depth)));
       const id = `toc_${index}`;
       const prefix = this.contentTreePrefix(depth);
-      const title = item.page
-        ? `${prefix}${item.title} (p. ${item.page})`
-        : `${prefix}${item.title}`;
+      const page = item.page ? this.displayTocPage(item.page) : null;
+      const title = item.page ? `${prefix}${item.title} (p. ${page})` : `${prefix}${item.title}`;
       lines.push(`  ${id}["${this.wrappedMermaidLabel(title, 42)}"]`);
       lines.push(`  ${previous} --> ${id}`);
       lines.push(`  class ${id} depth${depth};`);
@@ -1441,7 +1622,7 @@ export class Reader implements OnInit, OnDestroy {
     this.draftType.set(type);
     this.draftTitle.set(type === 'mermaid' ? 'Untitled diagram' : 'Untitled drawing');
     this.draftContent.set(type === 'mermaid' ? 'graph TD\n  A[Start] --> B[End]' : '');
-    this.draftPage.set(this.currentPage());
+    this.draftPage.set(this.currentDisplayPageValue());
     this.diagramsError.set(null);
     this.diagramView.set('edit');
     this.scheduleReaderStateSave();
@@ -1644,9 +1825,7 @@ export class Reader implements OnInit, OnDestroy {
       next: () => {
         this.sketchGroups.update((groups) => groups.filter((item) => item.id !== group.id));
         this.sketchList.update((items) =>
-          items.map((item) =>
-            item.group_id === group.id ? { ...item, group_id: null } : item,
-          ),
+          items.map((item) => (item.group_id === group.id ? { ...item, group_id: null } : item)),
         );
         if (this.selectedSketchGroupId() === group.id) this.selectedSketchGroupId.set(null);
         if (this.sketchGroupId() === group.id) {
@@ -1676,7 +1855,7 @@ export class Reader implements OnInit, OnDestroy {
         title: 'Untitled sketch',
         content: '',
         group_id: targetGroupId,
-        page: this.currentPage(),
+        page: this.currentDisplayPageValue(),
       })
       .subscribe({
         next: (saved) => {
@@ -1951,7 +2130,7 @@ export class Reader implements OnInit, OnDestroy {
     this.activeNote.set(null);
     this.noteTitle.set('Untitled note');
     this.noteContent.set('');
-    this.notePage.set(this.currentPage());
+    this.notePage.set(this.currentDisplayPageValue());
     this.notesError.set(null);
     this.noteView.set('edit');
     this.scheduleReaderStateSave();

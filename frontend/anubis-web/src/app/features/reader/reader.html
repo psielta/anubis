@@ -11,9 +11,9 @@
   [class.content-tree-open]="contentTreeOpen()"
 >
   <header class="reader-bar">
-    <a class="reader-back" routerLink="/library" aria-label="Back to library">
+    <button type="button" class="reader-back" (click)="goBack()" aria-label="Back">
       <mat-icon>arrow_back</mat-icon>
-    </a>
+    </button>
     <span class="reader-title">{{ book()?.title ?? 'Reader' }}</span>
     <span class="reader-controls">
       <button
@@ -21,7 +21,8 @@
         class="ai-toggle"
         [class.active]="panelOpen()"
         (click)="togglePanel()"
-        aria-label="Study assistant"
+        [attr.aria-label]="'Study assistant (' + shortcuts.assistant + ')'"
+        [attr.title]="'Study assistant (' + shortcuts.assistant + ')'"
       >
         <mat-icon>auto_awesome</mat-icon>
       </button>
@@ -30,7 +31,8 @@
         class="diagrams-toggle"
         [class.active]="diagramsOpen()"
         (click)="toggleDiagrams()"
-        aria-label="Study diagrams"
+        [attr.aria-label]="'Study diagrams (' + shortcuts.diagrams + ')'"
+        [attr.title]="'Study diagrams (' + shortcuts.diagrams + ')'"
       >
         <mat-icon>account_tree</mat-icon>
       </button>
@@ -39,7 +41,8 @@
         class="notes-toggle"
         [class.active]="notesOpen()"
         (click)="toggleNotes()"
-        aria-label="Study notes"
+        [attr.aria-label]="'Study notes (' + shortcuts.notes + ')'"
+        [attr.title]="'Study notes (' + shortcuts.notes + ')'"
       >
         <mat-icon>edit_note</mat-icon>
       </button>
@@ -48,7 +51,8 @@
         class="sketches-toggle"
         [class.active]="sketchesOpen()"
         (click)="toggleSketches()"
-        aria-label="Sketch notebook"
+        [attr.aria-label]="'Sketch notebook (' + shortcuts.sketches + ')'"
+        [attr.title]="'Sketch notebook (' + shortcuts.sketches + ')'"
       >
         <mat-icon>gesture</mat-icon>
       </button>
@@ -57,7 +61,8 @@
         class="toc-toggle"
         [class.active]="tocOpen()"
         (click)="toggleToc()"
-        aria-label="Edit contents"
+        [attr.aria-label]="'Edit contents (' + shortcuts.contents + ')'"
+        [attr.title]="'Edit contents (' + shortcuts.contents + ')'"
       >
         <mat-icon>toc</mat-icon>
       </button>
@@ -66,7 +71,8 @@
         class="content-tree-toggle"
         [class.active]="contentTreeOpen()"
         (click)="toggleContentTree()"
-        aria-label="Content tree"
+        [attr.aria-label]="'Content tree (' + shortcuts.contentTree + ')'"
+        [attr.title]="'Content tree (' + shortcuts.contentTree + ')'"
       >
         <mat-icon>schema</mat-icon>
       </button>
@@ -75,8 +81,8 @@
         class="command-palette-toggle"
         (click)="openCommandPalette()"
         [disabled]="loading() || !!error()"
-        aria-label="Find in contents"
-        title="Ctrl+K"
+        [attr.aria-label]="'Find in contents (' + shortcuts.commandPalette + ')'"
+        [attr.title]="'Find in contents (' + shortcuts.commandPalette + ')'"
       >
         <mat-icon>travel_explore</mat-icon>
       </button>
@@ -89,12 +95,12 @@
             <button
               mat-menu-item
               [disabled]="!item.page"
-              (click)="item.page && goToPage(item.page)"
+              (click)="item.page && goToTocPage(item.page)"
               [style.padding-inline-start.px]="16 + item.depth * 14"
             >
               <span class="toc-title">{{ item.title }}</span>
               @if (item.page) {
-                <span class="toc-page">{{ item.page }}</span>
+                <span class="toc-page">{{ displayTocPage(item.page) }}</span>
               }
             </button>
           }
@@ -118,7 +124,7 @@
         <mat-icon>add</mat-icon>
       </button>
       @if (pageCount()) {
-        <span class="reader-readout reader-pages">{{ currentPage() }} / {{ pageCount() }}</span>
+        <span class="reader-readout reader-pages">{{ currentPageReadout() }}</span>
       }
     </span>
   </header>
@@ -177,6 +183,7 @@
       >
         <header class="command-palette-head">
           <mat-icon>travel_explore</mat-icon>
+          <kbd class="shortcut-key">{{ shortcuts.commandPalette }}</kbd>
           <input
             #commandPaletteInput
             class="command-palette-input"
@@ -231,6 +238,7 @@
     <aside class="ai-panel">
       <header class="ai-head">
         <span class="ai-title"><mat-icon>auto_awesome</mat-icon> Study assistant</span>
+        <kbd class="shortcut-key">{{ shortcuts.assistant }}</kbd>
         <span class="ai-spacer"></span>
         @if (messages().length) {
           <button mat-icon-button (click)="clearHistory()" aria-label="Clear history">
@@ -344,6 +352,7 @@
     <aside class="content-tree-panel">
       <header class="dg-head">
         <span class="dg-title"><mat-icon>schema</mat-icon> Content tree</span>
+        <kbd class="shortcut-key">{{ shortcuts.contentTree }}</kbd>
         <span class="ai-spacer"></span>
         <button
           class="dg-save"
@@ -383,6 +392,7 @@
           </button>
         }
         <span class="dg-title"><mat-icon>account_tree</mat-icon> Diagrams</span>
+        <kbd class="shortcut-key">{{ shortcuts.diagrams }}</kbd>
         <span class="ai-spacer"></span>
         <button mat-icon-button (click)="toggleDiagrams()" aria-label="Close">
           <mat-icon>close</mat-icon>
@@ -499,6 +509,7 @@
           </button>
         }
         <span class="dg-title"><mat-icon>gesture</mat-icon> Sketches</span>
+        <kbd class="shortcut-key">{{ shortcuts.sketches }}</kbd>
         <span class="ai-spacer"></span>
         @if (sketchView() === 'edit') {
           <span class="sketch-save-status" [class.error]="sketchSaveStatus() === 'error'">
@@ -687,6 +698,7 @@
           </button>
         }
         <span class="dg-title"><mat-icon>edit_note</mat-icon> Notes</span>
+        <kbd class="shortcut-key">{{ shortcuts.notes }}</kbd>
         <span class="ai-spacer"></span>
         <button mat-icon-button (click)="toggleNotes()" aria-label="Close">
           <mat-icon>close</mat-icon>
@@ -791,6 +803,7 @@
     <aside class="toc-panel">
       <header class="dg-head">
         <span class="dg-title"><mat-icon>toc</mat-icon> Contents</span>
+        <kbd class="shortcut-key">{{ shortcuts.contents }}</kbd>
         <span class="ai-spacer"></span>
         <div class="toc-panel-actions">
           <button class="toc-action" type="button" (click)="addTocEntry()">
