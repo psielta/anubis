@@ -81,8 +81,12 @@
         class="command-palette-toggle"
         (click)="openCommandPalette()"
         [disabled]="loading() || !!error()"
-        [attr.aria-label]="'Find in contents (' + shortcuts.commandPalette + ')'"
-        [attr.title]="'Find in contents (' + shortcuts.commandPalette + ')'"
+        [attr.aria-label]="
+          'Find in contents (' + shortcuts.commandPalette + ' / ' + shortcuts.commandPaletteAlt + ')'
+        "
+        [attr.title]="
+          'Find in contents (' + shortcuts.commandPalette + ' / ' + shortcuts.commandPaletteAlt + ')'
+        "
       >
         <mat-icon>travel_explore</mat-icon>
       </button>
@@ -184,6 +188,7 @@
         <header class="command-palette-head">
           <mat-icon>travel_explore</mat-icon>
           <kbd class="shortcut-key">{{ shortcuts.commandPalette }}</kbd>
+          <kbd class="shortcut-key">{{ shortcuts.commandPaletteAlt }}</kbd>
           <input
             #commandPaletteInput
             class="command-palette-input"

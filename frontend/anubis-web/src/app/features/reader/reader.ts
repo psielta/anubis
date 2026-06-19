@@ -189,7 +189,8 @@ export class Reader implements OnInit, OnDestroy {
     sketches: 'Alt+Shift+S',
     contents: 'Alt+Shift+C',
     contentTree: 'Alt+Shift+M',
-    commandPalette: 'Alt+Shift+K',
+    commandPalette: 'Ctrl+K',
+    commandPaletteAlt: 'Alt+Shift+K',
   } as const;
 
   // AI study assistant
@@ -699,6 +700,10 @@ export class Reader implements OnInit, OnDestroy {
   }
 
   private readerShortcutAction(event: KeyboardEvent): ReaderShortcutAction | null {
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey) {
+      return event.code === 'KeyK' ? 'commandPalette' : null;
+    }
+
     if (!event.altKey || !event.shiftKey || event.ctrlKey || event.metaKey) return null;
     switch (event.code) {
       case 'KeyA':
