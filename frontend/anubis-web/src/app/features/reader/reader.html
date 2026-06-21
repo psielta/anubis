@@ -1283,6 +1283,13 @@
               >
                 <mat-icon>fact_check</mat-icon> Corrigir
               </button>
+              <button
+                class="exercise-ai-btn"
+                (click)="requestHintLevel()"
+                [disabled]="hintBusy() || nextHintLevel() > 3"
+              >
+                <mat-icon>stairs</mat-icon> Dica em níveis
+              </button>
             </div>
             @if (exerciseAiBusy() || exerciseAiText()) {
               <div class="exercise-ai-output">
@@ -1291,6 +1298,47 @@
                 }
                 @if (exerciseAiText()) {
                   <markdown class="md-body" [katex]="katexReady()" [katexOptions]="katexOptions" [data]="exerciseAiText()" />
+                }
+              </div>
+            }
+            @if (hintLevels().length || hintBusy() || hintError()) {
+              <div class="exercise-hint-levels">
+                @for (h of hintLevels(); track h.level) {
+                  <div class="exercise-hint-level">
+                    <span class="exercise-hint-level-tag">Dica · nível {{ h.level }}</span>
+                    <markdown
+                      class="md-body"
+                      [katex]="katexReady()"
+                      [katexOptions]="katexOptions"
+                      [data]="h.text"
+                    />
+                  </div>
+                }
+                @if (hintBusy()) {
+                  <div class="exercise-hint-level">
+                    <span class="exercise-hint-level-tag">Dica · nível {{ nextHintLevel() }}</span>
+                    @if (hintStreaming()) {
+                      <markdown
+                        class="md-body"
+                        [katex]="katexReady()"
+                        [katexOptions]="katexOptions"
+                        [data]="hintStreaming()"
+                      />
+                    } @else {
+                      <span class="exercise-ai-loading">A IA está pensando…</span>
+                    }
+                  </div>
+                }
+                @if (!hintBusy() && hintLevels().length && nextHintLevel() <= 3) {
+                  <button class="exercise-action" (click)="requestHintLevel()">
+                    <mat-icon>arrow_forward</mat-icon> Próxima dica (nível {{ nextHintLevel() }})
+                  </button>
+                }
+                @if (!hintBusy() && nextHintLevel() > 3) {
+                  <p class="exercise-hint-done">Você já viu as 3 dicas.</p>
+                }
+                @if (hintError()) {
+                  <p class="ai-error">{{ hintError() }}</p>
                 }
               </div>
             }

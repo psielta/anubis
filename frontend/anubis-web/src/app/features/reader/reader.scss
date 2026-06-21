@@ -1008,6 +1008,35 @@
   font-style: italic;
 }
 
+.exercise-hint-levels {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.exercise-hint-level {
+  padding: 0.5rem 0.7rem;
+  background: var(--anubis-canvas);
+  border: 1px solid var(--anubis-line);
+  border-inline-start: 3px solid var(--anubis-gold-deep);
+}
+
+.exercise-hint-level-tag {
+  display: block;
+  margin-bottom: 0.3rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--anubis-gold-deep);
+}
+
+.exercise-hint-done {
+  margin: 0;
+  font-size: 0.8rem;
+  font-style: italic;
+  color: var(--anubis-ink-soft);
+}
+
 .panel-splitter {
   display: none;
 }

@@ -1,5 +1,5 @@
 export type ExerciseStatus = 'pending' | 'completed' | 'doubt' | 'wrong';
-export type ExerciseAIMode = 'statement' | 'hint' | 'review';
+export type ExerciseAIMode = 'statement' | 'hint' | 'review' | 'hint_level';
 
 export interface ExerciseRegion {
   x0: number;
@@ -53,6 +53,7 @@ export interface ExerciseAttempt {
 export interface ExerciseAIRequest {
   mode: ExerciseAIMode;
   question?: string;
+  level?: number;
 }
 
 export interface ExerciseAIDone {

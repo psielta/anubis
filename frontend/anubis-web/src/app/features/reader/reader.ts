@@ -433,6 +433,12 @@ export class Reader implements OnInit, OnDestroy {
   protected readonly exerciseAiMode = signal<ExerciseAIMode | null>(null);
   protected readonly exerciseAiText = signal('');
   protected readonly exerciseAiError = signal<string | null>(null);
+  // Leveled hints (up to 3) — independent of the single "Dica" so both coexist.
+  protected readonly hintLevels = signal<{ level: number; text: string }[]>([]);
+  protected readonly hintStreaming = signal('');
+  protected readonly hintBusy = signal(false);
+  protected readonly hintError = signal<string | null>(null);
+  protected readonly nextHintLevel = computed(() => this.hintLevels().length + 1);
   protected readonly filteredExercises = computed(() => {
     const q = this.exerciseSearch().trim().toLowerCase();
     const list = this.exerciseList();
@@ -487,6 +493,7 @@ export class Reader implements OnInit, OnDestroy {
     sketch_content: string;
   } | null = null;
   private exerciseAiController: AbortController | null = null;
+  private hintController: AbortController | null = null;
   private readonly readerKeydown = (event: KeyboardEvent) => this.handleReaderKeydown(event);
 
   constructor() {
@@ -539,6 +546,7 @@ export class Reader implements OnInit, OnDestroy {
     this.translateAbort?.abort();
     if (this.autoTranslateTimer) clearTimeout(this.autoTranslateTimer);
     this.exerciseAiController?.abort();
+    this.hintController?.abort();
     this.observer?.disconnect();
     this.loadingTask?.destroy();
   }
@@ -3215,6 +3223,7 @@ export class Reader implements OnInit, OnDestroy {
     this.exerciseTitle.set(res.title);
     this.exerciseStatement.set(res.statement);
     this.editingStatement.set(false);
+    this.resetHintLevels();
     this.exerciseLatex.set(res.latex_content);
     this.exerciseSketch.set(res.sketch_content);
     this.exerciseStatus.set(res.status);
@@ -3511,6 +3520,64 @@ export class Reader implements OnInit, OnDestroy {
       },
       controller.signal,
     );
+  }
+
+  requestHintLevel() {
+    const res = this.activeExercise();
+    if (!res || this.hintBusy()) return;
+    const level = this.hintLevels().length + 1;
+    if (level > 3) return;
+    const content = this.pullExerciseContent();
+    this.hintBusy.set(true);
+    this.hintError.set(null);
+    this.hintStreaming.set('');
+    // Persist current work/statement first so the AI reads the latest state.
+    this.exercises.update(this.bookId, res.id, content).subscribe({
+      next: (saved) => {
+        this.applySavedExercise(saved);
+        this.streamHintLevel(res.id, level);
+      },
+      error: (err) => {
+        this.hintBusy.set(false);
+        const message = this.errorText(err, 'Não foi possível preparar a dica');
+        this.hintError.set(message);
+        this.notify.error(message);
+      },
+    });
+  }
+
+  private streamHintLevel(id: number, level: number) {
+    this.hintController?.abort();
+    const controller = new AbortController();
+    this.hintController = controller;
+    void this.exercises.askAI(
+      this.bookId,
+      id,
+      { mode: 'hint_level', level },
+      {
+        onDelta: (text) => this.hintStreaming.update((t) => t + text),
+        onDone: () => {
+          const text = this.hintStreaming().trim();
+          if (text) this.hintLevels.update((list) => [...list, { level, text }]);
+          this.hintStreaming.set('');
+          this.hintBusy.set(false);
+        },
+        onError: (message) => {
+          this.hintBusy.set(false);
+          this.hintError.set(message);
+          this.notify.error(message);
+        },
+      },
+      controller.signal,
+    );
+  }
+
+  private resetHintLevels() {
+    this.hintController?.abort();
+    this.hintLevels.set([]);
+    this.hintStreaming.set('');
+    this.hintBusy.set(false);
+    this.hintError.set(null);
   }
 
   private applySavedExercise(saved: ExerciseResolution) {

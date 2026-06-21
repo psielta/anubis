@@ -71,6 +71,39 @@ _EXERCISE_PROMPTS = {
     ),
 }
 
+# Dicas progressivas: nível 1 dá um empurrão, nível 2 monta a estratégia, nível
+# 3 conduz quase até o fim. Separadas para o modo "hint" único seguir intacto.
+_HINT_LEVEL_PROMPTS = {
+    1: (
+        "O usuário está resolvendo este exercício, recortado da página "
+        "anexada:\n\n"
+        '"""\n{statement}\n"""\n\n'
+        "Esta é a DICA DE NÍVEL 1 (orientação inicial). Aponte apenas o "
+        "conceito/propriedade envolvido e o primeiro passo a considerar, como "
+        "uma pergunta orientadora. NÃO faça contas nem revele a resposta. Seja "
+        "breve (2 a 4 linhas). Use Markdown e LaTeX ($...$). Escreva em "
+        "português do Brasil."
+    ),
+    2: (
+        "O usuário está resolvendo este exercício, recortado da página "
+        "anexada:\n\n"
+        '"""\n{statement}\n"""\n\n'
+        "Esta é a DICA DE NÍVEL 2 (mais detalhada). Monte a equação ou a "
+        "estratégia e mostre o primeiro passo do desenvolvimento, explicando o "
+        "porquê. Ainda NÃO chegue à resposta final. Use Markdown e LaTeX "
+        "($...$). Escreva em português do Brasil."
+    ),
+    3: (
+        "O usuário está resolvendo este exercício, recortado da página "
+        "anexada:\n\n"
+        '"""\n{statement}\n"""\n\n'
+        "Esta é a DICA DE NÍVEL 3 (quase completa). Conduza o passo a passo "
+        "detalhadamente quase até o fim, deixando apenas o cálculo final para o "
+        "usuário concluir. Use Markdown e LaTeX ($...$). Escreva em português "
+        "do Brasil."
+    ),
+}
+
 
 def configured() -> bool:
     return bool(settings.GEMINI_API_KEY)
@@ -159,9 +192,14 @@ async def stream_exercise_reply(
     statement: str,
     work: str,
     question: str | None = None,
+    level: int = 1,
 ) -> AsyncIterator[tuple[str, str]]:
     """Yield ('thinking'|'answer', chunk) for an exercise-resolution AI action."""
-    prompt = _EXERCISE_PROMPTS[mode].format(
+    if mode == "hint_level":
+        template = _HINT_LEVEL_PROMPTS.get(level, _HINT_LEVEL_PROMPTS[1])
+    else:
+        template = _EXERCISE_PROMPTS[mode]
+    prompt = template.format(
         statement=statement.strip() or "(no text extracted)",
         work=work.strip() or "(empty)",
     )

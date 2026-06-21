@@ -193,6 +193,7 @@ async def exercise_resolution_ai(
     statement = resolution.statement
     work = resolution.latex_content
     question = payload.question
+    level = payload.level
 
     async def event_stream() -> AsyncIterator[str]:
         answer: list[str] = []
@@ -204,6 +205,7 @@ async def exercise_resolution_ai(
                 statement=statement,
                 work=work,
                 question=question,
+                level=level,
             ):
                 if channel == "thinking":
                     yield _sse("thinking", {"text": text})
