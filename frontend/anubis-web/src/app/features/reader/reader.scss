@@ -318,6 +318,12 @@
     padding: 0.25rem 0.5rem;
     border: 1px solid var(--anubis-line);
   }
+
+  // The AI/translation can't produce loadable images; drop any stray Markdown
+  // image so a broken-image icon never shows in the rendered output.
+  img {
+    display: none;
+  }
 }
 
 .ai-error {
@@ -571,7 +577,10 @@
   }
 }
 
-.crop-rubberband {
+// The rubber-band is appended to an imperatively-created `.pdf-page`, so it has
+// no component-encapsulation attribute — pierce with ::ng-deep (like .pdf-page)
+// or the rectangle stays invisible while dragging.
+.reader-viewport ::ng-deep .crop-rubberband {
   position: absolute;
   z-index: 4;
   border: 1px solid var(--anubis-gold-deep);
