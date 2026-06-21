@@ -1,18 +1,18 @@
 <div class="dialog">
   <header class="dialog-head">
     <div>
-      <p class="eyebrow">Edit details</p>
-      <h2 class="dialog-title">Book details</h2>
+      <p class="eyebrow">Editar detalhes</p>
+      <h2 class="dialog-title">Detalhes do livro</h2>
     </div>
-    <button type="button" class="dialog-close" aria-label="Close" (click)="cancel()">
+    <button type="button" class="dialog-close" aria-label="Fechar" (click)="cancel()">
       <mat-icon>close</mat-icon>
     </button>
   </header>
 
-  <p class="dialog-sub">Fix the title or author if auto-detection got it wrong.</p>
+  <p class="dialog-sub">Corrija o título ou o autor caso a detecção automática tenha errado.</p>
 
   <mat-form-field appearance="outline" class="full-width">
-    <mat-label>Title</mat-label>
+    <mat-label>Título</mat-label>
     <input
       matInput
       [value]="editTitle()"
@@ -22,7 +22,7 @@
   </mat-form-field>
 
   <mat-form-field appearance="outline" class="full-width">
-    <mat-label>Author</mat-label>
+    <mat-label>Autor</mat-label>
     <input
       matInput
       [value]="editAuthor()"
@@ -34,7 +34,7 @@
         matSuffix
         type="button"
         class="clear-suffix"
-        aria-label="Clear author"
+        aria-label="Limpar autor"
         (click)="editAuthor.set('')"
       >
         <mat-icon>close</mat-icon>
@@ -48,7 +48,7 @@
 
   <footer class="dialog-foot">
     <button mat-stroked-button type="button" [disabled]="savingEdit()" (click)="cancel()">
-      Cancel
+      Cancelar
     </button>
     <button
       mat-flat-button
@@ -57,7 +57,7 @@
       [disabled]="savingEdit() || !editTitle().trim()"
       (click)="save()"
     >
-      {{ savingEdit() ? 'Saving…' : 'Save changes' }}
+      {{ savingEdit() ? 'Salvando…' : 'Salvar alterações' }}
     </button>
   </footer>
 </div>

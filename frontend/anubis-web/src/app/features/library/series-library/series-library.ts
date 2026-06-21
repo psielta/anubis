@@ -59,10 +59,10 @@ export class SeriesLibrary implements OnInit, OnDestroy {
     if (!trimmed) return;
     this.library.createCollection(trimmed).subscribe({
       next: () => {
-        this.notify.success('Series created');
+        this.notify.success('Série criada');
         this.load();
       },
-      error: (e) => this.reportError(e, 'Could not create series'),
+      error: (e) => this.reportError(e, 'Não foi possível criar a série'),
     });
   }
 
@@ -76,20 +76,20 @@ export class SeriesLibrary implements OnInit, OnDestroy {
     if (!trimmed || trimmed === series.name) return;
     this.library.renameCollection(series.id, trimmed).subscribe({
       next: () => {
-        this.notify.success('Series renamed');
+        this.notify.success('Série renomeada');
         this.load();
       },
-      error: (e) => this.reportError(e, 'Could not rename series'),
+      error: (e) => this.reportError(e, 'Não foi possível renomear a série'),
     });
   }
 
   protected deleteSeries(series: CollectionShelf) {
     this.library.deleteCollection(series.id).subscribe({
       next: () => {
-        this.notify.success('Series deleted');
+        this.notify.success('Série excluída');
         this.load();
       },
-      error: (e) => this.reportError(e, 'Could not delete series'),
+      error: (e) => this.reportError(e, 'Não foi possível excluir a série'),
     });
   }
 
@@ -130,7 +130,7 @@ export class SeriesLibrary implements OnInit, OnDestroy {
         this.refreshCovers(series.flatMap((item) => item.items));
       },
       error: (e) => {
-        this.error.set(this.errorText(e, 'Failed to load series'));
+        this.error.set(this.errorText(e, 'Não foi possível carregar as séries'));
         this.loading.set(false);
       },
     });

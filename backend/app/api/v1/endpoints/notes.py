@@ -10,7 +10,7 @@ router = APIRouter(prefix="/books/{book_id}/notes", tags=["notes"])
 
 async def _require_book(db: DbSession, user_id: int, book_id: int) -> None:
     if await book_crud.get_for_user(db, user_id, book_id) is None:
-        raise HTTPException(404, "Book not found")
+        raise HTTPException(404, "Livro não encontrado")
 
 
 @router.get("", response_model=list[NoteRead])
@@ -35,7 +35,7 @@ async def create_note(
     await _require_book(db, current_user.id, book_id)
     title = payload.title.strip()
     if not title:
-        raise HTTPException(422, "Title cannot be empty")
+        raise HTTPException(422, "O título não pode estar vazio")
     note = await note_crud.create(
         db,
         book_id=book_id,
@@ -56,7 +56,7 @@ async def get_note(
         db, note_id=note_id, book_id=book_id, user_id=current_user.id
     )
     if note is None:
-        raise HTTPException(404, "Note not found")
+        raise HTTPException(404, "Nota não encontrada")
     return NoteRead.model_validate(note)
 
 
@@ -73,13 +73,13 @@ async def update_note(
         db, note_id=note_id, book_id=book_id, user_id=current_user.id
     )
     if note is None:
-        raise HTTPException(404, "Note not found")
+        raise HTTPException(404, "Nota não encontrada")
 
     fields = payload.model_fields_set
     new_title: str | None = None
     if "title" in fields:  # title present: must not be null/empty
         if payload.title is None or not payload.title.strip():
-            raise HTTPException(422, "Title cannot be empty")
+            raise HTTPException(422, "O título não pode estar vazio")
         new_title = payload.title.strip()
 
     note = await note_crud.update(
@@ -102,5 +102,5 @@ async def delete_note(
         db, note_id=note_id, book_id=book_id, user_id=current_user.id
     )
     if note is None:
-        raise HTTPException(404, "Note not found")
+        raise HTTPException(404, "Nota não encontrada")
     await note_crud.delete(db, note)

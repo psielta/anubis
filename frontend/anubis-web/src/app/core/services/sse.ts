@@ -35,19 +35,19 @@ export async function streamSse(
       signal,
     });
   } catch {
-    handlers.onError('Network error — is the server running?');
+    handlers.onError('Erro de rede — o servidor está em execução?');
     return;
   }
 
   if (!resp.ok || !resp.body) {
-    let detail = `Request failed (${resp.status}).`;
+    let detail = `A requisição falhou (${resp.status}).`;
     try {
       const err = await resp.json();
       if (err?.detail) detail = err.detail;
     } catch {
       /* non-JSON error body */
     }
-    if (resp.status === 401) detail = 'Session expired — please reload.';
+    if (resp.status === 401) detail = 'Sessão expirada — recarregue a página.';
     handlers.onError(detail);
     return;
   }
@@ -69,7 +69,7 @@ export async function streamSse(
       }
     }
   } catch {
-    handlers.onError('Streaming was interrupted.');
+    handlers.onError('A transmissão foi interrompida.');
   }
 }
 

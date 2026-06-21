@@ -45,7 +45,7 @@ export class Login {
           this.route.snapshot.queryParamMap.get('returnUrl') ?? '/dashboard',
         ),
       error: (e) => {
-        this.error.set(e?.error?.detail ?? 'Login failed');
+        this.error.set(e?.error?.detail ?? 'Falha ao entrar');
         this.loading.set(false);
       },
     });

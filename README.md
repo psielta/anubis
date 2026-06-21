@@ -4,77 +4,86 @@
 
 <h1 align="center">Anubis</h1>
 
-Anubis is a portfolio full-stack application inspired by BookFusion: a personal
-digital library where users can organize books, read and study long-form
-content, and use AI as a study companion while reading.
+Anubis é uma aplicação full-stack de portfólio inspirada no BookFusion: uma
+biblioteca digital pessoal onde os usuários podem organizar livros, ler e estudar
+conteúdo extenso e usar IA como companheira de estudos durante a leitura.
 
-This repository currently contains the scalable application foundation from the
-approved bootstrap plan:
+Este repositório atualmente contém a base escalável da aplicação proveniente do
+plano de bootstrap aprovado:
 
-- FastAPI backend with async SQLAlchemy, Alembic and PostgreSQL
-- Angular 21 frontend with Angular Material and standalone/lazy-loaded routes
-- JWT authentication with short-lived access tokens and rotated httpOnly refresh
-  cookies
-- Docker Compose PostgreSQL and MinIO for local development
-- Backend quality gates and auth tests
+- Backend FastAPI com SQLAlchemy assíncrono, Alembic e PostgreSQL
+- Frontend Angular 21 com Angular Material e rotas standalone/carregadas sob demanda
+- Autenticação JWT com tokens de acesso de curta duração e cookies httpOnly de
+  refresh rotacionados
+- PostgreSQL e MinIO via Docker Compose para desenvolvimento local
+- Verificações de qualidade do backend e testes de autenticação
 
-The next product iterations should turn this foundation into a user-facing
-digital reading platform: library management, book import, reader UI,
-annotations, study notes, reading progress and AI-assisted study workflows.
+As próximas iterações do produto devem transformar esta base em uma plataforma de
+leitura digital voltada ao usuário: gerenciamento de biblioteca, importação de
+livros, interface de leitura, anotações, notas de estudo, progresso de leitura e
+fluxos de estudo assistidos por IA.
 
-## Product Direction
+## Direção do Produto
 
-Anubis is not a BookFusion integration and is not affiliated with BookFusion.
-It is a portfolio project that uses the same broad product category as
-inspiration: a digital library and reading/study environment.
+Anubis não é uma integração com o BookFusion e não é afiliado ao BookFusion.
+É um projeto de portfólio que usa a mesma categoria ampla de produto como
+inspiração: uma biblioteca digital e um ambiente de leitura/estudo.
 
-Core product goals:
+Objetivos centrais do produto:
 
-- Let users build and manage a private digital book library.
-- Support book metadata, collections, reading status and progress.
-- Provide a clean reading and study interface.
-- Let users create highlights, annotations and study notes.
-- Add AI features that help during study without replacing the reading process.
+- Permitir que os usuários construam e gerenciem uma biblioteca digital de livros
+  privada.
+- Suportar metadados de livros, coleções, status de leitura e progresso.
+- Fornecer uma interface limpa de leitura e estudo.
+- Permitir que os usuários criem destaques, anotações e notas de estudo.
+- Adicionar recursos de IA que ajudam durante o estudo sem substituir o processo
+  de leitura.
 
-Planned AI study capabilities:
+Capacidades de estudo com IA planejadas:
 
-- Ask questions about the current book or selected passage.
-- Summarize chapters or selected sections.
-- Generate flashcards and review prompts from highlights.
-- Explain difficult excerpts in simpler language.
-- Build study plans and reading recaps from user activity.
+- Fazer perguntas sobre o livro atual ou sobre um trecho selecionado.
+- Resumir capítulos ou seções selecionadas.
+- Gerar flashcards e perguntas de revisão a partir de destaques.
+- Explicar trechos difíceis em uma linguagem mais simples.
+- Construir planos de estudo e recapitulações de leitura a partir da atividade do
+  usuário.
 
-## Current Implementation Status
+## Status Atual da Implementação
 
-Implemented:
+Implementado:
 
-- User registration and login.
-- Protected app shell with a stacked top-navigation layout (portrait-friendly).
-- Access token stored client-side for API calls.
-- Refresh token stored as an httpOnly cookie scoped to auth routes.
-- Refresh token rotation with stale-token rejection.
-- PostgreSQL connection through SQLAlchemy async sessions.
-- Alembic migrations for the users table and refresh-token hash.
-- Backend tests covering auth, refresh, logout and duplicate registration.
-- Angular route guard, auth interceptor and refresh flow.
-- Book import: PDF upload (up to 250 MB) to MinIO with owner-scoped library API and UI.
-- Book covers: manual image upload plus automatic PDF first-page extraction.
-- In-app PDF reader (continuous scroll, zoom, editable table of contents
-  auto-detected from the PDF outline, with custom sections you can create,
-  reorder and nest).
-- Reading progress: resumes where you left off, with progress bars in the library.
-- Collections: organise books into collections, with search and pagination in the library.
-- AI study assistant: ask, summarize and generate flashcards over a book or chapter
-  (or a selected passage) via the Gemini API — streamed over SSE with the model's
-  reasoning and rendered as Markdown. Requires `GEMINI_API_KEY` in `backend/.env`.
+- Cadastro e login de usuário.
+- Shell de aplicação protegido com um layout de navegação superior empilhada
+  (adequado a telas em retrato).
+- Token de acesso armazenado no lado do cliente para chamadas de API.
+- Token de refresh armazenado como cookie httpOnly com escopo nas rotas de auth.
+- Rotação do token de refresh com rejeição de token obsoleto.
+- Conexão com o PostgreSQL através de sessões assíncronas do SQLAlchemy.
+- Migrações Alembic para a tabela de usuários e para o hash do token de refresh.
+- Testes de backend cobrindo auth, refresh, logout e cadastro duplicado.
+- Route guard do Angular, interceptor de auth e fluxo de refresh.
+- Importação de livros: upload de PDF (até 250 MB) para o MinIO com API e UI de
+  biblioteca com escopo por proprietário.
+- Capas de livros: upload manual de imagem além de extração automática da primeira
+  página do PDF.
+- Leitor de PDF integrado (rolagem contínua, zoom, sumário editável
+  detectado automaticamente a partir do outline do PDF, com seções customizadas
+  que você pode criar, reordenar e aninhar).
+- Progresso de leitura: retoma de onde você parou, com barras de progresso na
+  biblioteca.
+- Coleções: organize livros em coleções, com busca e paginação na biblioteca.
+- Assistente de estudo com IA: pergunte, resuma e gere flashcards sobre um livro ou
+  capítulo (ou um trecho selecionado) via API Gemini — transmitido por SSE com o
+  raciocínio do modelo e renderizado como Markdown. Requer `GEMINI_API_KEY` em
+  `backend/.env`.
 
-Not implemented yet:
+Ainda não implementado:
 
-- Highlights, annotations and notes (persisted).
-- AI embeddings / retrieval-augmented search across the whole library.
-- Production deployment containers for backend/frontend.
+- Destaques, anotações e notas (persistidos).
+- Embeddings de IA / busca aumentada por recuperação em toda a biblioteca.
+- Contêineres de deploy de produção para backend/frontend.
 
-## Tech Stack
+## Stack Tecnológica
 
 Backend:
 
@@ -93,17 +102,17 @@ Frontend:
 
 - Angular 21
 - Angular Material
-- Standalone components
-- Functional route guards and interceptors
-- Signals for auth state
+- Componentes standalone
+- Route guards e interceptors funcionais
+- Signals para o estado de auth
 
-Infrastructure:
+Infraestrutura:
 
 - Docker
 - Docker Compose
 - PostgreSQL 17
 
-## Repository Layout
+## Estrutura do Repositório
 
 ```text
 anubis/
@@ -135,11 +144,11 @@ anubis/
                 `-- shared/
 ```
 
-## Local Setup
+## Configuração Local
 
-### 1. Database and object storage
+### 1. Banco de dados e armazenamento de objetos
 
-From the repository root:
+A partir da raiz do repositório:
 
 ```powershell
 Copy-Item .env.example .env
@@ -147,18 +156,18 @@ docker compose up -d db minio minio-init
 docker compose ps
 ```
 
-The local Postgres port is configured through `POSTGRES_PORT` in `.env`.
-This workspace currently uses `5433` to avoid conflicts with local PostgreSQL
-installations.
+A porta local do Postgres é configurada através de `POSTGRES_PORT` em `.env`.
+Este workspace atualmente usa `5433` para evitar conflitos com instalações locais
+do PostgreSQL.
 
-MinIO serves S3-compatible object storage for uploaded books:
+O MinIO oferece armazenamento de objetos compatível com S3 para os livros enviados:
 
-- S3 API: `http://localhost:9000` (override with `MINIO_API_PORT`)
-- Console: `http://localhost:9001` (override with `MINIO_CONSOLE_PORT`)
-- Bucket: `anubis-library` (created privately by `minio-init`)
+- API S3: `http://localhost:9000` (substitua com `MINIO_API_PORT`)
+- Console: `http://localhost:9001` (substitua com `MINIO_CONSOLE_PORT`)
+- Bucket: `anubis-library` (criado de forma privada pelo `minio-init`)
 
-Set `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` in the root `.env`. The backend
-reads matching credentials from `backend/.env` as `S3_ACCESS_KEY` /
+Defina `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` no `.env` da raiz. O backend
+lê credenciais correspondentes de `backend/.env` como `S3_ACCESS_KEY` /
 `S3_SECRET_KEY`.
 
 ### 2. Backend
@@ -175,7 +184,7 @@ alembic upgrade head
 uvicorn app.main:app --reload --port 8000
 ```
 
-Backend URLs:
+URLs do backend:
 
 - API: `http://localhost:8000/api/v1`
 - Docs: `http://localhost:8000/docs`
@@ -189,11 +198,11 @@ npm install
 npm start
 ```
 
-Frontend URL:
+URL do frontend:
 
 - App: `http://localhost:4200`
 
-## Validation
+## Validação
 
 Backend:
 
@@ -212,54 +221,55 @@ cd frontend/anubis-web
 npm run build
 ```
 
-End-to-end smoke verified with Playwright MCP:
+Smoke de ponta a ponta verificado com o Playwright MCP:
 
-- Logged-out `/dashboard` redirects to `/login?returnUrl=/dashboard`.
-- Registration succeeds.
-- Duplicate registration returns a visible error.
-- Login lands on dashboard.
-- Dashboard displays the current user.
-- Refresh cookie is httpOnly and scoped to `/api/v1/auth`.
-- Reload restores user state.
-- Removing the access token triggers cookie-based refresh.
-- Logout clears local token and invalidates the refresh session.
+- `/dashboard` sem login redireciona para `/login?returnUrl=/dashboard`.
+- O cadastro tem sucesso.
+- Cadastro duplicado retorna um erro visível.
+- Login chega ao dashboard.
+- O dashboard exibe o usuário atual.
+- O cookie de refresh é httpOnly e tem escopo em `/api/v1/auth`.
+- O reload restaura o estado do usuário.
+- Remover o token de acesso dispara o refresh baseado em cookie.
+- O logout limpa o token local e invalida a sessão de refresh.
 
-## Authentication Model
+## Modelo de Autenticação
 
-- Access token: short-lived JWT returned in the response body and stored in
-  `localStorage` for API authorization.
-- Refresh token: long-lived JWT stored as an httpOnly cookie, scoped to
-  `/api/v1/auth`.
-- Refresh rotation: each refresh generates a new `jti`, stores its hash on the
-  user row, and rejects stale refresh tokens.
-- Logout clears the refresh-token hash server-side and deletes the cookie.
+- Token de acesso: JWT de curta duração retornado no corpo da resposta e
+  armazenado no `localStorage` para autorização de API.
+- Token de refresh: JWT de longa duração armazenado como cookie httpOnly, com
+  escopo em `/api/v1/auth`.
+- Rotação de refresh: cada refresh gera um novo `jti`, armazena seu hash na linha
+  do usuário e rejeita tokens de refresh obsoletos.
+- O logout limpa o hash do token de refresh no servidor e exclui o cookie.
 
-Future hardening:
+Endurecimento futuro:
 
-- Move access tokens from `localStorage` to memory.
-- Add CSRF protection for cookie-bearing auth endpoints.
-- Move refresh-token sessions to a dedicated table for multi-device support.
-- Add rate limiting and structured audit logging.
+- Mover os tokens de acesso do `localStorage` para a memória.
+- Adicionar proteção CSRF para os endpoints de auth que portam cookies.
+- Mover as sessões de token de refresh para uma tabela dedicada para suporte a
+  múltiplos dispositivos.
+- Adicionar rate limiting e log de auditoria estruturado.
 
-## Product Roadmap
+## Roadmap do Produto
 
-Suggested next milestones:
+Próximos marcos sugeridos:
 
-1. Library shelves/collections and reading status.
-2. Reader shell: table of contents, progress and responsive reading layout.
-3. Automatic metadata extraction on import.
-4. Highlights, notes and bookmarks.
-5. Study tools: highlights, notes and bookmarks.
-6. AI study assistant: passage Q&A, summaries and flashcard generation.
-7. Reading analytics: streaks, progress and study history.
-8. Production packaging: backend/frontend Dockerfiles and reverse proxy.
+1. Prateleiras/coleções da biblioteca e status de leitura.
+2. Shell do leitor: sumário, progresso e layout de leitura responsivo.
+3. Extração automática de metadados na importação.
+4. Destaques, notas e marcadores.
+5. Ferramentas de estudo: destaques, notas e marcadores.
+6. Assistente de estudo com IA: Q&A de trechos, resumos e geração de flashcards.
+7. Análises de leitura: sequências, progresso e histórico de estudo.
+8. Empacotamento de produção: Dockerfiles de backend/frontend e proxy reverso.
 
-## Portfolio Notes
+## Notas de Portfólio
 
-This project should demonstrate:
+Este projeto deve demonstrar:
 
-- Clean full-stack architecture.
-- Practical authentication and session handling.
-- Scalable backend and frontend boundaries.
-- Product thinking around digital reading and AI-assisted study.
-- A path from a working bootstrap to a real SaaS-style application.
+- Arquitetura full-stack limpa.
+- Tratamento prático de autenticação e sessão.
+- Fronteiras escaláveis de backend e frontend.
+- Pensamento de produto em torno de leitura digital e estudo assistido por IA.
+- Um caminho de um bootstrap funcional até uma aplicação real no estilo SaaS.

@@ -41,20 +41,20 @@ async def _issue_refresh_cookie(
 @router.post("/register", response_model=UserRead, status_code=201)
 async def register(data: UserCreate, db: DbSession) -> UserRead:
     if await user_crud.get_by_email(db, data.email):
-        raise HTTPException(409, "Email already registered")
+        raise HTTPException(409, "E-mail já cadastrado")
     try:
         return await user_crud.create(db, data)  # type: ignore[return-value]
     except IntegrityError:
-        raise HTTPException(409, "Email already registered")
+        raise HTTPException(409, "E-mail já cadastrado")
 
 
 @router.post("/login", response_model=AccessToken)
 async def login(data: LoginRequest, response: Response, db: DbSession) -> AccessToken:
     user = await user_crud.authenticate(db, data.email, data.password)
     if not user:
-        raise HTTPException(401, "Incorrect email or password")
+        raise HTTPException(401, "E-mail ou senha incorretos")
     if not user.is_active:
-        raise HTTPException(400, "Inactive user")
+        raise HTTPException(400, "Usuário inativo")
     await _issue_refresh_cookie(response, db, user)
     return AccessToken(access_token=create_access_token(user.id))
 
@@ -63,19 +63,19 @@ async def login(data: LoginRequest, response: Response, db: DbSession) -> Access
 async def refresh(request: Request, response: Response, db: DbSession) -> AccessToken:
     token = request.cookies.get(REFRESH_COOKIE)
     if not token:
-        raise HTTPException(401, "Missing refresh token")
+        raise HTTPException(401, "Token de atualização ausente")
     try:
         payload = decode_token(token)
         if payload.get("type") != "refresh" or payload.get("jti") is None:
-            raise HTTPException(401, "Invalid refresh token")
+            raise HTTPException(401, "Token de atualização inválido")
     except jwt.PyJWTError:
-        raise HTTPException(401, "Invalid refresh token")
+        raise HTTPException(401, "Token de atualização inválido")
 
     user = await user_crud.get_by_id(db, int(payload["sub"]))
     if not user or not user.is_active:
-        raise HTTPException(401, "Invalid refresh token")
+        raise HTTPException(401, "Token de atualização inválido")
     if not await user_crud.validate_refresh_jti(user, payload.get("jti")):
-        raise HTTPException(401, "Invalid refresh token")
+        raise HTTPException(401, "Token de atualização inválido")
 
     await _issue_refresh_cookie(response, db, user)
     return AccessToken(access_token=create_access_token(user.id))

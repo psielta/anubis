@@ -20,7 +20,7 @@ router = APIRouter(prefix="/books/{book_id}/latex-notebooks", tags=["latex-noteb
 
 async def _require_book(db: DbSession, user_id: int, book_id: int) -> None:
     if await book_crud.get_for_user(db, user_id, book_id) is None:
-        raise HTTPException(404, "Book not found")
+        raise HTTPException(404, "Livro não encontrado")
 
 
 async def _require_group(
@@ -32,7 +32,7 @@ async def _require_group(
         db, group_id=group_id, book_id=book_id, user_id=user_id
     )
     if group is None:
-        raise HTTPException(404, "Latex notebook group not found")
+        raise HTTPException(404, "Grupo de cadernos LaTeX não encontrado")
 
 
 @groups_router.get("", response_model=list[LatexNotebookGroupRead])
@@ -56,7 +56,7 @@ async def create_latex_notebook_group(
     await _require_book(db, current_user.id, book_id)
     name = payload.name.strip()
     if not name:
-        raise HTTPException(422, "Name cannot be empty")
+        raise HTTPException(422, "O nome não pode estar vazio")
     group = await latex_crud.create_group(
         db, book_id=book_id, user_id=current_user.id, name=name
     )
@@ -76,13 +76,13 @@ async def update_latex_notebook_group(
         db, group_id=group_id, book_id=book_id, user_id=current_user.id
     )
     if group is None:
-        raise HTTPException(404, "Latex notebook group not found")
+        raise HTTPException(404, "Grupo de cadernos LaTeX não encontrado")
 
     fields = payload.model_fields_set
     new_name: str | None = None
     if "name" in fields:
         if payload.name is None or not payload.name.strip():
-            raise HTTPException(422, "Name cannot be empty")
+            raise HTTPException(422, "O nome não pode estar vazio")
         new_name = payload.name.strip()
 
     group = await latex_crud.update_group(
@@ -103,7 +103,7 @@ async def delete_latex_notebook_group(
         db, group_id=group_id, book_id=book_id, user_id=current_user.id
     )
     if group is None:
-        raise HTTPException(404, "Latex notebook group not found")
+        raise HTTPException(404, "Grupo de cadernos LaTeX não encontrado")
     await latex_crud.delete_group(db, group)
 
 
@@ -131,7 +131,7 @@ async def create_latex_notebook(
     )
     title = payload.title.strip()
     if not title:
-        raise HTTPException(422, "Title cannot be empty")
+        raise HTTPException(422, "O título não pode estar vazio")
     notebook = await latex_crud.create_notebook(
         db,
         book_id=book_id,
@@ -153,7 +153,7 @@ async def get_latex_notebook(
         db, notebook_id=notebook_id, book_id=book_id, user_id=current_user.id
     )
     if notebook is None:
-        raise HTTPException(404, "Latex notebook not found")
+        raise HTTPException(404, "Caderno LaTeX não encontrado")
     return LatexNotebookRead.model_validate(notebook)
 
 
@@ -170,13 +170,13 @@ async def update_latex_notebook(
         db, notebook_id=notebook_id, book_id=book_id, user_id=current_user.id
     )
     if notebook is None:
-        raise HTTPException(404, "Latex notebook not found")
+        raise HTTPException(404, "Caderno LaTeX não encontrado")
 
     fields = payload.model_fields_set
     new_title: str | None = None
     if "title" in fields:
         if payload.title is None or not payload.title.strip():
-            raise HTTPException(422, "Title cannot be empty")
+            raise HTTPException(422, "O título não pode estar vazio")
         new_title = payload.title.strip()
 
     if "group_id" in fields:
@@ -206,5 +206,5 @@ async def delete_latex_notebook(
         db, notebook_id=notebook_id, book_id=book_id, user_id=current_user.id
     )
     if notebook is None:
-        raise HTTPException(404, "Latex notebook not found")
+        raise HTTPException(404, "Caderno LaTeX não encontrado")
     await latex_crud.delete_notebook(db, notebook)

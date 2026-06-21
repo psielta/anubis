@@ -80,7 +80,7 @@ export class ExerciseResolutionsService {
               content: (data['content'] as string) ?? '',
             });
           else if (event === 'error')
-            handlers.onError((data['detail'] as string) ?? 'The AI request failed.');
+            handlers.onError((data['detail'] as string) ?? 'A requisição de IA falhou.');
         },
         onError: handlers.onError,
       },

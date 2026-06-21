@@ -44,7 +44,7 @@ export class StudyService {
           else if (event === 'delta') handlers.onDelta((data['text'] as string) ?? '');
           else if (event === 'done') handlers.onDone(data as unknown as StudyDone);
           else if (event === 'error')
-            handlers.onError((data['detail'] as string) ?? 'The AI request failed.');
+            handlers.onError((data['detail'] as string) ?? 'A requisição de IA falhou.');
         },
         onError: handlers.onError,
       },

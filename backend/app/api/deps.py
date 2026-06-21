@@ -20,7 +20,7 @@ TokenDep = Annotated[str, Depends(oauth2_scheme)]
 async def get_current_user(db: DbSession, token: TokenDep) -> User:
     exc = HTTPException(
         status.HTTP_401_UNAUTHORIZED,
-        "Could not validate credentials",
+        "Não foi possível validar as credenciais",
         {"WWW-Authenticate": "Bearer"},
     )
     try:
@@ -40,11 +40,11 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 
 async def get_current_active_user(current_user: CurrentUser) -> User:
     if not current_user.is_active:
-        raise HTTPException(400, "Inactive user")
+        raise HTTPException(400, "Usuário inativo")
     return current_user
 
 
 async def get_current_superuser(current_user: CurrentUser) -> User:
     if not current_user.is_superuser:
-        raise HTTPException(403, "Not enough privileges")
+        raise HTTPException(403, "Permissões insuficientes")
     return current_user

@@ -10,7 +10,7 @@ router = APIRouter(prefix="/books/{book_id}/diagrams", tags=["diagrams"])
 
 async def _require_book(db: DbSession, user_id: int, book_id: int) -> None:
     if await book_crud.get_for_user(db, user_id, book_id) is None:
-        raise HTTPException(404, "Book not found")
+        raise HTTPException(404, "Livro não encontrado")
 
 
 @router.get("", response_model=list[DiagramRead])
@@ -34,7 +34,7 @@ async def create_diagram(
     await _require_book(db, current_user.id, book_id)
     title = payload.title.strip()
     if not title:
-        raise HTTPException(422, "Title cannot be empty")
+        raise HTTPException(422, "O título não pode estar vazio")
     diagram = await diagram_crud.create(
         db,
         book_id=book_id,
@@ -56,7 +56,7 @@ async def get_diagram(
         db, diagram_id=diagram_id, book_id=book_id, user_id=current_user.id
     )
     if diagram is None:
-        raise HTTPException(404, "Diagram not found")
+        raise HTTPException(404, "Diagrama não encontrado")
     return DiagramRead.model_validate(diagram)
 
 
@@ -73,13 +73,13 @@ async def update_diagram(
         db, diagram_id=diagram_id, book_id=book_id, user_id=current_user.id
     )
     if diagram is None:
-        raise HTTPException(404, "Diagram not found")
+        raise HTTPException(404, "Diagrama não encontrado")
 
     fields = payload.model_fields_set
     new_title: str | None = None
     if "title" in fields:  # title present: must not be null/empty
         if payload.title is None or not payload.title.strip():
-            raise HTTPException(422, "Title cannot be empty")
+            raise HTTPException(422, "O título não pode estar vazio")
         new_title = payload.title.strip()
 
     diagram = await diagram_crud.update(
@@ -102,5 +102,5 @@ async def delete_diagram(
         db, diagram_id=diagram_id, book_id=book_id, user_id=current_user.id
     )
     if diagram is None:
-        raise HTTPException(404, "Diagram not found")
+        raise HTTPException(404, "Diagrama não encontrado")
     await diagram_crud.delete(db, diagram)

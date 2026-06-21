@@ -3,13 +3,13 @@
     <p class="eyebrow">The Hall of Anubis</p>
     <h1 class="dash-title">
       @if (user(); as u) {
-        Welcome back, {{ u.full_name || u.email }}
+        Bem-vindo de volta, {{ u.full_name || u.email }}
       } @else {
-        Welcome back
+        Bem-vindo de volta
       }
     </h1>
     <p class="dash-sub">
-      Your archive is guarded. Pick up where you left off, or bring a new title into the hall.
+      Seu arquivo está protegido. Continue de onde parou ou traga um novo título para o salão.
     </p>
   </header>
 
@@ -18,15 +18,15 @@
       <span class="stat-medallion"><mat-icon>auto_stories</mat-icon></span>
       <div>
         <p class="stat-value">{{ bookCount() ?? '—' }}</p>
-        <p class="stat-label">Books in your library</p>
+        <p class="stat-label">Livros na sua biblioteca</p>
       </div>
     </article>
 
     <a routerLink="/library" class="action-card">
       <mat-icon class="action-icon">library_books</mat-icon>
       <div class="action-body">
-        <p class="action-title">Open the library</p>
-        <p class="action-sub">Browse and read your collection</p>
+        <p class="action-title">Abrir a biblioteca</p>
+        <p class="action-sub">Explore e leia sua coleção</p>
       </div>
       <mat-icon class="action-arrow">arrow_forward</mat-icon>
     </a>
@@ -34,8 +34,8 @@
     <a routerLink="/library" class="action-card">
       <mat-icon class="action-icon">upload_file</mat-icon>
       <div class="action-body">
-        <p class="action-title">Import a book</p>
-        <p class="action-sub">Add a PDF to the archive</p>
+        <p class="action-title">Importar um livro</p>
+        <p class="action-sub">Adicione um PDF ao arquivo</p>
       </div>
       <mat-icon class="action-arrow">arrow_forward</mat-icon>
     </a>
@@ -43,7 +43,7 @@
 
   @if (user(); as u) {
     <footer class="identity">
-      <span class="identity-label">Signed in as</span>
+      <span class="identity-label">Conectado como</span>
       <span class="identity-email">{{ u.email }}</span>
       <span class="role-chip">{{ u.role }}</span>
     </footer>

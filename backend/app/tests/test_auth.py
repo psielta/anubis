@@ -38,7 +38,7 @@ async def test_register_duplicate_returns_409(client):
         json={"email": email, "password": PASSWORD},
     )
     assert response.status_code == 409
-    assert response.json()["detail"] == "Email already registered"
+    assert response.json()["detail"] == "E-mail já cadastrado"
 
 
 @pytest.mark.asyncio

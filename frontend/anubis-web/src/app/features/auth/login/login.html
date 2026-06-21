@@ -7,8 +7,8 @@
 
     <mat-card class="auth-card">
       <mat-card-content>
-        <p class="eyebrow auth-eyebrow">Guardian of your archive</p>
-        <h1 class="auth-title">Enter the hall</h1>
+        <p class="eyebrow auth-eyebrow">Guardião do seu arquivo</p>
+        <h1 class="auth-title">Entre no salão</h1>
 
         @if (error()) {
           <p class="error">{{ error() }}</p>
@@ -16,12 +16,12 @@
 
         <form [formGroup]="form" (ngSubmit)="submit()">
           <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Email</mat-label>
+            <mat-label>E-mail</mat-label>
             <input matInput type="email" formControlName="email" autocomplete="email" />
           </mat-form-field>
 
           <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Password</mat-label>
+            <mat-label>Senha</mat-label>
             <input
               matInput
               type="password"
@@ -37,12 +37,12 @@
             class="auth-submit"
             [disabled]="loading() || form.invalid"
           >
-            {{ loading() ? 'Signing in…' : 'Sign in' }}
+            {{ loading() ? 'Entrando…' : 'Entrar' }}
           </button>
         </form>
 
         <p class="auth-foot">
-          New to Anubis? <a routerLink="/register" class="auth-link">Create an account</a>
+          Novo no Anubis? <a routerLink="/register" class="auth-link">Criar conta</a>
         </p>
       </mat-card-content>
     </mat-card>

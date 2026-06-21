@@ -182,27 +182,27 @@ export class NoteEditor implements AfterViewInit, OnDestroy {
       editor.chain().focus().unsetLink().run();
       return;
     }
-    const url = window.prompt('Link URL')?.trim();
+    const url = window.prompt('URL do link')?.trim();
     if (url) editor.chain().focus().setLink({ href: url }).run();
   }
 
   insertInlineMath(): void {
-    const latex = window.prompt('LaTeX (inline), e.g. E = mc^2')?.trim();
+    const latex = window.prompt('LaTeX (embutido), ex.: E = mc^2')?.trim();
     if (latex) this.editor?.chain().focus().insertInlineMath({ latex }).run();
   }
 
   insertBlockMath(): void {
-    const latex = window.prompt('LaTeX (block), e.g. \\int_0^1 x^2 dx')?.trim();
+    const latex = window.prompt('LaTeX (bloco), ex.: \\int_0^1 x^2 dx')?.trim();
     if (latex) this.editor?.chain().focus().insertBlockMath({ latex }).run();
   }
 
   private editInlineMath(node: { attrs: { latex?: string } }, pos: number): void {
-    const latex = window.prompt('Edit equation', node.attrs.latex ?? '')?.trim();
+    const latex = window.prompt('Editar equação', node.attrs.latex ?? '')?.trim();
     if (latex != null) this.editor?.chain().focus().updateInlineMath({ latex, pos }).run();
   }
 
   private editBlockMath(node: { attrs: { latex?: string } }, pos: number): void {
-    const latex = window.prompt('Edit equation', node.attrs.latex ?? '')?.trim();
+    const latex = window.prompt('Editar equação', node.attrs.latex ?? '')?.trim();
     if (latex != null) this.editor?.chain().focus().updateBlockMath({ latex, pos }).run();
   }
 

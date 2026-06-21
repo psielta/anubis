@@ -1,17 +1,17 @@
 <div class="dialog">
   <header class="dialog-head">
     <div>
-      <p class="eyebrow">Your archive</p>
-      <h2 class="dialog-title">Upload books</h2>
+      <p class="eyebrow">Seu acervo</p>
+      <h2 class="dialog-title">Enviar livros</h2>
     </div>
-    <button type="button" class="dialog-close" aria-label="Close" (click)="close()">
+    <button type="button" class="dialog-close" aria-label="Fechar" (click)="close()">
       <mat-icon>close</mat-icon>
     </button>
   </header>
 
   <p class="dialog-sub">
-    Drag &amp; drop your PDFs or click to select. Titles are detected automatically — you can fix
-    any details later.
+    Arraste seus PDFs ou clique para selecionar. Os títulos são detectados automaticamente — você
+    pode corrigir os detalhes depois.
   </p>
 
   <input #fileInput type="file" accept=".pdf" multiple hidden (change)="onFilesSelected($event)" />
@@ -25,8 +25,8 @@
     (drop)="onDrop($event)"
   >
     <mat-icon>cloud_upload</mat-icon>
-    <span class="dropzone-main">Drag &amp; drop your files</span>
-    <span class="dropzone-sub">or click to select &middot; PDF &middot; up to 250 MB</span>
+    <span class="dropzone-main">Arraste os arquivos</span>
+    <span class="dropzone-sub">ou clique para selecionar &middot; PDF &middot; até 250 MB</span>
   </button>
 
   @if (error()) {
@@ -52,7 +52,7 @@
             <button
               type="button"
               class="queue-remove"
-              aria-label="Remove"
+              aria-label="Remover"
               (click)="removeQueued(item.id)"
             >
               <mat-icon>close</mat-icon>
@@ -65,9 +65,9 @@
 
   <footer class="dialog-foot">
     @if (hasCompleted()) {
-      <button type="button" class="link-btn" (click)="clearCompleted()">Clear finished</button>
+      <button type="button" class="link-btn" (click)="clearCompleted()">Limpar concluídos</button>
     }
     <span class="foot-spacer"></span>
-    <button mat-flat-button color="primary" class="done-btn" (click)="close()">Done</button>
+    <button mat-flat-button color="primary" class="done-btn" (click)="close()">Concluir</button>
   </footer>
 </div>

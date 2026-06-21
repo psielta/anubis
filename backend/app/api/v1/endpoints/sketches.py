@@ -20,7 +20,7 @@ router = APIRouter(prefix="/books/{book_id}/sketches", tags=["sketches"])
 
 async def _require_book(db: DbSession, user_id: int, book_id: int) -> None:
     if await book_crud.get_for_user(db, user_id, book_id) is None:
-        raise HTTPException(404, "Book not found")
+        raise HTTPException(404, "Livro não encontrado")
 
 
 async def _require_group(
@@ -32,7 +32,7 @@ async def _require_group(
         db, group_id=group_id, book_id=book_id, user_id=user_id
     )
     if group is None:
-        raise HTTPException(404, "Sketch group not found")
+        raise HTTPException(404, "Grupo de rascunhos não encontrado")
 
 
 @groups_router.get("", response_model=list[SketchGroupRead])
@@ -56,7 +56,7 @@ async def create_sketch_group(
     await _require_book(db, current_user.id, book_id)
     name = payload.name.strip()
     if not name:
-        raise HTTPException(422, "Name cannot be empty")
+        raise HTTPException(422, "O nome não pode estar vazio")
     group = await sketch_crud.create_group(
         db, book_id=book_id, user_id=current_user.id, name=name
     )
@@ -76,13 +76,13 @@ async def update_sketch_group(
         db, group_id=group_id, book_id=book_id, user_id=current_user.id
     )
     if group is None:
-        raise HTTPException(404, "Sketch group not found")
+        raise HTTPException(404, "Grupo de rascunhos não encontrado")
 
     fields = payload.model_fields_set
     new_name: str | None = None
     if "name" in fields:
         if payload.name is None or not payload.name.strip():
-            raise HTTPException(422, "Name cannot be empty")
+            raise HTTPException(422, "O nome não pode estar vazio")
         new_name = payload.name.strip()
 
     group = await sketch_crud.update_group(
@@ -103,7 +103,7 @@ async def delete_sketch_group(
         db, group_id=group_id, book_id=book_id, user_id=current_user.id
     )
     if group is None:
-        raise HTTPException(404, "Sketch group not found")
+        raise HTTPException(404, "Grupo de rascunhos não encontrado")
     await sketch_crud.delete_group(db, group)
 
 
@@ -131,7 +131,7 @@ async def create_sketch(
     )
     title = payload.title.strip()
     if not title:
-        raise HTTPException(422, "Title cannot be empty")
+        raise HTTPException(422, "O título não pode estar vazio")
     sketch = await sketch_crud.create_sketch(
         db,
         book_id=book_id,
@@ -153,7 +153,7 @@ async def get_sketch(
         db, sketch_id=sketch_id, book_id=book_id, user_id=current_user.id
     )
     if sketch is None:
-        raise HTTPException(404, "Sketch not found")
+        raise HTTPException(404, "Rascunho não encontrado")
     return SketchRead.model_validate(sketch)
 
 
@@ -170,13 +170,13 @@ async def update_sketch(
         db, sketch_id=sketch_id, book_id=book_id, user_id=current_user.id
     )
     if sketch is None:
-        raise HTTPException(404, "Sketch not found")
+        raise HTTPException(404, "Rascunho não encontrado")
 
     fields = payload.model_fields_set
     new_title: str | None = None
     if "title" in fields:
         if payload.title is None or not payload.title.strip():
-            raise HTTPException(422, "Title cannot be empty")
+            raise HTTPException(422, "O título não pode estar vazio")
         new_title = payload.title.strip()
 
     if "group_id" in fields:
@@ -206,5 +206,5 @@ async def delete_sketch(
         db, sketch_id=sketch_id, book_id=book_id, user_id=current_user.id
     )
     if sketch is None:
-        raise HTTPException(404, "Sketch not found")
+        raise HTTPException(404, "Rascunho não encontrado")
     await sketch_crud.delete_sketch(db, sketch)

@@ -31,7 +31,7 @@ def _sse(event: str, data: dict) -> str:
 async def _require_book(db: DbSession, user_id: int, book_id: int) -> Book:
     book = await book_crud.get_for_user(db, user_id, book_id)
     if book is None:
-        raise HTTPException(404, "Book not found")
+        raise HTTPException(404, "Livro não encontrado")
     return book
 
 
@@ -42,7 +42,7 @@ async def _require_resolution(
         db, resolution_id=resolution_id, book_id=book_id, user_id=user_id
     )
     if resolution is None:
-        raise HTTPException(404, "Exercise resolution not found")
+        raise HTTPException(404, "Resolução de exercício não encontrada")
     return resolution
 
 
@@ -65,9 +65,9 @@ async def create_exercise_resolution(
     book = await _require_book(db, current_user.id, book_id)
     title = payload.title.strip()
     if not title:
-        raise HTTPException(422, "Title cannot be empty")
+        raise HTTPException(422, "O título não pode estar vazio")
     if book.page_count is not None and payload.page > book.page_count:
-        raise HTTPException(422, "Page is out of range")
+        raise HTTPException(422, "Página fora do intervalo")
     resolution = await crud.create(
         db,
         book_id=book_id,
@@ -110,7 +110,7 @@ async def update_exercise_resolution(
     new_title: str | None = None
     if "title" in fields:
         if payload.title is None or not payload.title.strip():
-            raise HTTPException(422, "Title cannot be empty")
+            raise HTTPException(422, "O título não pode estar vazio")
         new_title = payload.title.strip()
 
     resolution = await crud.update(
@@ -181,9 +181,9 @@ async def exercise_resolution_ai(
         db, user_id=current_user.id, book_id=book_id, resolution_id=resolution_id
     )
     if not ai.configured():
-        raise HTTPException(503, "AI is not configured. Set GEMINI_API_KEY.")
+        raise HTTPException(503, "IA não configurada. Defina GEMINI_API_KEY.")
     if book.file_format != "pdf":
-        raise HTTPException(400, "Only PDF books support the AI study assistant.")
+        raise HTTPException(400, "Apenas livros em PDF suportam o assistente de estudo de IA.")
 
     data = await storage.read_bytes(book.object_key)
     gemini = ai.client()
@@ -213,7 +213,7 @@ async def exercise_resolution_ai(
             content = "".join(answer).strip() or "_No response generated._"
             yield _sse("done", {"mode": mode, "content": content})
         except Exception:
-            yield _sse("error", {"detail": "The AI request failed. Please try again."})
+            yield _sse("error", {"detail": "A requisição de IA falhou. Tente novamente."})
 
     return StreamingResponse(
         event_stream(),

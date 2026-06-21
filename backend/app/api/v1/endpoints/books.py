@@ -42,11 +42,11 @@ def _validate_file(
 ) -> tuple[str, str]:
     ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     if ext not in ALLOWED_EXTENSIONS:
-        raise HTTPException(415, "Only PDF files are supported")
+        raise HTTPException(415, "Apenas arquivos PDF são suportados")
 
     declared = content_type or ""
     if declared != PDF_CONTENT_TYPE or not data.startswith(PDF_MAGIC):
-        raise HTTPException(415, "File content does not match PDF format")
+        raise HTTPException(415, "O conteúdo do arquivo não corresponde ao formato PDF")
 
     return ALLOWED_EXTENSIONS[ext], declared
 
@@ -72,9 +72,9 @@ def _validate_toc_tree(items: list[dict]) -> None:
         depth = item["depth"]
         if index == 0:
             if depth != 0:
-                raise HTTPException(422, "First table-of-contents entry must be top-level")
+                raise HTTPException(422, "A primeira entrada do sumário deve ser de nível superior")
         elif depth > previous_depth + 1:
-            raise HTTPException(422, "Table-of-contents nesting skips a level")
+            raise HTTPException(422, "O aninhamento do sumário pula um nível")
         previous_depth = depth
 
 
@@ -90,7 +90,7 @@ async def _read_manual_cover(cover: UploadFile) -> tuple[bytes, str]:
     """Read and strictly validate a user-uploaded cover image."""
     data = await cover.read()
     if len(data) > _max_cover_bytes():
-        raise HTTPException(413, f"Cover exceeds {settings.MAX_COVER_SIZE_MB} MB limit")
+        raise HTTPException(413, f"A capa excede o limite de {settings.MAX_COVER_SIZE_MB} MB")
     content_type = covers.validate_image(cover.content_type, data)
     return data, content_type
 
@@ -113,19 +113,19 @@ async def import_book(
     cover: Annotated[UploadFile | None, File()] = None,
 ) -> BookRead:
     if file.size is not None and file.size > _max_bytes():
-        raise HTTPException(413, f"File exceeds {settings.MAX_UPLOAD_SIZE_MB} MB limit")
+        raise HTTPException(413, f"O arquivo excede o limite de {settings.MAX_UPLOAD_SIZE_MB} MB")
 
     if collection_id is not None:
         collection = await collection_crud.get_for_user(
             db, current_user.id, collection_id
         )
         if collection is None:
-            raise HTTPException(404, "Collection not found")
+            raise HTTPException(404, "Coleção não encontrada")
 
     filename = file.filename or "upload"
     data = await file.read()
     if len(data) > _max_bytes():
-        raise HTTPException(413, f"File exceeds {settings.MAX_UPLOAD_SIZE_MB} MB limit")
+        raise HTTPException(413, f"O arquivo excede o limite de {settings.MAX_UPLOAD_SIZE_MB} MB")
 
     file_format, content_type = _validate_file(filename, file.content_type, data)
 
@@ -231,7 +231,7 @@ async def get_book(
 ) -> BookRead:
     book = await book_crud.get_for_user(db, current_user.id, book_id)
     if book is None:
-        raise HTTPException(404, "Book not found")
+        raise HTTPException(404, "Livro não encontrado")
     return await _book_read(db, book)
 
 
@@ -244,13 +244,13 @@ async def update_book(
 ) -> BookRead:
     book = await book_crud.get_for_user(db, current_user.id, book_id)
     if book is None:
-        raise HTTPException(404, "Book not found")
+        raise HTTPException(404, "Livro não encontrado")
 
     fields = payload.model_fields_set
     new_title: str | None = None
     if "title" in fields:  # title present: must not be null/empty
         if payload.title is None or not payload.title.strip():
-            raise HTTPException(422, "Title cannot be empty")
+            raise HTTPException(422, "O título não pode estar vazio")
         new_title = payload.title.strip()
 
     book = await book_crud.update_details(
@@ -271,7 +271,7 @@ async def download_book(
 ) -> StreamingResponse:
     book = await book_crud.get_for_user(db, current_user.id, book_id)
     if book is None:
-        raise HTTPException(404, "Book not found")
+        raise HTTPException(404, "Livro não encontrado")
 
     safe_name = _sanitize_filename(book.original_filename)
     return StreamingResponse(
@@ -293,7 +293,7 @@ async def update_progress(
 ) -> BookRead:
     book = await book_crud.get_for_user(db, current_user.id, book_id)
     if book is None:
-        raise HTTPException(404, "Book not found")
+        raise HTTPException(404, "Livro não encontrado")
 
     last_page = min(payload.last_page, payload.page_count)
     book = await book_crud.set_progress(
@@ -311,7 +311,7 @@ async def update_reader_state(
 ) -> BookRead:
     book = await book_crud.get_for_user(db, current_user.id, book_id)
     if book is None:
-        raise HTTPException(404, "Book not found")
+        raise HTTPException(404, "Livro não encontrado")
 
     book = await book_crud.set_reader_state(
         db, book, reader_state=payload.model_dump(mode="json")
@@ -328,19 +328,19 @@ async def update_toc(
 ) -> BookRead:
     book = await book_crud.get_for_user(db, current_user.id, book_id)
     if book is None:
-        raise HTTPException(404, "Book not found")
+        raise HTTPException(404, "Livro não encontrado")
 
     cleaned: list[dict] = []
     for entry in payload.items:
         title = entry.title.strip()
         if not title:
-            raise HTTPException(422, "Title cannot be empty")
+            raise HTTPException(422, "O título não pode estar vazio")
         if (
             entry.page is not None
             and book.page_count is not None
             and entry.page > book.page_count
         ):
-            raise HTTPException(422, "Page cannot exceed the book page count")
+            raise HTTPException(422, "A página não pode exceder o número de páginas do livro")
         cleaned.append({"title": title, "page": entry.page, "depth": entry.depth})
 
     _validate_toc_tree(cleaned)
@@ -357,7 +357,7 @@ async def set_book_collections(
 ) -> BookRead:
     book = await book_crud.get_for_user(db, current_user.id, book_id)
     if book is None:
-        raise HTTPException(404, "Book not found")
+        raise HTTPException(404, "Livro não encontrado")
 
     await collection_crud.set_book_collections(
         db,
@@ -377,7 +377,7 @@ async def set_book_cover(
 ) -> BookRead:
     book = await book_crud.get_for_user(db, current_user.id, book_id)
     if book is None:
-        raise HTTPException(404, "Book not found")
+        raise HTTPException(404, "Livro não encontrado")
 
     cover_data, content_type = await _read_manual_cover(cover)
     new_key = await _store_cover(current_user.id, cover_data, content_type)
@@ -407,7 +407,7 @@ async def get_book_cover(
 ) -> StreamingResponse:
     book = await book_crud.get_for_user(db, current_user.id, book_id)
     if book is None or book.cover_object_key is None:
-        raise HTTPException(404, "Cover not found")
+        raise HTTPException(404, "Capa não encontrada")
 
     return StreamingResponse(
         storage.stream(book.cover_object_key),
@@ -426,7 +426,7 @@ async def delete_book_cover(
 ) -> None:
     book = await book_crud.get_for_user(db, current_user.id, book_id)
     if book is None:
-        raise HTTPException(404, "Book not found")
+        raise HTTPException(404, "Livro não encontrado")
 
     cover_key = book.cover_object_key
     if cover_key is None:
@@ -442,7 +442,7 @@ async def delete_book(
 ) -> None:
     book = await book_crud.get_for_user(db, current_user.id, book_id)
     if book is None:
-        raise HTTPException(404, "Book not found")
+        raise HTTPException(404, "Livro não encontrado")
 
     object_key = book.object_key
     cover_key = book.cover_object_key

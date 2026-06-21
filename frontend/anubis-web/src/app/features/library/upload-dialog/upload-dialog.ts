@@ -123,13 +123,13 @@ export class UploadDialog implements OnDestroy {
     for (const file of Array.from(files)) {
       const ext = '.' + (file.name.split('.').pop()?.toLowerCase() ?? '');
       if (!ACCEPTED_EXTENSIONS.includes(ext)) {
-        const message = `${file.name}: only PDF files are supported`;
+        const message = `${file.name}: apenas arquivos PDF são suportados`;
         this.error.set(message);
         this.notify.error(message);
         continue;
       }
       if (file.size > MAX_UPLOAD_MB * 1024 * 1024) {
-        const message = `${file.name}: exceeds ${MAX_UPLOAD_MB} MB limit`;
+        const message = `${file.name}: excede o limite de ${MAX_UPLOAD_MB} MB`;
         this.error.set(message);
         this.notify.error(message);
         continue;
@@ -163,11 +163,11 @@ export class UploadDialog implements OnDestroy {
             progress: 100,
             book: event.body ?? undefined,
           });
-          this.notify.success(`${next.file.name} imported`);
+          this.notify.success(`${next.file.name} importado`);
         }
       },
       error: (e) => {
-        const message = this.errorText(e, 'Upload failed');
+        const message = this.errorText(e, 'Não foi possível enviar');
         this.patchItem(next.id, {
           status: 'error',
           error: message,

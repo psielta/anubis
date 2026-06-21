@@ -45,10 +45,10 @@ export class Library implements OnInit, OnDestroy {
   private notify = inject(NotificationsService);
 
   protected readonly statuses: { value: BookStatus; label: string }[] = [
-    { value: 'all', label: 'All' },
-    { value: 'favorites', label: 'Favorites' },
-    { value: 'plan_to_read', label: 'Plan to Read' },
-    { value: 'completed', label: 'Completed' },
+    { value: 'all', label: 'Todos' },
+    { value: 'favorites', label: 'Favoritos' },
+    { value: 'plan_to_read', label: 'Quero ler' },
+    { value: 'completed', label: 'Concluído' },
   ];
 
   protected readonly books = signal<Book[]>([]);
@@ -144,7 +144,7 @@ export class Library implements OnInit, OnDestroy {
     event.stopPropagation();
     this.library.update(book.id, { is_favorite: !book.is_favorite }).subscribe({
       next: (updated) => this.patchBook(updated),
-      error: (e) => this.reportError(e, 'Could not update favorite'),
+      error: (e) => this.reportError(e, 'Não foi possível atualizar o favorito'),
     });
   }
 
@@ -158,7 +158,7 @@ export class Library implements OnInit, OnDestroy {
         this.patchBook(updated);
         this.loadCollections();
       },
-      error: (e) => this.reportError(e, 'Could not update series'),
+      error: (e) => this.reportError(e, 'Não foi possível atualizar a série'),
     });
   }
 
@@ -171,9 +171,9 @@ export class Library implements OnInit, OnDestroy {
       next: (updated) => {
         this.patchBook(updated);
         this.loadCover(book.id);
-        this.notify.success('Cover updated');
+        this.notify.success('Capa atualizada');
       },
-      error: (e) => this.reportError(e, 'Cover upload failed'),
+      error: (e) => this.reportError(e, 'Não foi possível enviar a capa'),
     });
     input.value = '';
   }
@@ -188,7 +188,7 @@ export class Library implements OnInit, OnDestroy {
         anchor.click();
         URL.revokeObjectURL(url);
       },
-      error: (e) => this.reportError(e, 'Download failed'),
+      error: (e) => this.reportError(e, 'Não foi possível baixar'),
     });
   }
 
@@ -205,9 +205,9 @@ export class Library implements OnInit, OnDestroy {
         }
         this.load();
         this.loadCollections();
-        this.notify.success('Book deleted');
+        this.notify.success('Livro excluído');
       },
-      error: (e) => this.reportError(e, 'Delete failed'),
+      error: (e) => this.reportError(e, 'Não foi possível excluir'),
     });
   }
 
@@ -235,7 +235,7 @@ export class Library implements OnInit, OnDestroy {
   }
 
   protected sortLabel(): string {
-    return this.sort() === 'title' ? 'Title' : 'Date';
+    return this.sort() === 'title' ? 'Título' : 'Data';
   }
 
   private load() {
@@ -257,7 +257,7 @@ export class Library implements OnInit, OnDestroy {
           this.refreshCovers(result.items);
         },
         error: (e) => {
-          this.error.set(this.errorText(e, 'Failed to load library'));
+          this.error.set(this.errorText(e, 'Não foi possível carregar a biblioteca'));
           this.loading.set(false);
         },
       });
@@ -301,14 +301,14 @@ export class Library implements OnInit, OnDestroy {
 
   private validateImage(file: File, input: HTMLInputElement): boolean {
     if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
-      const message = 'Cover must be a PNG, JPEG or WebP image';
+      const message = 'A capa deve ser uma imagem PNG, JPEG ou WebP';
       this.error.set(message);
       this.notify.error(message);
       input.value = '';
       return false;
     }
     if (file.size > MAX_COVER_MB * 1024 * 1024) {
-      const message = `Cover exceeds ${MAX_COVER_MB} MB limit`;
+      const message = `A capa excede o limite de ${MAX_COVER_MB} MB`;
       this.error.set(message);
       this.notify.error(message);
       input.value = '';

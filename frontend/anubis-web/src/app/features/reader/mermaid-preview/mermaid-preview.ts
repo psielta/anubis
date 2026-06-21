@@ -91,14 +91,14 @@ export class MermaidPreview implements OnDestroy {
       const valid = await mermaid.parse(code, { suppressErrors: true });
       if (token !== this.seq) return; // a newer edit superseded this render
       if (!valid) {
-        this.showError(el, 'Invalid diagram syntax');
+        this.showError(el, 'Sintaxe de diagrama inválida');
         return;
       }
       const { svg } = await mermaid.render(`dg-mermaid-${token}`, code);
       if (token !== this.seq) return;
       el.innerHTML = svg;
     } catch {
-      if (token === this.seq) this.showError(el, 'Could not render this diagram');
+      if (token === this.seq) this.showError(el, 'Não foi possível renderizar este diagrama');
     }
   }
 

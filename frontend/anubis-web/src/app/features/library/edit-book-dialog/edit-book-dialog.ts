@@ -49,11 +49,11 @@ export class EditBookDialog {
     this.library.update(this.book.id, { title, author: author || null }).subscribe({
       next: (updated) => {
         this.savingEdit.set(false);
-        this.notify.success('Book updated');
+        this.notify.success('Livro atualizado');
         this.dialogRef.close(updated);
       },
       error: (e) => {
-        const message = this.errorText(e, 'Could not update book');
+        const message = this.errorText(e, 'Não foi possível atualizar o livro');
         this.error.set(message);
         this.notify.error(message);
         this.savingEdit.set(false);

@@ -1,60 +1,61 @@
 # AGENT.md
 
-This file gives coding agents the working context for the Anubis repository.
-Follow it when implementing, reviewing or planning changes.
+Este arquivo fornece aos agentes de código o contexto de trabalho do repositório
+Anubis. Siga-o ao implementar, revisar ou planejar mudanças.
 
-## Project Identity
+## Identidade do Projeto
 
-Anubis is a portfolio project for a BookFusion-inspired digital library. It is
-not a BookFusion integration and has no affiliation with BookFusion.
+Anubis é um projeto de portfólio para uma biblioteca digital inspirada no
+BookFusion. Não é uma integração com o BookFusion e não tem afiliação com o
+BookFusion.
 
-The product direction is a user library and reader application with AI-assisted
-study features:
+A direção do produto é uma aplicação de biblioteca e leitor de usuário com
+recursos de estudo assistidos por IA:
 
-- private user libraries
-- book metadata and collections
-- reading progress
-- reader and study workspace
-- highlights, annotations and notes
-- AI summaries, Q&A, explanations, study plans and flashcards
+- bibliotecas privadas de usuário
+- metadados de livros e coleções
+- progresso de leitura
+- espaço de trabalho de leitura e estudo
+- destaques, anotações e notas
+- resumos, Q&A, explicações, planos de estudo e flashcards com IA
 
-Do not frame the app as a generic admin dashboard. The admin/dashboard shell is
-only the current bootstrap surface.
+Não enquadre o app como um painel administrativo genérico. O shell de
+admin/dashboard é apenas a superfície atual de bootstrap.
 
-## Current Architecture
+## Arquitetura Atual
 
 Backend:
 
-- `backend/app/main.py`: FastAPI app, CORS, router registration and lifespan.
-- `backend/app/api/v1/endpoints/`: HTTP endpoints.
-- `backend/app/api/deps.py`: shared FastAPI dependencies.
-- `backend/app/core/`: config and security.
-- `backend/app/db/`: SQLAlchemy async engine/session.
-- `backend/app/models/`: SQLAlchemy models.
-- `backend/app/schemas/`: Pydantic API schemas.
-- `backend/app/crud/`: persistence-oriented data access.
-- `backend/alembic/`: database migrations.
+- `backend/app/main.py`: app FastAPI, CORS, registro de routers e lifespan.
+- `backend/app/api/v1/endpoints/`: endpoints HTTP.
+- `backend/app/api/deps.py`: dependências compartilhadas do FastAPI.
+- `backend/app/core/`: configuração e segurança.
+- `backend/app/db/`: engine/sessão assíncrona do SQLAlchemy.
+- `backend/app/models/`: modelos do SQLAlchemy.
+- `backend/app/schemas/`: schemas de API Pydantic.
+- `backend/app/crud/`: acesso a dados orientado à persistência.
+- `backend/alembic/`: migrações de banco de dados.
 
 Frontend:
 
-- `frontend/anubis-web/src/app/core/`: singleton services, guards,
-  interceptors and shared contracts.
-- `frontend/anubis-web/src/app/features/`: lazy feature areas.
-- `frontend/anubis-web/src/app/layout/`: structural layouts.
-- `frontend/anubis-web/src/app/shared/`: reusable stateless UI.
+- `frontend/anubis-web/src/app/core/`: serviços singleton, guards,
+  interceptors e contratos compartilhados.
+- `frontend/anubis-web/src/app/features/`: áreas de funcionalidade carregadas sob demanda.
+- `frontend/anubis-web/src/app/layout/`: layouts estruturais.
+- `frontend/anubis-web/src/app/shared/`: UI reutilizável sem estado.
 
-Keep these boundaries. Add a backend `services/` layer when domain workflows
-become more than simple CRUD.
+Mantenha estas fronteiras. Adicione uma camada `services/` no backend quando os
+fluxos de trabalho de domínio se tornarem mais do que simples CRUD.
 
-## Local Environment
+## Ambiente Local
 
-Default local ports:
+Portas locais padrão:
 
-- PostgreSQL: configured by root `.env`, currently `5433`.
+- PostgreSQL: configurada pelo `.env` da raiz, atualmente `5433`.
 - Backend: `http://localhost:8000`
 - Frontend: `http://localhost:4200`
 
-Backend setup:
+Configuração do backend:
 
 ```powershell
 cd backend
@@ -63,23 +64,23 @@ alembic upgrade head
 uvicorn app.main:app --reload --port 8000
 ```
 
-Frontend setup:
+Configuração do frontend:
 
 ```powershell
 cd frontend/anubis-web
 npm start
 ```
 
-Database:
+Banco de dados:
 
 ```powershell
 docker compose up -d db
 docker compose ps
 ```
 
-## Validation Checklist
+## Checklist de Validação
 
-Run relevant checks before reporting success:
+Execute as verificações relevantes antes de reportar sucesso:
 
 ```powershell
 cd backend
@@ -94,47 +95,49 @@ cd frontend/anubis-web
 npm run build
 ```
 
-For authentication or routing changes, also run an E2E browser smoke test:
+Para mudanças de autenticação ou roteamento, execute também um smoke test de
+navegador E2E:
 
-- logged-out dashboard redirects to login
-- register works
-- duplicate register displays error
-- login reaches dashboard
-- reload restores user
-- deleting access token triggers refresh from cookie
-- logout clears session
+- dashboard sem login redireciona para o login
+- o cadastro funciona
+- cadastro duplicado exibe erro
+- o login alcança o dashboard
+- o reload restaura o usuário
+- excluir o token de acesso dispara o refresh a partir do cookie
+- o logout limpa a sessão
 
-## Authentication Contract
+## Contrato de Autenticação
 
-The current auth model is intentional:
+O modelo de auth atual é intencional:
 
-- access token in response body and `localStorage`
-- refresh token in httpOnly cookie
-- refresh cookie path: `/api/v1/auth`
-- refresh rotation through JWT `jti`
-- stored refresh value is a hash of the current `jti`
-- stale refresh tokens must be rejected
-- logout clears server-side refresh state
+- token de acesso no corpo da resposta e no `localStorage`
+- token de refresh em cookie httpOnly
+- path do cookie de refresh: `/api/v1/auth`
+- rotação de refresh através do `jti` do JWT
+- o valor de refresh armazenado é um hash do `jti` atual
+- tokens de refresh obsoletos devem ser rejeitados
+- o logout limpa o estado de refresh no servidor
 
-Do not move refresh tokens into JSON or JavaScript-readable storage.
+Não mova os tokens de refresh para JSON ou para armazenamento legível por
+JavaScript.
 
-## Product Implementation Guidance
+## Orientação de Implementação do Produto
 
-When adding product features, prefer this order:
+Ao adicionar funcionalidades de produto, prefira esta ordem:
 
-1. Database model and migration.
-2. Pydantic schemas.
-3. CRUD or service layer.
-4. Versioned API endpoint.
-5. Angular feature folder and route.
-6. Focused backend tests.
-7. Frontend build and E2E smoke where user-visible.
+1. Modelo de banco de dados e migração.
+2. Schemas Pydantic.
+3. Camada de CRUD ou de serviço.
+4. Endpoint de API versionado.
+5. Pasta de funcionalidade e rota do Angular.
+6. Testes de backend focados.
+7. Build do frontend e smoke E2E quando visível ao usuário.
 
-Use product language consistently:
+Use a linguagem de produto de forma consistente:
 
 - library
 - books
-- shelves or collections
+- shelves ou collections
 - reader
 - progress
 - highlights
@@ -142,80 +145,85 @@ Use product language consistently:
 - study notes
 - AI study assistant
 
-Avoid generic CRM/admin terminology unless the feature is truly operational.
+Evite terminologia genérica de CRM/admin a menos que a funcionalidade seja
+realmente operacional.
 
-## Visual Design System
+## Sistema de Design Visual
 
-Anubis has one deliberate visual language — "The Hall of Anubis": an Egyptian
-archive/museum aesthetic of obsidian stone, antique gold and papyrus, with
-whispers of lapis and carnelian. It is already implemented across the auth
-screens, the app shell, the dashboard and the library. Extend it; do not
-redesign per feature.
+Anubis tem uma linguagem visual deliberada — "The Hall of Anubis": uma estética
+de arquivo/museu egípcio de pedra obsidiana, ouro antigo e papiro, com
+sussurros de lápis-lazúli e cornalina. Já está implementada nas telas de auth,
+no shell da aplicação, no dashboard e na biblioteca. Estenda-a; não
+redesenhe a cada funcionalidade.
 
-Source of truth: `frontend/anubis-web/src/styles.scss` (tokens, Material theme,
-global utilities) and `frontend/anubis-web/src/index.html` (fonts).
+Fonte da verdade: `frontend/anubis-web/src/styles.scss` (tokens, tema do Material,
+utilitários globais) e `frontend/anubis-web/src/index.html` (fontes).
 
-Design tokens (CSS custom properties on `:root`, prefix `--anubis-*`). Always
-reuse these; never hardcode new hex values:
+Tokens de design (propriedades CSS customizadas em `:root`, prefixo `--anubis-*`).
+Sempre reutilize estes; nunca codifique novos valores hex:
 
-- Stone: `--anubis-obsidian` `#15151d`, `--anubis-obsidian-soft` `#1e1e29`,
+- Pedra: `--anubis-obsidian` `#15151d`, `--anubis-obsidian-soft` `#1e1e29`,
   `--anubis-obsidian-deep` `#0c0c12`
-- Gold: `--anubis-gold` `#c8a24c`, `--anubis-gold-bright` `#e8cf88`,
+- Ouro: `--anubis-gold` `#c8a24c`, `--anubis-gold-bright` `#e8cf88`,
   `--anubis-gold-deep` `#8f7330`
-- Light surfaces: `--anubis-canvas` `#efe5cd` (page), `--anubis-surface`
+- Superfícies claras: `--anubis-canvas` `#efe5cd` (página), `--anubis-surface`
   `#fbf6ea` (cards)
-- Text: `--anubis-ink` `#2a2520`, `--anubis-ink-soft` `#6f6555`
-- Lines/accents: `--anubis-line` `#e0d2ab`, `--anubis-lapis` `#22456e`,
+- Texto: `--anubis-ink` `#2a2520`, `--anubis-ink-soft` `#6f6555`
+- Linhas/acentos: `--anubis-line` `#e0d2ab`, `--anubis-lapis` `#22456e`,
   `--anubis-danger` `#a8432d`
 
-Typography (Google Fonts, wired through `mat.theme(... typography ...)`):
+Tipografia (Google Fonts, conectadas através de `mat.theme(... typography ...)`):
 
-- Headings/display: Cinzel (`brand-family`)
-- Body/UI: Spectral (`plain-family`)
-- Wordmark only: Cinzel Decorative (`shared/app-logo`)
-- Small uppercase gold labels: the global `.eyebrow` class
+- Títulos/display: Cinzel (`brand-family`)
+- Corpo/UI: Spectral (`plain-family`)
+- Apenas wordmark: Cinzel Decorative (`shared/app-logo`)
+- Pequenos rótulos dourados em maiúsculas: a classe global `.eyebrow`
 
-Material theme: primary = yellow (gold), tertiary = blue (lapis), density `0`.
+Tema do Material: primary = yellow (gold), tertiary = blue (lapis), densidade `0`.
 
-Shape: the entire UI is square. All `--mat-sys-corner-*` tokens are flattened to
-`0px` and custom components use no `border-radius`. Keep new components square.
+Formato: toda a UI é quadrada. Todos os tokens `--mat-sys-corner-*` são achatados
+para `0px` e os componentes customizados não usam `border-radius`. Mantenha os
+novos componentes quadrados.
 
-Surface conventions:
+Convenções de superfície:
 
-- Auth screens (`features/auth/`): a dark cinematic `.auth-page` chamber holding
-  a papyrus `.auth-card` stele. Shared styles live in `features/auth/_auth.scss`
-  and are `@use`d by both login and register.
-- App shell (`layout/admin-layout/`): a stacked layout — an obsidian top bar
-  with horizontal gold navigation (active item underlined in gold) over a
-  full-width, centered `--anubis-canvas` content column. Chosen over a side rail
-  because the app targets portrait displays.
-- Cards/panels: `--anubis-surface` background, `--anubis-line` hairline border,
-  squared, soft shadow; interactive cards lift on hover.
+- Telas de auth (`features/auth/`): uma câmara `.auth-page` escura e cinematográfica
+  abrigando uma estela `.auth-card` de papiro. Estilos compartilhados ficam em
+  `features/auth/_auth.scss` e são usados via `@use` tanto pelo login quanto pelo
+  register.
+- Shell da aplicação (`layout/admin-layout/`): um layout empilhado — uma barra
+  superior obsidiana com navegação dourada horizontal (item ativo sublinhado em
+  ouro) sobre uma coluna de conteúdo `--anubis-canvas` de largura total e
+  centralizada. Escolhido em vez de uma barra lateral porque o app é voltado a
+  telas em retrato.
+- Cards/painéis: fundo `--anubis-surface`, borda fina `--anubis-line`,
+  quadrados, sombra suave; cards interativos se elevam ao passar o mouse.
 
-Two non-obvious rules (regressions if ignored):
+Duas regras não óbvias (regressões se ignoradas):
 
-1. Keep the `px` unit on corner tokens (`0px`, never bare `0`). Components feed
-   them into `max(16px, var(--mat-sys-corner-*))`; a unitless `0` makes the
-   `max()` invalid and strips form-field inner padding.
-2. To recolour Material list/nav on a dark surface, use `--mat-list-*` tokens
-   (e.g. `--mat-list-list-item-label-text-color`), not `--mdc-list-*`. The
-   mdc-prefixed names are ignored, leaving labels at the light theme's
-   near-black default.
+1. Mantenha a unidade `px` nos tokens de corner (`0px`, nunca `0` puro). Os
+   componentes os alimentam em `max(16px, var(--mat-sys-corner-*))`; um `0` sem
+   unidade torna o `max()` inválido e remove o padding interno do form-field.
+2. Para recolorir list/nav do Material em uma superfície escura, use os tokens
+   `--mat-list-*` (por exemplo, `--mat-list-list-item-label-text-color`), não
+   `--mdc-list-*`. Os nomes com prefixo mdc são ignorados, deixando os rótulos no
+   padrão quase-preto do tema claro.
 
-The per-component style budget is raised to `8kB` (warning) / `16kB` (error) in
-`angular.json` to accommodate this richer styling.
+O orçamento de estilo por componente é elevado para `8kB` (aviso) / `16kB` (erro)
+em `angular.json` para acomodar essa estilização mais rica.
 
-## Repository Hygiene
+## Higiene do Repositório
 
-- Do not commit `.env`, virtualenvs, caches, `node_modules`, build output,
-  Playwright MCP output, terminal logs or cookie files.
-- Preserve the existing architecture and naming style.
-- Keep changes scoped to the requested feature.
-- Update README/AGENT/CLAUDE when the product direction or workflow changes.
+- Não faça commit de `.env`, virtualenvs, caches, `node_modules`, saída de build,
+  saída do Playwright MCP, logs de terminal ou arquivos de cookie.
+- Preserve a arquitetura existente e o estilo de nomenclatura.
+- Mantenha as mudanças restritas à funcionalidade solicitada.
+- Atualize README/AGENT/CLAUDE quando a direção do produto ou o fluxo de trabalho
+  mudar.
 
-## Commit Conventions
+## Convenções de Commit
 
-All commits follow Conventional Commits:
+Todos os commits seguem Conventional Commits:
 
 ```
 <type>(optional-scope): <subject>
@@ -225,12 +233,13 @@ All commits follow Conventional Commits:
 [optional footer]
 ```
 
-- Types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`,
-  `ci`, `chore`, `revert`. Scope is optional but encouraged (e.g.
+- Tipos: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`,
+  `ci`, `chore`, `revert`. O scope é opcional, mas encorajado (por exemplo,
   `feat(library): ...`, `style(theme): ...`).
-- Subject: imperative mood, lowercase, no trailing period, ~72 chars.
-- Use the body to explain what/why when it is not obvious; wrap at ~72 columns.
-- Breaking changes: add `!` after the type/scope (e.g. `feat(api)!: ...`) or a
-  `BREAKING CHANGE:` footer.
-- Keep commits clean: do NOT add `Co-authored-by`, agent/tool attribution, or
-  sign-off trailers. This rule overrides any default agent commit footer.
+- Subject: modo imperativo, minúsculas, sem ponto final, ~72 caracteres.
+- Use o body para explicar o quê/porquê quando não for óbvio; quebre em ~72 colunas.
+- Mudanças que quebram compatibilidade: adicione `!` após o type/scope (por
+  exemplo, `feat(api)!: ...`) ou um rodapé `BREAKING CHANGE:`.
+- Mantenha os commits limpos: NÃO adicione `Co-authored-by`, atribuição de
+  agente/ferramenta ou rodapés de sign-off. Esta regra sobrepõe qualquer rodapé
+  de commit padrão de agente.

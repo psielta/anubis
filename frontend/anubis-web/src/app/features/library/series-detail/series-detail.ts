@@ -36,7 +36,7 @@ export class SeriesDetail implements OnInit, OnDestroy {
   private dialog = inject(MatDialog);
   private notify = inject(NotificationsService);
 
-  protected readonly seriesName = signal('Series');
+  protected readonly seriesName = signal('Série');
   protected readonly allBooks = signal<Book[]>([]);
   protected readonly total = signal(0);
   protected readonly search = signal('');
@@ -116,16 +116,16 @@ export class SeriesDetail implements OnInit, OnDestroy {
       next: () => {
         this.allBooks.update((books) => books.filter((item) => item.id !== book.id));
         this.total.update((value) => Math.max(0, value - 1));
-        this.notify.success('Removed from series');
+        this.notify.success('Removido da série');
       },
-      error: (e) => this.reportError(e, 'Could not remove from series'),
+      error: (e) => this.reportError(e, 'Não foi possível remover da série'),
     });
   }
 
   protected toggleFavorite(book: Book) {
     this.library.update(book.id, { is_favorite: !book.is_favorite }).subscribe({
       next: (updated) => this.patchBook(updated),
-      error: (e) => this.reportError(e, 'Could not update favorite'),
+      error: (e) => this.reportError(e, 'Não foi possível atualizar o favorito'),
     });
   }
 
@@ -169,7 +169,7 @@ export class SeriesDetail implements OnInit, OnDestroy {
           this.refreshCovers(result.items);
         },
         error: (e) => {
-          this.error.set(this.errorText(e, 'Failed to load series books'));
+          this.error.set(this.errorText(e, 'Não foi possível carregar os livros da série'));
           this.loading.set(false);
         },
       });
@@ -178,10 +178,10 @@ export class SeriesDetail implements OnInit, OnDestroy {
   private persistOrder(next: Book[], previous: Book[]) {
     this.allBooks.set(next);
     this.library.reorderCollection(this.collectionId, next.map((book) => book.id)).subscribe({
-      next: () => this.notify.success('Series order updated'),
+      next: () => this.notify.success('Ordem da série atualizada'),
       error: (e) => {
         this.allBooks.set(previous);
-        this.reportError(e, 'Could not reorder series');
+        this.reportError(e, 'Não foi possível reordenar a série');
       },
     });
   }

@@ -45,7 +45,7 @@ export class Register {
       .subscribe({
         next: () => this.router.navigateByUrl('/login'),
         error: (e) => {
-          this.error.set(e?.error?.detail ?? 'Registration failed');
+          this.error.set(e?.error?.detail ?? 'Falha ao criar conta');
           this.loading.set(false);
         },
       });

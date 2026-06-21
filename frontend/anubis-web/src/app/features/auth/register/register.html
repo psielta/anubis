@@ -7,8 +7,8 @@
 
     <mat-card class="auth-card">
       <mat-card-content>
-        <p class="eyebrow auth-eyebrow">Begin your archive</p>
-        <h1 class="auth-title">Create your account</h1>
+        <p class="eyebrow auth-eyebrow">Comece seu arquivo</p>
+        <h1 class="auth-title">Crie sua conta</h1>
 
         @if (error()) {
           <p class="error">{{ error() }}</p>
@@ -16,17 +16,17 @@
 
         <form [formGroup]="form" (ngSubmit)="submit()">
           <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Full name</mat-label>
+            <mat-label>Nome completo</mat-label>
             <input matInput formControlName="full_name" autocomplete="name" />
           </mat-form-field>
 
           <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Email</mat-label>
+            <mat-label>E-mail</mat-label>
             <input matInput type="email" formControlName="email" autocomplete="email" />
           </mat-form-field>
 
           <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Password</mat-label>
+            <mat-label>Senha</mat-label>
             <input
               matInput
               type="password"
@@ -42,12 +42,12 @@
             class="auth-submit"
             [disabled]="loading() || form.invalid"
           >
-            {{ loading() ? 'Creating account…' : 'Create account' }}
+            {{ loading() ? 'Criando conta…' : 'Criar conta' }}
           </button>
         </form>
 
         <p class="auth-foot">
-          Already initiated? <a routerLink="/login" class="auth-link">Sign in</a>
+          Já tem uma conta? <a routerLink="/login" class="auth-link">Entrar</a>
         </p>
       </mat-card-content>
     </mat-card>

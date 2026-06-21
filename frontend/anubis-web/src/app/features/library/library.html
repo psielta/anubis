@@ -1,12 +1,12 @@
 <section class="shelf-page">
   <header class="shelf-head">
-    <button type="button" class="back-pill" routerLink="/dashboard" aria-label="Back">
+    <button type="button" class="back-pill" routerLink="/dashboard" aria-label="Voltar">
       <mat-icon>chevron_left</mat-icon>
     </button>
 
-    <h1 class="shelf-title">My Shelf</h1>
+    <h1 class="shelf-title">Minha estante</h1>
 
-    <nav class="status-tabs" aria-label="Shelf status">
+    <nav class="status-tabs" aria-label="Status da estante">
       @for (item of statuses; track item.value) {
         <button
           type="button"
@@ -22,12 +22,12 @@
 
     <button type="button" class="series-link" routerLink="/library/series">
       <mat-icon>view_carousel</mat-icon>
-      <span>Series</span>
+      <span>Séries</span>
     </button>
 
     <button mat-flat-button color="primary" class="upload-btn" (click)="openUpload()">
       <mat-icon>cloud_upload</mat-icon>
-      Upload
+      Enviar
     </button>
   </header>
 
@@ -39,11 +39,11 @@
     <mat-menu #sortMenu="matMenu">
       <button mat-menu-item (click)="setSort('date')">
         <mat-icon>{{ sort() === 'date' ? 'check' : 'calendar_today' }}</mat-icon>
-        <span>Date</span>
+        <span>Data</span>
       </button>
       <button mat-menu-item (click)="setSort('title')">
         <mat-icon>{{ sort() === 'title' ? 'check' : 'sort_by_alpha' }}</mat-icon>
-        <span>Title</span>
+        <span>Título</span>
       </button>
     </mat-menu>
 
@@ -52,17 +52,17 @@
       <input
         matInput
         type="search"
-        placeholder="Find a book..."
+        placeholder="Buscar livros…"
         [value]="search()"
         (input)="onSearch($event)"
       />
     </mat-form-field>
 
-    <div class="view-toggle" aria-label="View mode">
+    <div class="view-toggle" aria-label="Modo de exibição">
       <button
         type="button"
         [class.active]="viewMode() === 'grid'"
-        aria-label="Grid view"
+        aria-label="Visualização em grade"
         (click)="setViewMode('grid')"
       >
         <mat-icon>grid_view</mat-icon>
@@ -70,7 +70,7 @@
       <button
         type="button"
         [class.active]="viewMode() === 'list'"
-        aria-label="List view"
+        aria-label="Visualização em lista"
         (click)="setViewMode('list')"
       >
         <mat-icon>view_list</mat-icon>
@@ -83,12 +83,12 @@
   }
 
   @if (loading()) {
-    <div class="shelf-state">Loading shelf...</div>
+    <div class="shelf-state">Carregando estante…</div>
   } @else if (books().length === 0) {
     <div class="empty">
       <mat-icon>menu_book</mat-icon>
-      <p class="empty-title">No books found</p>
-      <p class="empty-sub">Upload a PDF or adjust the search and filters.</p>
+      <p class="empty-title">Nenhum livro encontrado</p>
+      <p class="empty-sub">Envie um PDF ou ajuste a busca e os filtros.</p>
     </div>
   } @else {
     <div class="book-grid" [class.book-grid--list]="viewMode() === 'list'">
@@ -106,12 +106,12 @@
           </a>
 
           <div class="book-info">
-            <p class="book-author">{{ book.author || 'Unknown' }}</p>
+            <p class="book-author">{{ book.author || 'Desconhecido' }}</p>
             <h2 class="book-title" [title]="book.title">{{ book.title }}</h2>
             @if (readingProgress(book); as pct) {
               <div
                 class="book-progress"
-                [attr.title]="'Page ' + book.last_page + ' of ' + book.page_count"
+                [attr.title]="'Página ' + book.last_page + ' de ' + book.page_count"
               >
                 <span [style.width.%]="pct"></span>
               </div>
@@ -138,34 +138,34 @@
               mat-icon-button
               class="favorite"
               [class.active]="book.is_favorite"
-              [attr.aria-label]="book.is_favorite ? 'Remove favorite' : 'Add favorite'"
+              [attr.aria-label]="book.is_favorite ? 'Remover dos favoritos' : 'Adicionar aos favoritos'"
               (click)="toggleFavorite(book, $event)"
             >
               <mat-icon>{{ book.is_favorite ? 'star' : 'star_border' }}</mat-icon>
             </button>
-            <button mat-icon-button [matMenuTriggerFor]="bookMenu" aria-label="Book options">
+            <button mat-icon-button [matMenuTriggerFor]="bookMenu" aria-label="Opções do livro">
               <mat-icon>more_horiz</mat-icon>
             </button>
             <mat-menu #bookMenu="matMenu">
               <a mat-menu-item [routerLink]="['/read', book.id]">
                 <mat-icon>auto_stories</mat-icon>
-                <span>Read</span>
+                <span>Ler</span>
               </a>
               <button mat-menu-item (click)="openEdit(book)">
                 <mat-icon>edit</mat-icon>
-                <span>Edit details</span>
+                <span>Editar detalhes</span>
               </button>
               <button mat-menu-item (click)="coverEdit.click()">
                 <mat-icon>photo_camera</mat-icon>
-                <span>Change cover</span>
+                <span>Alterar capa</span>
               </button>
               <button mat-menu-item (click)="download(book)">
                 <mat-icon>download</mat-icon>
-                <span>Download</span>
+                <span>Baixar</span>
               </button>
-              <span class="menu-cap">Series</span>
+              <span class="menu-cap">Séries</span>
               @if (!collections().length) {
-                <span class="menu-empty">No series yet</span>
+                <span class="menu-empty">Nenhuma série ainda</span>
               }
               @for (c of collections(); track c.id) {
                 <button mat-menu-item (click)="toggleBookCollection(book, c.id, $event)">
@@ -177,7 +177,7 @@
               }
               <button mat-menu-item class="danger-item" (click)="remove(book)">
                 <mat-icon>delete</mat-icon>
-                <span>Delete</span>
+                <span>Excluir</span>
               </button>
             </mat-menu>
           </div>

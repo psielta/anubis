@@ -28,7 +28,7 @@ async def list_study_messages(
 ) -> list[StudyMessageRead]:
     book = await book_crud.get_for_user(db, current_user.id, book_id)
     if book is None:
-        raise HTTPException(404, "Book not found")
+        raise HTTPException(404, "Livro não encontrado")
     messages = await study_crud.list_for_book(db, book.id)
     return [StudyMessageRead.model_validate(m) for m in messages]
 
@@ -39,7 +39,7 @@ async def clear_study_messages(
 ) -> None:
     book = await book_crud.get_for_user(db, current_user.id, book_id)
     if book is None:
-        raise HTTPException(404, "Book not found")
+        raise HTTPException(404, "Livro não encontrado")
     await study_crud.clear_for_book(db, book.id)
 
 
@@ -52,11 +52,11 @@ async def create_study_message(
 ) -> StreamingResponse:
     book = await book_crud.get_for_user(db, current_user.id, book_id)
     if book is None:
-        raise HTTPException(404, "Book not found")
+        raise HTTPException(404, "Livro não encontrado")
     if not ai.configured():
-        raise HTTPException(503, "AI is not configured. Set GEMINI_API_KEY.")
+        raise HTTPException(503, "IA não configurada. Defina GEMINI_API_KEY.")
     if book.file_format != "pdf":
-        raise HTTPException(400, "Only PDF books support the AI study assistant.")
+        raise HTTPException(400, "Apenas livros em PDF suportam o assistente de estudo de IA.")
 
     data = await storage.read_bytes(book.object_key)
     gemini = ai.client()
@@ -80,7 +80,8 @@ async def create_study_message(
             part = cached
         else:
             raise HTTPException(
-                413, "Book too large for whole-book AI — choose a chapter instead."
+                413,
+                "Livro muito grande para IA do livro inteiro — escolha um capítulo.",
             )
 
     if payload.kind == "chat":
@@ -126,7 +127,7 @@ async def create_study_message(
             )
             yield _sse("done", {"id": message.id, "scope": scope, "kind": payload.kind})
         except Exception:
-            yield _sse("error", {"detail": "The AI request failed. Please try again."})
+            yield _sse("error", {"detail": "A requisição de IA falhou. Tente novamente."})
 
     return StreamingResponse(
         event_stream(),

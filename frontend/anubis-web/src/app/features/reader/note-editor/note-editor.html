@@ -1,9 +1,9 @@
-<div class="ne-toolbar" role="toolbar" aria-label="Formatting">
+<div class="ne-toolbar" role="toolbar" aria-label="Formatação">
   <div class="ne-group">
-    <button type="button" class="ne-btn" title="Undo" aria-label="Undo" (click)="undo()">
+    <button type="button" class="ne-btn" title="Desfazer" aria-label="Desfazer" (click)="undo()">
       <mat-icon>undo</mat-icon>
     </button>
-    <button type="button" class="ne-btn" title="Redo" aria-label="Redo" (click)="redo()">
+    <button type="button" class="ne-btn" title="Refazer" aria-label="Refazer" (click)="redo()">
       <mat-icon>redo</mat-icon>
     </button>
   </div>
@@ -12,8 +12,8 @@
     <button
       type="button"
       class="ne-btn ne-text"
-      title="Heading 1"
-      aria-label="Heading 1"
+      title="Título 1"
+      aria-label="Título 1"
       [class.active]="state().h1"
       (click)="toggleHeading(1)"
     >
@@ -22,8 +22,8 @@
     <button
       type="button"
       class="ne-btn ne-text"
-      title="Heading 2"
-      aria-label="Heading 2"
+      title="Título 2"
+      aria-label="Título 2"
       [class.active]="state().h2"
       (click)="toggleHeading(2)"
     >
@@ -32,8 +32,8 @@
     <button
       type="button"
       class="ne-btn ne-text"
-      title="Heading 3"
-      aria-label="Heading 3"
+      title="Título 3"
+      aria-label="Título 3"
       [class.active]="state().h3"
       (click)="toggleHeading(3)"
     >
@@ -45,8 +45,8 @@
     <button
       type="button"
       class="ne-btn"
-      title="Bold"
-      aria-label="Bold"
+      title="Negrito"
+      aria-label="Negrito"
       [class.active]="state().bold"
       (click)="toggleBold()"
     >
@@ -55,8 +55,8 @@
     <button
       type="button"
       class="ne-btn"
-      title="Italic"
-      aria-label="Italic"
+      title="Itálico"
+      aria-label="Itálico"
       [class.active]="state().italic"
       (click)="toggleItalic()"
     >
@@ -65,8 +65,8 @@
     <button
       type="button"
       class="ne-btn"
-      title="Strikethrough"
-      aria-label="Strikethrough"
+      title="Tachado"
+      aria-label="Tachado"
       [class.active]="state().strike"
       (click)="toggleStrike()"
     >
@@ -75,8 +75,8 @@
     <button
       type="button"
       class="ne-btn"
-      title="Inline code"
-      aria-label="Inline code"
+      title="Código embutido"
+      aria-label="Código embutido"
       [class.active]="state().code"
       (click)="toggleCode()"
     >
@@ -88,8 +88,8 @@
     <button
       type="button"
       class="ne-btn"
-      title="Bullet list"
-      aria-label="Bullet list"
+      title="Lista com marcadores"
+      aria-label="Lista com marcadores"
       [class.active]="state().bulletList"
       (click)="toggleBulletList()"
     >
@@ -98,8 +98,8 @@
     <button
       type="button"
       class="ne-btn"
-      title="Numbered list"
-      aria-label="Numbered list"
+      title="Lista numerada"
+      aria-label="Lista numerada"
       [class.active]="state().orderedList"
       (click)="toggleOrderedList()"
     >
@@ -111,8 +111,8 @@
     <button
       type="button"
       class="ne-btn"
-      title="Quote"
-      aria-label="Quote"
+      title="Citação"
+      aria-label="Citação"
       [class.active]="state().blockquote"
       (click)="toggleBlockquote()"
     >
@@ -121,8 +121,8 @@
     <button
       type="button"
       class="ne-btn"
-      title="Code block"
-      aria-label="Code block"
+      title="Bloco de código"
+      aria-label="Bloco de código"
       [class.active]="state().codeBlock"
       (click)="toggleCodeBlock()"
     >
@@ -141,8 +141,8 @@
     <button
       type="button"
       class="ne-btn"
-      title="Divider"
-      aria-label="Divider"
+      title="Divisor"
+      aria-label="Divisor"
       (click)="setHorizontalRule()"
     >
       <mat-icon>horizontal_rule</mat-icon>
@@ -153,8 +153,8 @@
     <button
       type="button"
       class="ne-btn"
-      title="Inline equation"
-      aria-label="Inline equation"
+      title="Equação embutida"
+      aria-label="Equação embutida"
       (click)="insertInlineMath()"
     >
       <mat-icon>functions</mat-icon>
@@ -162,8 +162,8 @@
     <button
       type="button"
       class="ne-btn"
-      title="Block equation"
-      aria-label="Block equation"
+      title="Equação em bloco"
+      aria-label="Equação em bloco"
       (click)="insertBlockMath()"
     >
       <mat-icon>calculate</mat-icon>
@@ -174,5 +174,5 @@
 <div #host class="ne-surface"></div>
 
 @if (!ready()) {
-  <p class="ne-loading">Loading editor…</p>
+  <p class="ne-loading">Carregando editor…</p>
 }

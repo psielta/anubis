@@ -40,7 +40,7 @@ async def create_collection(
         )
     except IntegrityError:
         await db.rollback()
-        raise HTTPException(409, "A collection with that name already exists")
+        raise HTTPException(409, "Já existe uma coleção com esse nome")
     return _read(collection)
 
 
@@ -91,10 +91,10 @@ async def reorder_collection_books(
     except ValueError as exc:
         raise HTTPException(422, str(exc))
     if not changed:
-        raise HTTPException(404, "Collection not found")
+        raise HTTPException(404, "Coleção não encontrada")
     collection = await collection_crud.get_for_user(db, current_user.id, collection_id)
     if collection is None:
-        raise HTTPException(404, "Collection not found")
+        raise HTTPException(404, "Coleção não encontrada")
     return _read(collection, len(payload.book_ids))
 
 
@@ -107,12 +107,12 @@ async def rename_collection(
 ) -> CollectionRead:
     collection = await collection_crud.get_for_user(db, current_user.id, collection_id)
     if collection is None:
-        raise HTTPException(404, "Collection not found")
+        raise HTTPException(404, "Coleção não encontrada")
     try:
         collection = await collection_crud.rename(db, collection, payload.name.strip())
     except IntegrityError:
         await db.rollback()
-        raise HTTPException(409, "A collection with that name already exists")
+        raise HTTPException(409, "Já existe uma coleção com esse nome")
     return _read(collection)
 
 
@@ -122,5 +122,5 @@ async def delete_collection(
 ) -> None:
     collection = await collection_crud.get_for_user(db, current_user.id, collection_id)
     if collection is None:
-        raise HTTPException(404, "Collection not found")
+        raise HTTPException(404, "Coleção não encontrada")
     await collection_crud.delete_collection(db, collection)
