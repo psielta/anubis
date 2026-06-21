@@ -695,14 +695,46 @@
   border: 1px solid var(--anubis-line);
 }
 
-.exercise-statement-label {
+.exercise-statement {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.3rem;
+}
+
+.exercise-statement-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.exercise-statement-title {
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--anubis-ink-soft);
+}
+
+.exercise-statement-edit {
+  padding: 0.15rem 0.5rem;
+  border: 1px solid var(--anubis-line);
+  background: transparent;
+  color: var(--anubis-ink-soft);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.72rem;
+
+  &:hover {
+    border-color: var(--anubis-gold-deep);
+    color: var(--anubis-gold-deep);
+  }
+}
+
+.exercise-statement-preview {
+  display: block;
+  padding: 0.5rem;
+  background: var(--anubis-surface);
+  border: 1px solid var(--anubis-line);
 }
 
 .exercise-statement-input {

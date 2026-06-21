@@ -1122,16 +1122,36 @@
                 [maxWidth]="exerciseFocus() ? 520 : 360"
               />
             </div>
-            <label class="exercise-statement-label">
-              Enunciado
-              <textarea
-                class="exercise-statement-input"
-                rows="3"
-                [value]="exerciseStatement()"
-                (input)="setExerciseStatement($any($event.target).value)"
-                placeholder="Texto do enunciado (extraído do recorte)"
-              ></textarea>
-            </label>
+            <div class="exercise-statement">
+              <div class="exercise-statement-head">
+                <span class="exercise-statement-title">Enunciado</span>
+                @if (exerciseStatement().trim()) {
+                  <button
+                    type="button"
+                    class="exercise-statement-edit"
+                    (click)="toggleStatementEdit()"
+                  >
+                    {{ editingStatement() ? 'Visualizar' : 'Editar' }}
+                  </button>
+                }
+              </div>
+              @if (editingStatement() || !exerciseStatement().trim()) {
+                <textarea
+                  class="exercise-statement-input"
+                  rows="3"
+                  [value]="exerciseStatement()"
+                  (input)="setExerciseStatement($any($event.target).value)"
+                  placeholder="Texto do enunciado (extraído do recorte)"
+                ></textarea>
+              } @else {
+                <markdown
+                  class="md-body exercise-statement-preview"
+                  [katex]="katexReady()"
+                  [katexOptions]="katexOptions"
+                  [data]="exerciseStatement()"
+                />
+              }
+            </div>
 
             <div class="exercise-status-bar">
               <button

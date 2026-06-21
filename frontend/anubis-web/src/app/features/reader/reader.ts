@@ -414,6 +414,7 @@ export class Reader implements OnInit, OnDestroy {
   protected readonly activeExercise = signal<ExerciseResolution | null>(null);
   protected readonly exerciseTitle = signal('');
   protected readonly exerciseStatement = signal('');
+  protected readonly editingStatement = signal(false);
   protected readonly exerciseLatex = signal('');
   protected readonly exerciseSketch = signal('');
   protected readonly exerciseStatus = signal<ExerciseStatus>('pending');
@@ -3213,6 +3214,7 @@ export class Reader implements OnInit, OnDestroy {
     this.activeExercise.set(res);
     this.exerciseTitle.set(res.title);
     this.exerciseStatement.set(res.statement);
+    this.editingStatement.set(false);
     this.exerciseLatex.set(res.latex_content);
     this.exerciseSketch.set(res.sketch_content);
     this.exerciseStatus.set(res.status);
@@ -3254,6 +3256,10 @@ export class Reader implements OnInit, OnDestroy {
   setExerciseStatement(value: string) {
     this.exerciseStatement.set(value);
     this.scheduleExerciseAutosave();
+  }
+
+  toggleStatementEdit() {
+    this.editingStatement.update((v) => !v);
   }
 
   setExerciseTab(tab: 'latex' | 'sketch') {
@@ -3458,7 +3464,10 @@ export class Reader implements OnInit, OnDestroy {
     this.exercises.update(this.bookId, res.id, content).subscribe({
       next: (saved) => {
         this.applySavedExercise(saved);
-        if (mode === 'statement') this.exerciseStatement.set('');
+        if (mode === 'statement') {
+          this.exerciseStatement.set('');
+          this.editingStatement.set(false);
+        }
         this.streamExerciseAI(res.id, mode);
       },
       error: (err) => {

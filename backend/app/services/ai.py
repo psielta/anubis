@@ -41,11 +41,16 @@ _TASK_PROMPTS = {
 _EXERCISE_PROMPTS = {
     "statement": (
         "O usuário recortou um exercício da página anexada. Aqui está o texto "
-        "bruto extraído do recorte (pode estar ruidoso ou fora de ordem):\n\n"
+        "bruto extraído do recorte (pode estar ruidoso, fora de ordem ou com "
+        "caracteres trocados):\n\n"
         '"""\n{statement}\n"""\n\n'
-        "Reescreva-o como um enunciado de problema único, limpo e fiel, em "
-        "Markdown. Mantenha todos os valores, números e fórmulas dados (use "
-        "LaTeX, ex.: $x^2$). NÃO resolva. Devolva apenas o enunciado limpo, sem "
+        "Transcreva o enunciado fielmente a partir da IMAGEM da página anexada, "
+        "usando o texto acima apenas como apoio. Corrija caracteres corrompidos "
+        "ou ilegíveis (como '�'), em especial letras gregas (α, β, θ, π). "
+        "Quando houver vários itens (a, b, c, ...), coloque CADA item em sua "
+        "própria linha. Represente toda a matemática em LaTeX: $...$ para inline "
+        "(ex.: $\\alpha$, $2x - 10^\\circ$) e $$...$$ para equações em destaque. "
+        "NÃO resolva. Devolva apenas o enunciado limpo em Markdown, sem "
         "preâmbulo. Escreva em português do Brasil."
     ),
     "hint": (
