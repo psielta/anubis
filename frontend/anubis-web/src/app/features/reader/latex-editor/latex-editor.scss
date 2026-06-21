@@ -3,6 +3,9 @@
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  // Clip to the allocated box so the preview never paints over sibling controls
+  // (e.g. the exercise action buttons below the "Folha LaTeX" tab).
+  overflow: hidden;
 }
 
 .latex-toolbar-bar {
@@ -98,7 +101,7 @@
 
 .latex-source {
   flex: 1 1 40%;
-  min-height: 120px;
+  min-height: 0;
   width: 100%;
   resize: none;
   border: none;
@@ -117,7 +120,7 @@
 
 .latex-preview {
   flex: 1 1 60%;
-  min-height: 120px;
+  min-height: 0;
   overflow: auto;
   padding: 14px 12px;
   background: var(--anubis-canvas);
