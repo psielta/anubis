@@ -439,6 +439,9 @@ export class Reader implements OnInit, OnDestroy {
   protected readonly hintBusy = signal(false);
   protected readonly hintError = signal<string | null>(null);
   protected readonly nextHintLevel = computed(() => this.hintLevels().length + 1);
+  // Free-form question to the AI tutor about the exercise.
+  protected readonly askInput = signal('');
+  protected readonly askedQuestion = signal('');
   protected readonly filteredExercises = computed(() => {
     const q = this.exerciseSearch().trim().toLowerCase();
     const list = this.exerciseList();
@@ -3232,6 +3235,8 @@ export class Reader implements OnInit, OnDestroy {
     this.exerciseAiText.set('');
     this.exerciseAiMode.set(null);
     this.exerciseAiError.set(null);
+    this.askInput.set('');
+    this.askedQuestion.set('');
     this.exerciseLastSaved = {
       title: res.title,
       statement: res.statement,
@@ -3488,14 +3493,14 @@ export class Reader implements OnInit, OnDestroy {
     });
   }
 
-  private streamExerciseAI(id: number, mode: ExerciseAIMode) {
+  private streamExerciseAI(id: number, mode: ExerciseAIMode, question?: string) {
     this.exerciseAiController?.abort();
     const controller = new AbortController();
     this.exerciseAiController = controller;
     void this.exercises.askAI(
       this.bookId,
       id,
-      { mode },
+      question ? { mode, question } : { mode },
       {
         onDelta: (text) => {
           if (mode === 'statement') this.exerciseStatement.update((t) => t + text);
@@ -3578,6 +3583,31 @@ export class Reader implements OnInit, OnDestroy {
     this.hintStreaming.set('');
     this.hintBusy.set(false);
     this.hintError.set(null);
+  }
+
+  askCustomQuestion() {
+    const res = this.activeExercise();
+    const question = this.askInput().trim();
+    if (!res || this.exerciseAiBusy() || !question) return;
+    const content = this.pullExerciseContent();
+    this.exerciseAiBusy.set(true);
+    this.exerciseAiMode.set('ask');
+    this.exerciseAiError.set(null);
+    this.exerciseAiText.set('');
+    this.askedQuestion.set(question);
+    // Persist current work/statement first so the AI reads the latest state.
+    this.exercises.update(this.bookId, res.id, content).subscribe({
+      next: (saved) => {
+        this.applySavedExercise(saved);
+        this.streamExerciseAI(res.id, 'ask', question);
+      },
+      error: (err) => {
+        this.exerciseAiBusy.set(false);
+        const message = this.errorText(err, 'Não foi possível enviar a pergunta');
+        this.exerciseAiError.set(message);
+        this.notify.error(message);
+      },
+    });
   }
 
   private applySavedExercise(saved: ExerciseResolution) {

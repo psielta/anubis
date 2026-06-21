@@ -1,5 +1,5 @@
 export type ExerciseStatus = 'pending' | 'completed' | 'doubt' | 'wrong';
-export type ExerciseAIMode = 'statement' | 'hint' | 'review' | 'hint_level';
+export type ExerciseAIMode = 'statement' | 'hint' | 'review' | 'hint_level' | 'ask';
 
 export interface ExerciseRegion {
   x0: number;

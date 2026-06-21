@@ -9,7 +9,7 @@ MAX_STATEMENT = 20_000
 MAX_FEEDBACK = 50_000
 
 ExerciseStatus = Literal["pending", "completed", "doubt", "wrong"]
-ExerciseAIMode = Literal["statement", "hint", "review", "hint_level"]
+ExerciseAIMode = Literal["statement", "hint", "review", "hint_level", "ask"]
 
 
 class RegionModel(BaseModel):

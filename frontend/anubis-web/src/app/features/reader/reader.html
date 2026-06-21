@@ -1291,8 +1291,32 @@
                 <mat-icon>stairs</mat-icon> Dica em níveis
               </button>
             </div>
+            <form
+              class="exercise-ask"
+              (submit)="$event.preventDefault(); askCustomQuestion()"
+            >
+              <textarea
+                class="exercise-ask-input"
+                rows="2"
+                placeholder="Pergunte à IA sobre esta questão, como a um professor…"
+                [value]="askInput()"
+                (input)="askInput.set($any($event.target).value)"
+              ></textarea>
+              <button
+                class="exercise-ai-btn exercise-ask-send"
+                type="submit"
+                [disabled]="exerciseAiBusy() || !askInput().trim()"
+              >
+                <mat-icon>send</mat-icon> Perguntar
+              </button>
+            </form>
             @if (exerciseAiBusy() || exerciseAiText()) {
               <div class="exercise-ai-output">
+                @if (exerciseAiMode() === 'ask' && askedQuestion()) {
+                  <p class="exercise-ai-question">
+                    <mat-icon>help_outline</mat-icon> {{ askedQuestion() }}
+                  </p>
+                }
                 @if (exerciseAiBusy() && !exerciseAiText()) {
                   <span class="exercise-ai-loading">A IA está pensando…</span>
                 }

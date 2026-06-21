@@ -104,6 +104,21 @@ _HINT_LEVEL_PROMPTS = {
     ),
 }
 
+# Pergunta livre do usuário sobre o exercício — a IA responde como um professor.
+_ASK_PROMPT = (
+    "Você é um professor paciente ajudando o usuário com este exercício, "
+    "recortado da página anexada:\n\n"
+    '"""\n{statement}\n"""\n\n'
+    "Resolução parcial do usuário (LaTeX), pode estar vazia:\n\n"
+    '"""\n{work}\n"""\n\n'
+    "Pergunta do usuário:\n\n"
+    '"""\n{question}\n"""\n\n'
+    "Responda à pergunta de forma didática, orientando-o a progredir na "
+    "resolução. Baseie-se na imagem da página e no enunciado. Evite entregar a "
+    "resposta final de imediato, a menos que ele peça explicitamente. Use "
+    "Markdown e LaTeX. Escreva em português do Brasil."
+)
+
 
 def configured() -> bool:
     return bool(settings.GEMINI_API_KEY)
@@ -195,6 +210,15 @@ async def stream_exercise_reply(
     level: int = 1,
 ) -> AsyncIterator[tuple[str, str]]:
     """Yield ('thinking'|'answer', chunk) for an exercise-resolution AI action."""
+    if mode == "ask":
+        prompt = _ASK_PROMPT.format(
+            statement=statement.strip() or "(no text extracted)",
+            work=work.strip() or "(empty)",
+            question=(question or "").strip() or "Me ajude a resolver este exercício.",
+        )
+        async for item in _stream_prompt(gemini, part, prompt):
+            yield item
+        return
     if mode == "hint_level":
         template = _HINT_LEVEL_PROMPTS.get(level, _HINT_LEVEL_PROMPTS[1])
     else:
