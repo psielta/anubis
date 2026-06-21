@@ -4,6 +4,7 @@ import {
   OnDestroy,
   OnInit,
   computed,
+  effect,
   inject,
   signal,
   viewChild,
@@ -25,6 +26,7 @@ import type {
 } from 'pdfjs-dist';
 import { LibraryService } from '../../core/services/library';
 import { StudyService } from '../../core/services/study';
+import { TranslationService } from '../../core/services/translation';
 import { DiagramsService } from '../../core/services/diagrams';
 import { NotesService } from '../../core/services/notes';
 import { SketchesService } from '../../core/services/sketches';
@@ -117,9 +119,11 @@ type ReaderShortcutAction =
   | 'crop'
   | 'contents'
   | 'contentTree'
+  | 'translate'
   | 'commandPalette';
 
 const SAVE_DEBOUNCE_MS = 1200;
+const AUTO_TRANSLATE_DEBOUNCE_MS = 500;
 const READER_STATE_DEBOUNCE_MS = 800;
 const SKETCH_AUTOSAVE_MS = 1500;
 const LATEX_AUTOSAVE_MS = 1500;
@@ -151,6 +155,7 @@ export class Reader implements OnInit, OnDestroy {
   private document = inject(DOCUMENT);
   private library = inject(LibraryService);
   private study = inject(StudyService);
+  private translation = inject(TranslationService);
   private diagrams = inject(DiagramsService);
   private notes = inject(NotesService);
   private sketches = inject(SketchesService);
@@ -164,6 +169,7 @@ export class Reader implements OnInit, OnDestroy {
   protected readonly resizablePanelOpen = computed(
     () =>
       this.panelOpen() ||
+      this.translateOpen() ||
       this.tocOpen() ||
       this.contentTreeOpen() ||
       this.notesOpen() ||
@@ -204,7 +210,7 @@ export class Reader implements OnInit, OnDestroy {
   protected readonly contentTreeSaving = signal(false);
   protected readonly contentTreeError = signal<string | null>(null);
   protected readonly contentTreeMermaid = computed(() =>
-    this.buildContentTreeMermaid(this.book()?.title ?? 'Book', this.toc()),
+    this.buildContentTreeMermaid(this.book()?.title ?? 'Livro', this.toc()),
   );
   protected readonly commandPaletteOpen = signal(false);
   protected readonly commandPaletteQuery = signal('');
@@ -225,6 +231,7 @@ export class Reader implements OnInit, OnDestroy {
     crop: 'Alt+Shift+E',
     contents: 'Alt+Shift+C',
     contentTree: 'Alt+Shift+M',
+    translate: 'Alt+Shift+T',
     commandPalette: 'Ctrl+K',
     commandPaletteAlt: 'Alt+Shift+K',
   } as const;
@@ -244,6 +251,22 @@ export class Reader implements OnInit, OnDestroy {
   protected readonly pendingSelection = signal<string | null>(null);
   private historyLoaded = false;
   private aiController: AbortController | null = null;
+
+  // Page translation (pt-BR)
+  protected readonly translateOpen = signal(false);
+  protected readonly translatedMarkdown = signal('');
+  protected readonly translateBusy = signal(false);
+  protected readonly translateError = signal<string | null>(null);
+  protected readonly translatedPage = signal<number | null>(null);
+  protected readonly autoTranslate = this.prefs.autoTranslate;
+  protected readonly translatedPageReadout = computed(() => {
+    const p = this.translatedPage();
+    return p ? this.pageReadout(p) : '';
+  });
+  private translationCache = new Map<number, string>();
+  private translateAbort: AbortController | null = null;
+  private translatingPage = 0;
+  private autoTranslateTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Study diagrams
   protected readonly diagramsOpen = signal(false);
@@ -443,10 +466,19 @@ export class Reader implements OnInit, OnDestroy {
   private exerciseAiController: AbortController | null = null;
   private readonly readerKeydown = (event: KeyboardEvent) => this.handleReaderKeydown(event);
 
+  constructor() {
+    // Auto-translate: when enabled and the panel is open, translate each new page.
+    effect(() => {
+      const page = this.currentPage();
+      if (!this.autoTranslate() || !this.translateOpen()) return;
+      this.scheduleAutoTranslate(page);
+    });
+  }
+
   ngOnInit() {
     this.bookId = Number(this.route.snapshot.paramMap.get('id'));
     if (!this.bookId) {
-      this.fail('Invalid book');
+      this.fail('Livro inválido');
       return;
     }
     this.document.addEventListener('keydown', this.readerKeydown);
@@ -454,7 +486,7 @@ export class Reader implements OnInit, OnDestroy {
       next: (book) => {
         this.book.set(book);
         if (book.file_format !== 'pdf') {
-          this.fail('This book format cannot be read in the app');
+          this.fail('Este formato de livro não pode ser lido no app');
           return;
         }
         this.resumePage = book.last_page && book.last_page > 1 ? book.last_page : null;
@@ -462,7 +494,7 @@ export class Reader implements OnInit, OnDestroy {
         this.applySavedReaderState(book.reader_state);
         this.loadFile(this.bookId);
       },
-      error: () => this.fail('Book not found'),
+      error: () => this.fail('Livro não encontrado'),
     });
   }
 
@@ -480,6 +512,8 @@ export class Reader implements OnInit, OnDestroy {
     if (this.readerStateTimer) clearTimeout(this.readerStateTimer);
     this.flushReaderState();
     this.aiController?.abort();
+    this.translateAbort?.abort();
+    if (this.autoTranslateTimer) clearTimeout(this.autoTranslateTimer);
     this.exerciseAiController?.abort();
     this.observer?.disconnect();
     this.loadingTask?.destroy();
@@ -511,7 +545,7 @@ export class Reader implements OnInit, OnDestroy {
         this.loading.set(false);
         this.tryInit();
       },
-      error: () => this.fail('Could not open this book'),
+      error: () => this.fail('Não foi possível abrir este livro'),
     });
   }
 
@@ -565,7 +599,7 @@ export class Reader implements OnInit, OnDestroy {
         }
       }
     } catch {
-      this.error.set('Could not render this PDF');
+      this.error.set('Não foi possível renderizar este PDF');
     }
   }
 
@@ -745,7 +779,7 @@ export class Reader implements OnInit, OnDestroy {
     const sections: ReaderCommandSection[] = [];
     const pageCommand = this.pageCommandForQuery(query, pageCount);
     if (pageCommand) {
-      sections.push({ title: 'Pages', items: [pageCommand] });
+      sections.push({ title: 'Páginas', items: [pageCommand] });
     }
 
     const contents = items
@@ -754,14 +788,14 @@ export class Reader implements OnInit, OnDestroy {
       .filter((command) => !normalizedQuery || command.search.includes(normalizedQuery));
 
     if (contents.length) {
-      sections.push({ title: 'Contents', items: contents });
+      sections.push({ title: 'Sumário', items: contents });
     }
 
     return sections;
   }
 
   private tocCommand(item: TocItem & { page: number }, index: number): ReaderCommand {
-    const title = item.title.trim() || 'Untitled section';
+    const title = item.title.trim() || 'Seção sem título';
     const depth = Math.max(0, Math.min(item.depth, 4));
     const preferLabel = this.tocCustom();
     const targetPage = this.resolveNavigationPage(item.page, preferLabel);
@@ -770,7 +804,7 @@ export class Reader implements OnInit, OnDestroy {
       targetPage !== item.page ? `p. ${displayPage} · PDF ${targetPage}` : `p. ${displayPage}`;
     return {
       id: `toc-${index}-${item.page}`,
-      group: 'Contents',
+      group: 'Sumário',
       label: title,
       meta,
       page: item.page,
@@ -788,8 +822,8 @@ export class Reader implements OnInit, OnDestroy {
     if (labeledPage) {
       return {
         id: `page-label-${this.normalizePageLabel(raw)}-${labeledPage}`,
-        group: 'Pages',
-        label: `Go to page ${raw}`,
+        group: 'Páginas',
+        label: `Ir para a página ${raw}`,
         meta: labeledPage === Number(raw) ? `${labeledPage} / ${pageCount}` : `PDF ${labeledPage}`,
         page: labeledPage,
         preferLabel: false,
@@ -802,8 +836,8 @@ export class Reader implements OnInit, OnDestroy {
     if (!Number.isInteger(page) || page < 1 || page > pageCount) return null;
     return {
       id: `page-${page}`,
-      group: 'Pages',
-      label: `Go to page ${page}`,
+      group: 'Páginas',
+      label: `Ir para a página ${page}`,
       meta: `${page} / ${pageCount}`,
       page,
       preferLabel: false,
@@ -861,6 +895,8 @@ export class Reader implements OnInit, OnDestroy {
         return 'contents';
       case 'KeyM':
         return 'contentTree';
+      case 'KeyT':
+        return 'translate';
       case 'KeyK':
         return 'commandPalette';
       default:
@@ -897,6 +933,9 @@ export class Reader implements OnInit, OnDestroy {
         break;
       case 'contentTree':
         this.toggleContentTree();
+        break;
+      case 'translate':
+        this.toggleTranslate();
         break;
       case 'commandPalette':
         this.openCommandPalette();
@@ -1310,6 +1349,7 @@ export class Reader implements OnInit, OnDestroy {
     this.exercisesOpen.set(false);
     this.tocOpen.set(false);
     this.contentTreeOpen.set(false);
+    this.translateOpen.set(false);
 
     switch (state.panel) {
       case 'assistant':
@@ -1344,6 +1384,9 @@ export class Reader implements OnInit, OnDestroy {
       case 'content_tree':
         this.contentTreeOpen.set(true);
         break;
+      case 'translate':
+        this.translateOpen.set(true);
+        break;
     }
 
     this.readerStateSaveEnabled = true;
@@ -1362,6 +1405,7 @@ export class Reader implements OnInit, OnDestroy {
     if (this.exercisesOpen()) return 'exercises';
     if (this.tocOpen()) return 'toc';
     if (this.contentTreeOpen()) return 'content_tree';
+    if (this.translateOpen()) return 'translate';
     return null;
   }
 
@@ -1454,9 +1498,105 @@ export class Reader implements OnInit, OnDestroy {
       this.closeExercisesPanel();
       this.tocOpen.set(false);
       this.contentTreeOpen.set(false);
+      this.closeTranslatePanel();
       if (!this.historyLoaded) this.loadHistory();
     }
     this.scheduleReaderStateSave();
+  }
+
+  // --- Page translation (pt-BR) --------------------------------------------
+  toggleTranslate() {
+    const open = !this.translateOpen();
+    this.translateOpen.set(open);
+    if (open) {
+      this.panelOpen.set(false);
+      this.diagramsOpen.set(false);
+      this.notesOpen.set(false);
+      this.closeSketchesPanel();
+      this.closeLatexPanel();
+      this.closeExercisesPanel();
+      this.tocOpen.set(false);
+      this.contentTreeOpen.set(false);
+      this.translateCurrentPage();
+    } else {
+      this.translateAbort?.abort();
+    }
+    this.scheduleReaderStateSave();
+  }
+
+  private closeTranslatePanel() {
+    if (!this.translateOpen()) return;
+    this.translateAbort?.abort();
+    this.translateOpen.set(false);
+  }
+
+  translateCurrentPage(force = false) {
+    if (this.loading() || this.error() || !this.bookId) return;
+    const page = this.currentPage();
+    if (!page) return;
+    if (!force) {
+      if (this.translateBusy() && this.translatingPage === page) return;
+      if (this.translatedPage() === page && this.translatedMarkdown()) return;
+      const cached = this.translationCache.get(page);
+      if (cached) {
+        this.translateAbort?.abort();
+        this.translatingPage = page;
+        this.translateBusy.set(false);
+        this.translateError.set(null);
+        this.translatedMarkdown.set(cached);
+        this.translatedPage.set(page);
+        return;
+      }
+    }
+
+    this.translateAbort?.abort();
+    this.translateAbort = new AbortController();
+    this.translatingPage = page;
+    this.translateBusy.set(true);
+    this.translateError.set(null);
+    this.translatedMarkdown.set('');
+    this.translatedPage.set(page);
+
+    void this.translation.translate(
+      this.bookId,
+      { page, force },
+      {
+        onDelta: (t) => this.translatedMarkdown.update((v) => v + t),
+        onDone: () => {
+          this.translationCache.set(page, this.translatedMarkdown());
+          this.translateBusy.set(false);
+        },
+        onError: (message) => {
+          this.translateError.set(message);
+          this.notify.error(message);
+          this.translateBusy.set(false);
+        },
+      },
+      this.translateAbort.signal,
+    );
+  }
+
+  retranslate() {
+    this.translateCurrentPage(true);
+  }
+
+  setAutoTranslate(on: boolean) {
+    this.prefs.setAutoTranslate(on);
+    if (on && this.translateOpen()) this.translateCurrentPage();
+  }
+
+  toggleAutoTranslate() {
+    this.setAutoTranslate(!this.autoTranslate());
+  }
+
+  private scheduleAutoTranslate(page: number) {
+    if (this.autoTranslateTimer) clearTimeout(this.autoTranslateTimer);
+    this.autoTranslateTimer = setTimeout(() => {
+      this.autoTranslateTimer = null;
+      if (!this.autoTranslate() || !this.translateOpen()) return;
+      if (this.currentPage() !== page) return;
+      this.translateCurrentPage();
+    }, AUTO_TRANSLATE_DEBOUNCE_MS);
   }
 
   captureSelection() {
@@ -1530,6 +1670,7 @@ export class Reader implements OnInit, OnDestroy {
       this.closeExercisesPanel();
       this.tocOpen.set(false);
       this.contentTreeOpen.set(false);
+      this.closeTranslatePanel();
       this.panelOpen.set(true);
       if (!this.historyLoaded) this.loadHistory();
       this.scheduleReaderStateSave();
@@ -1657,9 +1798,9 @@ export class Reader implements OnInit, OnDestroy {
     this.study.clear(this.bookId).subscribe({
       next: () => {
         this.messages.set([]);
-        this.notify.success('Study history cleared');
+        this.notify.success('Histórico de estudo limpo');
       },
-      error: (err) => this.notify.error(this.errorText(err, 'Could not clear study history')),
+      error: (err) => this.notify.error(this.errorText(err, 'Não foi possível limpar o histórico de estudo')),
     });
   }
 
@@ -1675,6 +1816,7 @@ export class Reader implements OnInit, OnDestroy {
       this.closeLatexPanel();
       this.closeExercisesPanel();
       this.contentTreeOpen.set(false);
+      this.closeTranslatePanel();
       this.tocDraft.set(this.cloneToc(this.toc()));
       this.tocError.set(null);
     }
@@ -1730,7 +1872,7 @@ export class Reader implements OnInit, OnDestroy {
   addTocEntry() {
     this.tocDraft.update((list) => [
       ...list,
-      { title: 'New section', page: this.currentDisplayPageValue(), depth: 0 },
+      { title: 'Nova seção', page: this.currentDisplayPageValue(), depth: 0 },
     ]);
     this.tocError.set(null);
   }
@@ -1828,10 +1970,10 @@ export class Reader implements OnInit, OnDestroy {
     this.tocError.set(null);
     this.tocService.save(this.bookId, items).subscribe({
       next: (book) => {
-        void this.applySavedToc(book).then(() => this.notify.success('Contents saved'));
+        void this.applySavedToc(book).then(() => this.notify.success('Sumário salvo'));
       },
       error: (err) => {
-        const message = this.errorText(err, 'Could not save contents');
+        const message = this.errorText(err, 'Não foi possível salvar o sumário');
         this.tocError.set(message);
         this.notify.error(message);
         this.tocSaving.set(false);
@@ -1867,6 +2009,7 @@ export class Reader implements OnInit, OnDestroy {
       this.closeLatexPanel();
       this.closeExercisesPanel();
       this.tocOpen.set(false);
+      this.closeTranslatePanel();
       this.contentTreeError.set(null);
     }
     this.scheduleReaderStateSave();
@@ -1941,7 +2084,7 @@ export class Reader implements OnInit, OnDestroy {
   }
 
   private contentTreeDiagramTitle(): string {
-    const title = `${this.book()?.title?.trim() || 'Book'} content tree`;
+    const title = `Árvore de conteúdo de ${this.book()?.title?.trim() || 'Livro'}`;
     return title.length > 200 ? title.slice(0, 200) : title;
   }
 
@@ -1964,10 +2107,10 @@ export class Reader implements OnInit, OnDestroy {
             this.diagramList.update((list) => [saved, ...list.filter((d) => d.id !== saved.id)]);
           }
           this.contentTreeSaving.set(false);
-          this.notify.success('Content tree saved as diagram');
+          this.notify.success('Árvore de conteúdo salva como diagrama');
         },
         error: (err) => {
-          const message = this.errorText(err, 'Could not save content tree');
+          const message = this.errorText(err, 'Não foi possível salvar a árvore de conteúdo');
           this.contentTreeError.set(message);
           this.notify.error(message);
           this.contentTreeSaving.set(false);
@@ -1987,6 +2130,7 @@ export class Reader implements OnInit, OnDestroy {
       this.closeExercisesPanel();
       this.tocOpen.set(false);
       this.contentTreeOpen.set(false);
+      this.closeTranslatePanel();
       if (!this.diagramsLoaded()) this.loadDiagrams();
     }
     this.scheduleReaderStateSave();
@@ -2000,7 +2144,7 @@ export class Reader implements OnInit, OnDestroy {
         afterLoad?.();
       },
       error: (err) => {
-        const message = this.errorText(err, 'Could not load diagrams');
+        const message = this.errorText(err, 'Não foi possível carregar os diagramas');
         this.diagramsError.set(message);
         this.notify.error(message);
       },
@@ -2034,8 +2178,8 @@ export class Reader implements OnInit, OnDestroy {
   newDiagram(type: DiagramType) {
     this.activeDiagram.set(null);
     this.draftType.set(type);
-    this.draftTitle.set(type === 'mermaid' ? 'Untitled diagram' : 'Untitled drawing');
-    this.draftContent.set(type === 'mermaid' ? 'graph TD\n  A[Start] --> B[End]' : '');
+    this.draftTitle.set(type === 'mermaid' ? 'Diagrama sem título' : 'Desenho sem título');
+    this.draftContent.set(type === 'mermaid' ? 'graph TD\n  A[Início] --> B[Fim]' : '');
     this.draftPage.set(this.currentDisplayPageValue());
     this.diagramsError.set(null);
     this.diagramView.set('edit');
@@ -2101,10 +2245,10 @@ export class Reader implements OnInit, OnDestroy {
         this.diagramList.update((list) => [saved, ...list.filter((d) => d.id !== saved.id)]);
         this.diagramSaving.set(false);
         this.scheduleReaderStateSave();
-        this.notify.success('Diagram saved');
+        this.notify.success('Diagrama salvo');
       },
       error: (err) => {
-        const message = this.errorText(err, 'Could not save diagram');
+        const message = this.errorText(err, 'Não foi possível salvar o diagrama');
         this.diagramsError.set(message);
         this.notify.error(message);
         this.diagramSaving.set(false);
@@ -2121,10 +2265,10 @@ export class Reader implements OnInit, OnDestroy {
           this.diagramView.set('list');
         }
         this.scheduleReaderStateSave();
-        this.notify.success('Diagram deleted');
+        this.notify.success('Diagrama excluído');
       },
       error: (err) => {
-        const message = this.errorText(err, 'Could not delete diagram');
+        const message = this.errorText(err, 'Não foi possível excluir o diagrama');
         this.diagramsError.set(message);
         this.notify.error(message);
       },
@@ -2146,6 +2290,7 @@ export class Reader implements OnInit, OnDestroy {
     this.notesOpen.set(false);
     this.tocOpen.set(false);
     this.contentTreeOpen.set(false);
+    this.closeTranslatePanel();
     this.closeLatexPanel();
     this.closeExercisesPanel();
     this.sketchesError.set(null);
@@ -2165,7 +2310,7 @@ export class Reader implements OnInit, OnDestroy {
         afterLoad?.();
       },
       error: (err) => {
-        const message = this.errorText(err, 'Could not load sketches');
+        const message = this.errorText(err, 'Não foi possível carregar os rascunhos');
         this.sketchesError.set(message);
         this.notify.error(message);
       },
@@ -2199,17 +2344,17 @@ export class Reader implements OnInit, OnDestroy {
   }
 
   createSketchGroup() {
-    const name = window.prompt('Group name')?.trim();
+    const name = window.prompt('Nome do grupo')?.trim();
     if (!name) return;
     this.sketches.createGroup(this.bookId, { name }).subscribe({
       next: (group) => {
         this.sketchGroups.update((groups) => [...groups, group]);
         this.selectedSketchGroupId.set(group.id);
         this.scheduleReaderStateSave();
-        this.notify.success('Group created');
+        this.notify.success('Grupo criado');
       },
       error: (err) => {
-        const message = this.errorText(err, 'Could not create group');
+        const message = this.errorText(err, 'Não foi possível criar o grupo');
         this.sketchesError.set(message);
         this.notify.error(message);
       },
@@ -2217,17 +2362,17 @@ export class Reader implements OnInit, OnDestroy {
   }
 
   renameSketchGroup(group: SketchGroup) {
-    const name = window.prompt('Group name', group.name)?.trim();
+    const name = window.prompt('Nome do grupo', group.name)?.trim();
     if (!name || name === group.name) return;
     this.sketches.updateGroup(this.bookId, group.id, { name }).subscribe({
       next: (saved) => {
         this.sketchGroups.update((groups) =>
           groups.map((item) => (item.id === saved.id ? saved : item)),
         );
-        this.notify.success('Group renamed');
+        this.notify.success('Grupo renomeado');
       },
       error: (err) => {
-        const message = this.errorText(err, 'Could not rename group');
+        const message = this.errorText(err, 'Não foi possível renomear o grupo');
         this.sketchesError.set(message);
         this.notify.error(message);
       },
@@ -2235,7 +2380,7 @@ export class Reader implements OnInit, OnDestroy {
   }
 
   deleteSketchGroup(group: SketchGroup) {
-    const ok = window.confirm(`Delete "${group.name}"? Sketches will move to Ungrouped.`);
+    const ok = window.confirm(`Excluir "${group.name}"? Os rascunhos voltam para Sem grupo.`);
     if (!ok) return;
     this.sketches.removeGroup(this.bookId, group.id).subscribe({
       next: () => {
@@ -2249,10 +2394,10 @@ export class Reader implements OnInit, OnDestroy {
           this.scheduleSketchAutosave();
         }
         this.scheduleReaderStateSave();
-        this.notify.success('Group deleted');
+        this.notify.success('Grupo excluído');
       },
       error: (err) => {
-        const message = this.errorText(err, 'Could not delete group');
+        const message = this.errorText(err, 'Não foi possível excluir o grupo');
         this.sketchesError.set(message);
         this.notify.error(message);
       },
@@ -2268,7 +2413,7 @@ export class Reader implements OnInit, OnDestroy {
     this.sketchesError.set(null);
     this.sketches
       .create(this.bookId, {
-        title: 'Untitled sketch',
+        title: 'Rascunho sem título',
         content: '',
         group_id: targetGroupId,
         page: this.currentDisplayPageValue(),
@@ -2280,10 +2425,10 @@ export class Reader implements OnInit, OnDestroy {
           this.sketchList.update((list) => [saved, ...list.filter((s) => s.id !== saved.id)]);
           this.setActiveSketch(saved);
           this.scheduleReaderStateSave();
-          this.notify.success('Sketch created');
+          this.notify.success('Rascunho criado');
         },
         error: (err) => {
-          const message = this.errorText(err, 'Could not create sketch');
+          const message = this.errorText(err, 'Não foi possível criar o rascunho');
           this.sketchSaving.set(false);
           this.sketchSaveStatus.set('error');
           this.sketchesError.set(message);
@@ -2361,7 +2506,7 @@ export class Reader implements OnInit, OnDestroy {
   }
 
   sketchUpdatedLabel(sketch: Sketch): string {
-    return new Date(sketch.updated_at).toLocaleDateString(undefined, {
+    return new Date(sketch.updated_at).toLocaleDateString('pt-BR', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -2369,8 +2514,8 @@ export class Reader implements OnInit, OnDestroy {
   }
 
   sketchGroupName(groupId: number | null): string {
-    if (groupId == null) return 'Ungrouped';
-    return this.sketchGroups().find((group) => group.id === groupId)?.name ?? 'Ungrouped';
+    if (groupId == null) return 'Sem grupo';
+    return this.sketchGroups().find((group) => group.id === groupId)?.name ?? 'Sem grupo';
   }
 
   deleteSketch(sketch: Sketch) {
@@ -2385,10 +2530,10 @@ export class Reader implements OnInit, OnDestroy {
           this.sketchSaveStatus.set('idle');
         }
         this.scheduleReaderStateSave();
-        this.notify.success('Sketch deleted');
+        this.notify.success('Rascunho excluído');
       },
       error: (err) => {
-        const message = this.errorText(err, 'Could not delete sketch');
+        const message = this.errorText(err, 'Não foi possível excluir o rascunho');
         this.sketchesError.set(message);
         this.notify.error(message);
       },
@@ -2434,7 +2579,7 @@ export class Reader implements OnInit, OnDestroy {
     const payload = this.currentSketchPayload();
     if (!payload.title) {
       this.sketchSaveStatus.set('error');
-      this.sketchesError.set('Sketch title cannot be empty');
+      this.sketchesError.set('O título do rascunho não pode ficar vazio');
       return;
     }
     if (
@@ -2479,7 +2624,7 @@ export class Reader implements OnInit, OnDestroy {
         }
       },
       error: (err) => {
-        const message = this.errorText(err, 'Could not save sketch');
+        const message = this.errorText(err, 'Não foi possível salvar o rascunho');
         this.sketchSaving.set(false);
         this.sketchSaveStatus.set('error');
         this.sketchesError.set(message);
@@ -2505,6 +2650,7 @@ export class Reader implements OnInit, OnDestroy {
     this.closeExercisesPanel();
     this.tocOpen.set(false);
     this.contentTreeOpen.set(false);
+    this.closeTranslatePanel();
     this.latexError.set(null);
     if (!this.latexLoaded()) this.loadLatex();
     this.scheduleReaderStateSave();
@@ -2718,7 +2864,7 @@ export class Reader implements OnInit, OnDestroy {
   }
 
   latexUpdatedLabel(notebook: LatexNotebook): string {
-    return new Date(notebook.updated_at).toLocaleDateString(undefined, {
+    return new Date(notebook.updated_at).toLocaleDateString('pt-BR', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -2877,6 +3023,7 @@ export class Reader implements OnInit, OnDestroy {
     this.closeLatexPanel();
     this.tocOpen.set(false);
     this.contentTreeOpen.set(false);
+    this.closeTranslatePanel();
   }
 
   private closeExercisesPanel() {
@@ -3101,7 +3248,7 @@ export class Reader implements OnInit, OnDestroy {
   }
 
   exerciseUpdatedLabel(res: ExerciseResolution): string {
-    return new Date(res.updated_at).toLocaleDateString(undefined, {
+    return new Date(res.updated_at).toLocaleDateString('pt-BR', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -3109,7 +3256,7 @@ export class Reader implements OnInit, OnDestroy {
   }
 
   attemptLabel(attempt: ExerciseAttempt): string {
-    return new Date(attempt.created_at).toLocaleString(undefined, {
+    return new Date(attempt.created_at).toLocaleString('pt-BR', {
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
@@ -3465,6 +3612,7 @@ export class Reader implements OnInit, OnDestroy {
       this.closeExercisesPanel();
       this.tocOpen.set(false);
       this.contentTreeOpen.set(false);
+      this.closeTranslatePanel();
       if (!this.notesLoaded()) this.loadNotes();
     }
     this.scheduleReaderStateSave();
@@ -3478,7 +3626,7 @@ export class Reader implements OnInit, OnDestroy {
         afterLoad?.();
       },
       error: (err) => {
-        const message = this.errorText(err, 'Could not load notes');
+        const message = this.errorText(err, 'Não foi possível carregar as notas');
         this.notesError.set(message);
         this.notify.error(message);
       },
@@ -3511,7 +3659,7 @@ export class Reader implements OnInit, OnDestroy {
 
   newNote() {
     this.activeNote.set(null);
-    this.noteTitle.set('Untitled note');
+    this.noteTitle.set('Nota sem título');
     this.noteContent.set('');
     this.notePage.set(this.currentDisplayPageValue());
     this.notesError.set(null);
@@ -3554,7 +3702,7 @@ export class Reader implements OnInit, OnDestroy {
   /** Native date formatting — DatePipe would pull Angular's locale data into
    *  the initial bundle just for this label. */
   noteUpdatedLabel(note: Note): string {
-    return new Date(note.updated_at).toLocaleDateString(undefined, {
+    return new Date(note.updated_at).toLocaleDateString('pt-BR', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -3594,10 +3742,10 @@ export class Reader implements OnInit, OnDestroy {
         this.noteList.update((list) => [saved, ...list.filter((n) => n.id !== saved.id)]);
         this.noteSaving.set(false);
         this.scheduleReaderStateSave();
-        this.notify.success('Note saved');
+        this.notify.success('Nota salva');
       },
       error: (err) => {
-        const message = this.errorText(err, 'Could not save note');
+        const message = this.errorText(err, 'Não foi possível salvar a nota');
         this.notesError.set(message);
         this.notify.error(message);
         this.noteSaving.set(false);
@@ -3614,10 +3762,10 @@ export class Reader implements OnInit, OnDestroy {
           this.noteView.set('list');
         }
         this.scheduleReaderStateSave();
-        this.notify.success('Note deleted');
+        this.notify.success('Nota excluída');
       },
       error: (err) => {
-        const message = this.errorText(err, 'Could not delete note');
+        const message = this.errorText(err, 'Não foi possível excluir a nota');
         this.notesError.set(message);
         this.notify.error(message);
       },

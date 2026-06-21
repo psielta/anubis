@@ -13,20 +13,21 @@
   [class.exercise-focus-open]="exerciseFocus()"
   [class.toc-open]="tocOpen()"
   [class.content-tree-open]="contentTreeOpen()"
+  [class.translate-open]="translateOpen()"
 >
   <header class="reader-bar">
-    <button type="button" class="reader-back" (click)="goBack()" aria-label="Back">
+    <button type="button" class="reader-back" (click)="goBack()" aria-label="Voltar">
       <mat-icon>arrow_back</mat-icon>
     </button>
-    <span class="reader-title">{{ book()?.title ?? 'Reader' }}</span>
+    <span class="reader-title">{{ book()?.title ?? 'Leitor' }}</span>
     <span class="reader-controls">
       <button
         mat-icon-button
         class="ai-toggle"
         [class.active]="panelOpen()"
         (click)="togglePanel()"
-        [attr.aria-label]="'Study assistant (' + shortcuts.assistant + ')'"
-        [attr.title]="'Study assistant (' + shortcuts.assistant + ')'"
+        [attr.aria-label]="'Assistente de estudo (' + shortcuts.assistant + ')'"
+        [attr.title]="'Assistente de estudo (' + shortcuts.assistant + ')'"
       >
         <mat-icon>auto_awesome</mat-icon>
       </button>
@@ -35,8 +36,8 @@
         class="diagrams-toggle"
         [class.active]="diagramsOpen()"
         (click)="toggleDiagrams()"
-        [attr.aria-label]="'Study diagrams (' + shortcuts.diagrams + ')'"
-        [attr.title]="'Study diagrams (' + shortcuts.diagrams + ')'"
+        [attr.aria-label]="'Diagramas de estudo (' + shortcuts.diagrams + ')'"
+        [attr.title]="'Diagramas de estudo (' + shortcuts.diagrams + ')'"
       >
         <mat-icon>account_tree</mat-icon>
       </button>
@@ -45,8 +46,8 @@
         class="notes-toggle"
         [class.active]="notesOpen()"
         (click)="toggleNotes()"
-        [attr.aria-label]="'Study notes (' + shortcuts.notes + ')'"
-        [attr.title]="'Study notes (' + shortcuts.notes + ')'"
+        [attr.aria-label]="'Notas de estudo (' + shortcuts.notes + ')'"
+        [attr.title]="'Notas de estudo (' + shortcuts.notes + ')'"
       >
         <mat-icon>edit_note</mat-icon>
       </button>
@@ -55,8 +56,8 @@
         class="sketches-toggle"
         [class.active]="sketchesOpen()"
         (click)="toggleSketches()"
-        [attr.aria-label]="'Sketch notebook (' + shortcuts.sketches + ')'"
-        [attr.title]="'Sketch notebook (' + shortcuts.sketches + ')'"
+        [attr.aria-label]="'Caderno de rascunhos (' + shortcuts.sketches + ')'"
+        [attr.title]="'Caderno de rascunhos (' + shortcuts.sketches + ')'"
       >
         <mat-icon>gesture</mat-icon>
       </button>
@@ -69,6 +70,17 @@
         [attr.title]="'Cadernos LaTeX (' + shortcuts.latex + ')'"
       >
         <mat-icon>functions</mat-icon>
+      </button>
+      <button
+        mat-icon-button
+        class="translate-toggle"
+        [class.active]="translateOpen()"
+        (click)="toggleTranslate()"
+        [disabled]="loading() || !!error()"
+        [attr.aria-label]="'Traduzir página (' + shortcuts.translate + ')'"
+        [attr.title]="'Traduzir página (' + shortcuts.translate + ')'"
+      >
+        <mat-icon>translate</mat-icon>
       </button>
       <button
         mat-icon-button
@@ -96,8 +108,8 @@
         class="toc-toggle"
         [class.active]="tocOpen()"
         (click)="toggleToc()"
-        [attr.aria-label]="'Edit contents (' + shortcuts.contents + ')'"
-        [attr.title]="'Edit contents (' + shortcuts.contents + ')'"
+        [attr.aria-label]="'Editar sumário (' + shortcuts.contents + ')'"
+        [attr.title]="'Editar sumário (' + shortcuts.contents + ')'"
       >
         <mat-icon>toc</mat-icon>
       </button>
@@ -106,8 +118,8 @@
         class="content-tree-toggle"
         [class.active]="contentTreeOpen()"
         (click)="toggleContentTree()"
-        [attr.aria-label]="'Content tree (' + shortcuts.contentTree + ')'"
-        [attr.title]="'Content tree (' + shortcuts.contentTree + ')'"
+        [attr.aria-label]="'Árvore de conteúdo (' + shortcuts.contentTree + ')'"
+        [attr.title]="'Árvore de conteúdo (' + shortcuts.contentTree + ')'"
       >
         <mat-icon>schema</mat-icon>
       </button>
@@ -117,16 +129,16 @@
         (click)="openCommandPalette()"
         [disabled]="loading() || !!error()"
         [attr.aria-label]="
-          'Find in contents (' + shortcuts.commandPalette + ' / ' + shortcuts.commandPaletteAlt + ')'
+          'Localizar no sumário (' + shortcuts.commandPalette + ' / ' + shortcuts.commandPaletteAlt + ')'
         "
         [attr.title]="
-          'Find in contents (' + shortcuts.commandPalette + ' / ' + shortcuts.commandPaletteAlt + ')'
+          'Localizar no sumário (' + shortcuts.commandPalette + ' / ' + shortcuts.commandPaletteAlt + ')'
         "
       >
         <mat-icon>travel_explore</mat-icon>
       </button>
       @if (toc().length) {
-        <button mat-icon-button [matMenuTriggerFor]="tocMenu" aria-label="Table of contents">
+        <button mat-icon-button [matMenuTriggerFor]="tocMenu" aria-label="Sumário">
           <mat-icon>list</mat-icon>
         </button>
         <mat-menu #tocMenu="matMenu" class="toc-menu">
@@ -149,7 +161,7 @@
         mat-icon-button
         (click)="zoom(-10)"
         [disabled]="loading() || !!error()"
-        aria-label="Zoom out"
+        aria-label="Diminuir zoom"
       >
         <mat-icon>remove</mat-icon>
       </button>
@@ -158,7 +170,7 @@
         mat-icon-button
         (click)="zoom(10)"
         [disabled]="loading() || !!error()"
-        aria-label="Zoom in"
+        aria-label="Aumentar zoom"
       >
         <mat-icon>add</mat-icon>
       </button>
@@ -173,10 +185,10 @@
       <div class="reader-message">
         <mat-icon>error_outline</mat-icon>
         <p>{{ error() }}</p>
-        <a routerLink="/library" class="reader-link">Back to library</a>
+        <a routerLink="/library" class="reader-link">Voltar à biblioteca</a>
       </div>
     } @else if (loading()) {
-      <div class="reader-message">Opening the book…</div>
+      <div class="reader-message">Abrindo o livro…</div>
     }
     <div
       #viewport
@@ -204,7 +216,7 @@
       (resizeEnd)="onPanelResize($event)"
       role="separator"
       aria-orientation="vertical"
-      aria-label="Resize side panel"
+      aria-label="Redimensionar painel lateral"
       tabindex="0"
     ></div>
   }
@@ -216,7 +228,7 @@
       [style.left.px]="selButtonLeft()"
       (click)="askSelection()"
     >
-      <mat-icon>auto_awesome</mat-icon> Ask about this
+      <mat-icon>auto_awesome</mat-icon> Perguntar sobre isto
     </button>
   }
 
@@ -247,7 +259,7 @@
         class="command-palette"
         role="dialog"
         aria-modal="true"
-        aria-label="Find in contents"
+        aria-label="Localizar no sumário"
         (click)="$event.stopPropagation()"
       >
         <header class="command-palette-head">
@@ -258,7 +270,7 @@
             #commandPaletteInput
             class="command-palette-input"
             type="search"
-            placeholder="Search contents or page..."
+            placeholder="Buscar no sumário ou página..."
             [value]="commandPaletteQuery()"
             (input)="setCommandPaletteQuery($any($event.target).value)"
             (keydown)="onCommandPaletteInputKeydown($event)"
@@ -269,15 +281,15 @@
             type="button"
             class="command-palette-close"
             (click)="closeCommandPalette()"
-            aria-label="Close"
+            aria-label="Fechar"
           >
             <mat-icon>close</mat-icon>
           </button>
         </header>
 
-        <div class="command-palette-list" role="listbox" aria-label="Reader commands">
+        <div class="command-palette-list" role="listbox" aria-label="Comandos do leitor">
           @if (!commandPaletteCommands().length) {
-            <p class="command-palette-empty">No matching contents or valid page.</p>
+            <p class="command-palette-empty">Nenhum conteúdo correspondente ou página válida.</p>
           }
           @for (section of commandPaletteSections(); track section.title) {
             <div class="command-palette-group">{{ section.title }}</div>
@@ -307,15 +319,15 @@
   @if (panelOpen()) {
     <aside class="ai-panel">
       <header class="ai-head">
-        <span class="ai-title"><mat-icon>auto_awesome</mat-icon> Study assistant</span>
+        <span class="ai-title"><mat-icon>auto_awesome</mat-icon> Assistente de estudo</span>
         <kbd class="shortcut-key">{{ shortcuts.assistant }}</kbd>
         <span class="ai-spacer"></span>
         @if (messages().length) {
-          <button mat-icon-button (click)="clearHistory()" aria-label="Clear history">
+          <button mat-icon-button (click)="clearHistory()" aria-label="Limpar histórico">
             <mat-icon>delete_sweep</mat-icon>
           </button>
         }
-        <button mat-icon-button (click)="togglePanel()" aria-label="Close">
+        <button mat-icon-button (click)="togglePanel()" aria-label="Fechar">
           <mat-icon>close</mat-icon>
         </button>
       </header>
@@ -326,7 +338,7 @@
           [class.active]="effectiveAiScope() === 'book'"
           (click)="aiScope.set('book')"
         >
-          Whole book
+          Livro inteiro
         </button>
         <button
           class="scope-chip"
@@ -334,14 +346,14 @@
           [disabled]="!chapterRange()"
           (click)="aiScope.set('chapter')"
         >
-          This chapter
+          Este capítulo
         </button>
       </div>
 
       <div class="ai-thread">
         @if (!messages().length && !aiBusy()) {
           <p class="ai-empty">
-            Ask a question, or generate a summary or flashcards — grounded in this PDF.
+            Faça uma pergunta, ou gere um resumo ou flashcards — com base neste PDF.
           </p>
         }
         @for (m of messages(); track m.id) {
@@ -368,14 +380,14 @@
           <div class="ai-msg ai-assistant">
             @if (thinking()) {
               <details class="ai-thinking" open>
-                <summary>Thinking…</summary>
+                <summary>Pensando…</summary>
                 <pre>{{ thinking() }}</pre>
               </details>
             }
             @if (streamingAnswer()) {
               <markdown class="md-body" [data]="streamingAnswer()" />
             } @else if (!thinking()) {
-              <p class="ai-working">Working…</p>
+              <p class="ai-working">Processando…</p>
             }
           </div>
         }
@@ -387,7 +399,7 @@
 
       <div class="ai-actions">
         <button class="ai-action" (click)="send('summary')" [disabled]="aiBusy()">
-          <mat-icon>summarize</mat-icon> Summarize
+          <mat-icon>summarize</mat-icon> Resumir
         </button>
         <button class="ai-action" (click)="send('flashcards')" [disabled]="aiBusy()">
           <mat-icon>style</mat-icon> Flashcards
@@ -402,7 +414,7 @@
             type="button"
             class="ai-selection-clear"
             (click)="clearPendingSelection()"
-            aria-label="Clear selection"
+            aria-label="Limpar seleção"
           >
             <mat-icon>close</mat-icon>
           </button>
@@ -410,18 +422,77 @@
       }
 
       <form class="ai-ask" (submit)="$event.preventDefault(); send('chat', q)">
-        <input #q class="ai-input" placeholder="Ask about this book…" [disabled]="aiBusy()" />
-        <button class="ai-send" type="submit" [disabled]="aiBusy()" aria-label="Ask">
+        <input #q class="ai-input" placeholder="Pergunte sobre este livro…" [disabled]="aiBusy()" />
+        <button class="ai-send" type="submit" [disabled]="aiBusy()" aria-label="Perguntar">
           <mat-icon>send</mat-icon>
         </button>
       </form>
     </aside>
   }
 
+  @if (translateOpen()) {
+    <aside class="translate-panel">
+      <header class="dg-head">
+        <span class="dg-title"><mat-icon>translate</mat-icon> Tradução</span>
+        <kbd class="shortcut-key">{{ shortcuts.translate }}</kbd>
+        <span class="ai-spacer"></span>
+        <button mat-icon-button (click)="toggleTranslate()" aria-label="Fechar">
+          <mat-icon>close</mat-icon>
+        </button>
+      </header>
+
+      <div class="ai-actions">
+        <button class="ai-action" (click)="translateCurrentPage()" [disabled]="translateBusy()">
+          <mat-icon>translate</mat-icon> Traduzir página
+        </button>
+        <button
+          class="ai-action"
+          (click)="retranslate()"
+          [disabled]="translateBusy() || translatedPage() === null"
+        >
+          <mat-icon>refresh</mat-icon> Retraduzir
+        </button>
+        <button
+          class="ai-action"
+          [class.active]="autoTranslate()"
+          (click)="toggleAutoTranslate()"
+          [attr.aria-pressed]="autoTranslate()"
+          [attr.title]="
+            autoTranslate() ? 'Tradução automática ativada' : 'Tradução automática desativada'
+          "
+        >
+          <mat-icon>autorenew</mat-icon> Auto
+        </button>
+      </div>
+
+      <div class="ai-thread">
+        @if (translatedPage()) {
+          <span class="ai-scope-label">Página {{ translatedPageReadout() }}</span>
+        }
+        @if (translatedMarkdown()) {
+          <markdown class="md-body" [data]="translatedMarkdown()" />
+        }
+        @if (translateBusy() && !translatedMarkdown()) {
+          <p class="ai-working">Traduzindo…</p>
+        }
+        @if (!translateBusy() && !translatedMarkdown() && !translateError()) {
+          <p class="ai-empty">
+            Clique em <strong>Traduzir página</strong> para ver esta página em português, ou ative o
+            modo <strong>Auto</strong> para traduzir conforme você avança.
+          </p>
+        }
+      </div>
+
+      @if (translateError()) {
+        <p class="ai-error">{{ translateError() }}</p>
+      }
+    </aside>
+  }
+
   @if (contentTreeOpen()) {
     <aside class="content-tree-panel">
       <header class="dg-head">
-        <span class="dg-title"><mat-icon>schema</mat-icon> Content tree</span>
+        <span class="dg-title"><mat-icon>schema</mat-icon> Árvore de conteúdo</span>
         <kbd class="shortcut-key">{{ shortcuts.contentTree }}</kbd>
         <span class="ai-spacer"></span>
         <button
@@ -430,16 +501,16 @@
           (click)="saveContentTreeDiagram()"
           [disabled]="contentTreeSaving() || !toc().length"
         >
-          {{ contentTreeSaving() ? 'Saving...' : 'Save as diagram' }}
+          {{ contentTreeSaving() ? 'Salvando...' : 'Salvar como diagrama' }}
         </button>
-        <button mat-icon-button (click)="toggleContentTree()" aria-label="Close">
+        <button mat-icon-button (click)="toggleContentTree()" aria-label="Fechar">
           <mat-icon>close</mat-icon>
         </button>
       </header>
 
       @if (!toc().length) {
         <div class="content-tree-empty">
-          <p class="dg-empty">No contents yet.</p>
+          <p class="dg-empty">Nenhum conteúdo ainda.</p>
         </div>
       } @else {
         <div class="content-tree-body">
@@ -457,14 +528,14 @@
     <aside class="diagrams-panel">
       <header class="dg-head">
         @if (diagramView() === 'edit') {
-          <button mat-icon-button (click)="backToDiagramList()" aria-label="Back to list">
+          <button mat-icon-button (click)="backToDiagramList()" aria-label="Voltar à lista">
             <mat-icon>arrow_back</mat-icon>
           </button>
         }
-        <span class="dg-title"><mat-icon>account_tree</mat-icon> Diagrams</span>
+        <span class="dg-title"><mat-icon>account_tree</mat-icon> Diagramas</span>
         <kbd class="shortcut-key">{{ shortcuts.diagrams }}</kbd>
         <span class="ai-spacer"></span>
-        <button mat-icon-button (click)="toggleDiagrams()" aria-label="Close">
+        <button mat-icon-button (click)="toggleDiagrams()" aria-label="Fechar">
           <mat-icon>close</mat-icon>
         </button>
       </header>
@@ -473,16 +544,16 @@
         <div class="dg-list">
           <div class="dg-new">
             <button class="dg-new-btn" (click)="newDiagram('mermaid')">
-              <mat-icon>schema</mat-icon> New Mermaid
+              <mat-icon>schema</mat-icon> Novo Mermaid
             </button>
             <button class="dg-new-btn" (click)="newDiagram('excalidraw')">
-              <mat-icon>draw</mat-icon> New drawing
+              <mat-icon>draw</mat-icon> Novo desenho
             </button>
           </div>
           @if (!diagramList().length) {
             <p class="dg-empty">
-              No diagrams yet. Build a Mermaid diagram or a free-form drawing to map out what you
-              are reading.
+              Nenhum diagrama ainda. Crie um diagrama Mermaid ou um desenho livre para mapear o que
+              você está lendo.
             </p>
           }
           @for (d of diagramList(); track d.id) {
@@ -502,7 +573,7 @@
               <span
                 class="dg-card-del"
                 role="button"
-                aria-label="Delete diagram"
+                aria-label="Excluir diagrama"
                 (click)="$event.stopPropagation(); deleteDiagram(d)"
               >
                 <mat-icon>delete</mat-icon>
@@ -517,7 +588,7 @@
               class="dg-name"
               [value]="draftTitle()"
               (input)="draftTitle.set($any($event.target).value)"
-              placeholder="Diagram title"
+              placeholder="Título do diagrama"
               maxlength="200"
             />
             <label class="dg-page">
@@ -535,7 +606,7 @@
               (click)="saveDiagram()"
               [disabled]="diagramSaving() || !draftTitle().trim()"
             >
-              {{ diagramSaving() ? 'Saving…' : 'Save' }}
+              {{ diagramSaving() ? 'Salvando…' : 'Salvar' }}
             </button>
           </div>
 
@@ -558,7 +629,7 @@
                 (sceneChange)="onSceneChange($event)"
               />
             } @placeholder {
-              <div class="dg-loading">Loading canvas…</div>
+              <div class="dg-loading">Carregando tela…</div>
             }
           }
         </div>
@@ -574,30 +645,30 @@
     <aside class="sketches-panel" [class.sketch-focus]="sketchFocus()">
       <header class="dg-head">
         @if (sketchView() === 'edit') {
-          <button mat-icon-button (click)="backToSketchList()" aria-label="Back to sketches">
+          <button mat-icon-button (click)="backToSketchList()" aria-label="Voltar aos rascunhos">
             <mat-icon>arrow_back</mat-icon>
           </button>
         }
-        <span class="dg-title"><mat-icon>gesture</mat-icon> Sketches</span>
+        <span class="dg-title"><mat-icon>gesture</mat-icon> Rascunhos</span>
         <kbd class="shortcut-key">{{ shortcuts.sketches }}</kbd>
         <span class="ai-spacer"></span>
         @if (sketchView() === 'edit') {
           <span class="sketch-save-status" [class.error]="sketchSaveStatus() === 'error'">
             {{
               sketchSaveStatus() === 'saving'
-                ? 'Saving...'
+                ? 'Salvando...'
                 : sketchSaveStatus() === 'saved'
-                  ? 'Saved'
+                  ? 'Salvo'
                   : sketchSaveStatus() === 'error'
-                    ? 'Not saved'
-                    : 'Unsaved'
+                    ? 'Não salvo'
+                    : 'Sem salvar'
             }}
           </span>
           @if (activeSketch(); as currentSketch) {
             <button
               mat-icon-button
               (click)="deleteSketch(currentSketch)"
-              aria-label="Delete sketch"
+              aria-label="Excluir rascunho"
             >
               <mat-icon>delete</mat-icon>
             </button>
@@ -605,12 +676,12 @@
           <button
             mat-icon-button
             (click)="toggleSketchFocus()"
-            [attr.aria-label]="sketchFocus() ? 'Exit focus mode' : 'Focus mode'"
+            [attr.aria-label]="sketchFocus() ? 'Sair do modo foco' : 'Modo foco'"
           >
             <mat-icon>{{ sketchFocus() ? 'fullscreen_exit' : 'fullscreen' }}</mat-icon>
           </button>
         }
-        <button mat-icon-button (click)="toggleSketches()" aria-label="Close">
+        <button mat-icon-button (click)="toggleSketches()" aria-label="Fechar">
           <mat-icon>close</mat-icon>
         </button>
       </header>
@@ -619,28 +690,28 @@
         <div class="dg-list sketch-list">
           <div class="dg-new">
             <button class="dg-new-btn" (click)="newSketch()">
-              <mat-icon>add</mat-icon> New sketch
+              <mat-icon>add</mat-icon> Novo rascunho
             </button>
             <button class="dg-new-btn" (click)="createSketchGroup()">
-              <mat-icon>create_new_folder</mat-icon> New group
+              <mat-icon>create_new_folder</mat-icon> Novo grupo
             </button>
           </div>
           @if (sketchList().length) {
             <input
               class="note-search"
               type="search"
-              placeholder="Search sketches..."
-              aria-label="Search sketches"
+              placeholder="Buscar rascunhos..."
+              aria-label="Buscar rascunhos"
               [value]="sketchSearch()"
               (input)="setSketchSearch($any($event.target).value)"
             />
           }
           @if (!sketchList().length && !sketchGroups().length) {
             <p class="dg-empty">
-              No sketches yet. Create a sketch to solve exercises beside this book.
+              Nenhum rascunho ainda. Crie um rascunho para resolver exercícios ao lado deste livro.
             </p>
           } @else if (!filteredSketches().length) {
-            <p class="dg-empty">No sketches match your search.</p>
+            <p class="dg-empty">Nenhum rascunho corresponde à busca.</p>
           }
 
           @for (section of sketchSections(); track section.group?.id ?? 0) {
@@ -652,7 +723,7 @@
                   (click)="selectSketchGroup(section.group?.id ?? null)"
                 >
                   <mat-icon>{{ section.group ? 'folder' : 'folder_open' }}</mat-icon>
-                  <span>{{ section.group?.name ?? 'Ungrouped' }}</span>
+                  <span>{{ section.group?.name ?? 'Sem grupo' }}</span>
                   <span class="sketch-section-count">{{ section.sketches.length }}</span>
                 </button>
                 @if (section.group; as group) {
@@ -660,7 +731,7 @@
                     class="toc-icon"
                     type="button"
                     (click)="renameSketchGroup(group)"
-                    aria-label="Rename group"
+                    aria-label="Renomear grupo"
                   >
                     <mat-icon>edit</mat-icon>
                   </button>
@@ -668,7 +739,7 @@
                     class="toc-icon danger"
                     type="button"
                     (click)="deleteSketchGroup(group)"
-                    aria-label="Delete group"
+                    aria-label="Excluir grupo"
                   >
                     <mat-icon>delete</mat-icon>
                   </button>
@@ -677,7 +748,7 @@
                   class="toc-icon"
                   type="button"
                   (click)="newSketch(section.group?.id ?? null)"
-                  aria-label="New sketch in group"
+                  aria-label="Novo rascunho no grupo"
                 >
                   <mat-icon>add</mat-icon>
                 </button>
@@ -691,14 +762,14 @@
                     <span class="dg-card-meta"
                       >{{ sketchUpdatedLabel(s) }}
                       @if (s.page) {
-                        Â· p. {{ s.page }}
+                        · p. {{ s.page }}
                       }
                     </span>
                   </span>
                   <span
                     class="dg-card-del"
                     role="button"
-                    aria-label="Delete sketch"
+                    aria-label="Excluir rascunho"
                     (click)="$event.stopPropagation(); deleteSketch(s)"
                   >
                     <mat-icon>delete</mat-icon>
@@ -715,7 +786,7 @@
               class="dg-name"
               [value]="sketchTitle()"
               (input)="setSketchTitle($any($event.target).value)"
-              placeholder="Sketch title"
+              placeholder="Título do rascunho"
               maxlength="200"
             />
             <label class="dg-page">
@@ -732,9 +803,9 @@
               class="sketch-group-select"
               [value]="sketchGroupId() ?? ''"
               (change)="setSketchGroup($any($event.target).value)"
-              aria-label="Sketch group"
+              aria-label="Grupo do rascunho"
             >
-              <option value="">Ungrouped</option>
+              <option value="">Sem grupo</option>
               @for (group of sketchGroups(); track group.id) {
                 <option [value]="group.id">{{ group.name }}</option>
               }
@@ -748,7 +819,7 @@
               (sceneChange)="onSketchSceneChange($event)"
             />
           } @placeholder {
-            <div class="dg-loading">Loading canvas...</div>
+            <div class="dg-loading">Carregando tela...</div>
           }
         </div>
       }
@@ -1220,14 +1291,14 @@
     <aside class="notes-panel">
       <header class="dg-head">
         @if (noteView() === 'edit') {
-          <button mat-icon-button (click)="backToNoteList()" aria-label="Back to list">
+          <button mat-icon-button (click)="backToNoteList()" aria-label="Voltar à lista">
             <mat-icon>arrow_back</mat-icon>
           </button>
         }
-        <span class="dg-title"><mat-icon>edit_note</mat-icon> Notes</span>
+        <span class="dg-title"><mat-icon>edit_note</mat-icon> Notas</span>
         <kbd class="shortcut-key">{{ shortcuts.notes }}</kbd>
         <span class="ai-spacer"></span>
-        <button mat-icon-button (click)="toggleNotes()" aria-label="Close">
+        <button mat-icon-button (click)="toggleNotes()" aria-label="Fechar">
           <mat-icon>close</mat-icon>
         </button>
       </header>
@@ -1236,26 +1307,26 @@
         <div class="dg-list">
           <div class="dg-new">
             <button class="dg-new-btn" (click)="newNote()">
-              <mat-icon>post_add</mat-icon> New note
+              <mat-icon>post_add</mat-icon> Nova nota
             </button>
           </div>
           @if (noteList().length) {
             <input
               class="note-search"
               type="search"
-              placeholder="Search notes…"
-              aria-label="Search notes"
+              placeholder="Buscar notas…"
+              aria-label="Buscar notas"
               [value]="noteSearch()"
               (input)="setNoteSearch($any($event.target).value)"
             />
           }
           @if (!noteList().length) {
             <p class="dg-empty">
-              No notes yet. Capture concepts in your own words, summaries, questions and review
-              points in Markdown while you read.
+              Nenhuma nota ainda. Registre conceitos com suas palavras, resumos, perguntas e pontos
+              de revisão em Markdown enquanto lê.
             </p>
           } @else if (!filteredNotes().length) {
-            <p class="dg-empty">No notes match your search.</p>
+            <p class="dg-empty">Nenhuma nota corresponde à busca.</p>
           }
           @for (n of filteredNotes(); track n.id) {
             <button class="dg-card" (click)="openNote(n)">
@@ -1275,7 +1346,7 @@
               <span
                 class="dg-card-del"
                 role="button"
-                aria-label="Delete note"
+                aria-label="Excluir nota"
                 (click)="$event.stopPropagation(); deleteNote(n)"
               >
                 <mat-icon>delete</mat-icon>
@@ -1290,7 +1361,7 @@
               class="dg-name"
               [value]="noteTitle()"
               (input)="noteTitle.set($any($event.target).value)"
-              placeholder="Note title"
+              placeholder="Título da nota"
               maxlength="200"
             />
             <label class="dg-page">
@@ -1308,7 +1379,7 @@
               (click)="saveNote()"
               [disabled]="noteSaving() || !noteTitle().trim()"
             >
-              {{ noteSaving() ? 'Saving…' : 'Save' }}
+              {{ noteSaving() ? 'Salvando…' : 'Salvar' }}
             </button>
           </div>
 
@@ -1329,15 +1400,15 @@
   @if (tocOpen()) {
     <aside class="toc-panel">
       <header class="dg-head">
-        <span class="dg-title"><mat-icon>toc</mat-icon> Contents</span>
+        <span class="dg-title"><mat-icon>toc</mat-icon> Sumário</span>
         <kbd class="shortcut-key">{{ shortcuts.contents }}</kbd>
         <span class="ai-spacer"></span>
         <div class="toc-panel-actions">
           <button class="toc-action" type="button" (click)="addTocEntry()">
-            <mat-icon>add</mat-icon> New section
+            <mat-icon>add</mat-icon> Nova seção
           </button>
           <button class="toc-action" type="button" (click)="resetTocFromPdf()">
-            <mat-icon>restart_alt</mat-icon> Reset from PDF
+            <mat-icon>restart_alt</mat-icon> Restaurar do PDF
           </button>
           <button
             class="dg-save"
@@ -1345,20 +1416,20 @@
             (click)="saveToc()"
             [disabled]="tocSaving() || tocHasBlankTitle()"
           >
-            {{ tocSaving() ? 'Savingâ€¦' : 'Save' }}
+            {{ tocSaving() ? 'Salvando…' : 'Salvar' }}
           </button>
         </div>
-        <button mat-icon-button (click)="toggleToc()" aria-label="Close">
+        <button mat-icon-button (click)="toggleToc()" aria-label="Fechar">
           <mat-icon>close</mat-icon>
         </button>
       </header>
 
       <div class="toc-list">
         @if (!tocDraft().length) {
-          <p class="dg-empty">No contents yet.</p>
+          <p class="dg-empty">Nenhum conteúdo ainda.</p>
         }
         @if (tocHasBlankTitle()) {
-          <p class="toc-hint">Every section needs a title.</p>
+          <p class="toc-hint">Toda seção precisa de um título.</p>
         }
         @for (entry of tocDraft(); track $index) {
           <div class="toc-row">
@@ -1368,7 +1439,7 @@
               [value]="entry.title"
               (input)="setTocTitle($index, $any($event.target).value)"
               maxlength="512"
-              placeholder="Section title"
+              placeholder="Título da seção"
             />
             <label class="dg-page toc-page-field">
               p.
@@ -1386,7 +1457,7 @@
                 type="button"
                 (click)="outdentTocEntry($index)"
                 [disabled]="!canOutdent($index)"
-                aria-label="Outdent section"
+                aria-label="Diminuir recuo da seção"
               >
                 <mat-icon>format_indent_decrease</mat-icon>
               </button>
@@ -1395,7 +1466,7 @@
                 type="button"
                 (click)="indentTocEntry($index)"
                 [disabled]="!canIndent($index)"
-                aria-label="Indent section"
+                aria-label="Aumentar recuo da seção"
               >
                 <mat-icon>format_indent_increase</mat-icon>
               </button>
@@ -1403,7 +1474,7 @@
                 class="toc-icon"
                 type="button"
                 (click)="moveTocEntry($index, -1)"
-                aria-label="Move section up"
+                aria-label="Mover seção para cima"
               >
                 <mat-icon>keyboard_arrow_up</mat-icon>
               </button>
@@ -1411,7 +1482,7 @@
                 class="toc-icon"
                 type="button"
                 (click)="moveTocEntry($index, 1)"
-                aria-label="Move section down"
+                aria-label="Mover seção para baixo"
               >
                 <mat-icon>keyboard_arrow_down</mat-icon>
               </button>
@@ -1419,7 +1490,7 @@
                 class="toc-icon danger"
                 type="button"
                 (click)="deleteTocEntry($index)"
-                aria-label="Delete section"
+                aria-label="Excluir seção"
               >
                 <mat-icon>delete</mat-icon>
               </button>

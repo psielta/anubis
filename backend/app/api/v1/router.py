@@ -10,6 +10,7 @@ from app.api.v1.endpoints import (
     notes,
     sketches,
     study,
+    translate,
     users,
 )
 
@@ -25,4 +26,5 @@ api_router.include_router(notes.router)
 api_router.include_router(sketches.groups_router)
 api_router.include_router(sketches.router)
 api_router.include_router(study.router)
+api_router.include_router(translate.router)
 api_router.include_router(users.router)

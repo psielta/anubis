@@ -16,46 +16,50 @@ from google.genai import types
 from app.core.config import settings
 
 _SYSTEM_INSTRUCTION = (
-    "You are a focused study tutor for the user's book. Answer using ONLY the "
-    "attached document; if the answer is not in it, say so plainly. Always reply "
-    "in clear GitHub-flavored Markdown (headings, lists, bold, tables, code)."
+    "Você é um tutor de estudos focado no livro do usuário. Responda usando "
+    "APENAS o documento anexado; se a resposta não estiver nele, diga isso "
+    "claramente. Responda SEMPRE em português do Brasil (pt-BR), em Markdown "
+    "GitHub-flavored claro (títulos, listas, negrito, tabelas, código)."
 )
 
 _TASK_PROMPTS = {
     "summary": (
-        "Summarize this document for studying: the main ideas as Markdown headings "
-        "with bullet points, then a short '## Key takeaways' list."
+        "Resuma este documento para estudo: as ideias principais como títulos "
+        "Markdown com tópicos e, ao final, uma breve lista '## Principais "
+        "conclusões'. Escreva em português do Brasil."
     ),
     "flashcards": (
-        "Create study flashcards from this document as a Markdown list. For each "
-        "card use two lines: '**Q:** <question>' then '**A:** <answer>'."
+        "Crie flashcards de estudo a partir deste documento como uma lista "
+        "Markdown. Para cada cartão use duas linhas: '**P:** <pergunta>' e "
+        "depois '**R:** <resposta>'. Escreva em português do Brasil."
     ),
 }
 
 _EXERCISE_PROMPTS = {
     "statement": (
-        "The user cropped an exercise from the attached page. Here is the raw text "
-        "extracted from that crop (it may be noisy or out of order):\n\n"
+        "O usuário recortou um exercício da página anexada. Aqui está o texto "
+        "bruto extraído do recorte (pode estar ruidoso ou fora de ordem):\n\n"
         '"""\n{statement}\n"""\n\n'
-        "Rewrite it as a single clean, faithful problem statement in Markdown. Keep "
-        "every given value, number and formula (use LaTeX, e.g. $x^2$). Do NOT solve "
-        "it. Output only the cleaned statement, with no preamble."
+        "Reescreva-o como um enunciado de problema único, limpo e fiel, em "
+        "Markdown. Mantenha todos os valores, números e fórmulas dados (use "
+        "LaTeX, ex.: $x^2$). NÃO resolva. Devolva apenas o enunciado limpo, sem "
+        "preâmbulo. Escreva em português do Brasil."
     ),
     "hint": (
-        "The user is solving this exercise, cropped from the attached page:\n\n"
+        "O usuário está resolvendo este exercício, recortado da página anexada:\n\n"
         '"""\n{statement}\n"""\n\n'
-        "Give a step-by-step guided hint that leads toward the solution without "
-        "stating the final answer up front. Use Markdown and LaTeX ($...$). Finish "
-        "by saying what to compute next."
+        "Dê uma dica guiada, passo a passo, que conduza à solução sem revelar a "
+        "resposta final de imediato. Use Markdown e LaTeX ($...$). Termine "
+        "dizendo o que calcular em seguida. Escreva em português do Brasil."
     ),
     "review": (
-        "The user is solving this exercise, cropped from the attached page:\n\n"
+        "O usuário está resolvendo este exercício, recortado da página anexada:\n\n"
         '"""\n{statement}\n"""\n\n'
-        "Here is the user's attempted resolution (LaTeX source):\n\n"
+        "Aqui está a resolução tentada pelo usuário (código LaTeX):\n\n"
         '"""\n{work}\n"""\n\n'
-        "Review it: check each step, point out mistakes, and say whether the final "
-        "answer is correct. Be specific, concise and encouraging. Use Markdown and "
-        "LaTeX."
+        "Revise: verifique cada passo, aponte os erros e diga se a resposta "
+        "final está correta. Seja específico, conciso e encorajador. Use "
+        "Markdown e LaTeX. Escreva em português do Brasil."
     ),
 }
 
@@ -121,16 +125,17 @@ async def stream_reply(
 ) -> AsyncIterator[tuple[str, str]]:
     """Yield ('thinking'|'answer', text_chunk) from a streamed Gemini reply."""
     if selection:
-        focus = (question or "").strip() or "Explain this passage in its context."
+        focus = (question or "").strip() or "Explique esta passagem no seu contexto."
         prompt = (
-            "The user highlighted this passage from the document:\n\n"
+            "O usuário destacou esta passagem do documento:\n\n"
             f'"""\n{selection}\n"""\n\n'
             f"{focus}\n\n"
-            "Answer about THIS passage specifically; use the rest of the attached "
-            "pages only for context."
+            "Responda especificamente sobre ESTA passagem; use o restante das "
+            "páginas anexadas apenas como contexto. Responda em português do Brasil."
         )
     elif kind == "chat":
-        prompt = (question or "").strip() or "Explain the key points of this document."
+        fallback = "Explique os pontos principais deste documento."
+        prompt = (question or "").strip() or fallback
     else:
         prompt = _TASK_PROMPTS[kind]
 
@@ -153,7 +158,7 @@ async def stream_exercise_reply(
         work=work.strip() or "(empty)",
     )
     if question and question.strip():
-        prompt += f"\n\nThe user also asks: {question.strip()}"
+        prompt += f"\n\nO usuário também pergunta: {question.strip()}"
     async for item in _stream_prompt(gemini, part, prompt):
         yield item
 
@@ -184,3 +189,38 @@ async def _stream_prompt(
             if not text:
                 continue
             yield ("thinking" if getattr(piece, "thought", False) else "answer", text)
+
+
+_TRANSLATE_SYSTEM_INSTRUCTION = (
+    "Você é um tradutor especialista. Traduza a página de PDF anexada para "
+    "português do Brasil (pt-BR) com naturalidade e fidelidade ao significado. "
+    "Devolva APENAS a tradução em Markdown GitHub-flavored, espelhando o layout "
+    "original: mantenha títulos, listas, tabelas, negrito/itálico, citações e "
+    "notas de rodapé; mantenha blocos e trechos de código sem traduzir; "
+    "represente fórmulas como LaTeX ($...$ inline, $$...$$ em bloco) e preserve a "
+    "ordem de leitura de páginas em colunas. Não adicione comentários, títulos "
+    "extras, nem cerque a saída inteira em crases."
+)
+
+
+async def stream_translation(gemini: genai.Client, part: Any) -> AsyncIterator[str]:
+    """Yield Markdown chunks translating the attached PDF page into pt-BR."""
+    config = types.GenerateContentConfig(
+        system_instruction=_TRANSLATE_SYSTEM_INSTRUCTION,
+    )
+    stream = await gemini.aio.models.generate_content_stream(
+        model=settings.GEMINI_MODEL,
+        contents=[part, "Traduza esta página para português do Brasil em Markdown."],
+        config=config,
+    )
+    async for chunk in stream:
+        candidates = chunk.candidates or []
+        if not candidates:
+            continue
+        content = candidates[0].content
+        if content is None or not content.parts:
+            continue
+        for piece in content.parts:
+            text = getattr(piece, "text", None)
+            if text:
+                yield text

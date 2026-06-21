@@ -12,7 +12,8 @@ export type ReaderPanel =
   | 'sketches'
   | 'latex'
   | 'toc'
-  | 'content_tree';
+  | 'content_tree'
+  | 'translate';
 export type ReaderSubView = 'list' | 'edit';
 
 export interface ReaderNotesState {

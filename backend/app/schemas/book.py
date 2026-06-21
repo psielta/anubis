@@ -62,6 +62,7 @@ class ReaderState(BaseModel):
         "sketches",
         "toc",
         "content_tree",
+        "translate",
     ] | None = None
     panel_width_px: int = Field(default=400, ge=320, le=2000)
     notes: ReaderNotesState = Field(default_factory=ReaderNotesState)

@@ -29,10 +29,10 @@ class Settings(BaseSettings):
     MAX_UPLOAD_SIZE_MB: int = 250
     MAX_COVER_SIZE_MB: int = 5
 
-    # AI study assistant (Gemini). Override GEMINI_MODEL via .env as the
-    # lineup evolves (e.g. gemini-2.5-flash, gemini-3-flash-preview).
+    # AI study assistant + page translation (Gemini). Override GEMINI_MODEL via
+    # .env as the lineup evolves (e.g. gemini-3.5-flash, gemini-3-flash-preview).
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-2.5-flash"
+    GEMINI_MODEL: str = "gemini-3.5-flash"
     AI_INLINE_MAX_MB: int = 15
 
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")

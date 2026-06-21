@@ -6,6 +6,7 @@ from app.models.latex_notebook import LatexNotebook, LatexNotebookGroup
 from app.models.note import Note
 from app.models.sketch import Sketch, SketchGroup
 from app.models.study import StudyMessage
+from app.models.translation import PageTranslation
 from app.models.user import User
 
 __all__ = [
@@ -17,6 +18,7 @@ __all__ = [
     "LatexNotebook",
     "LatexNotebookGroup",
     "Note",
+    "PageTranslation",
     "Sketch",
     "SketchGroup",
     "StudyMessage",

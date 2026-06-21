@@ -365,6 +365,12 @@
   }
 }
 
+.ai-action.active {
+  color: var(--anubis-gold-bright);
+  background: var(--anubis-obsidian);
+  border-color: var(--anubis-obsidian);
+}
+
 .ai-ask {
   display: flex;
   gap: 0.5rem;
@@ -478,7 +484,8 @@
 .notes-toggle.active,
 .sketches-toggle.active,
 .toc-toggle.active,
-.content-tree-toggle.active {
+.content-tree-toggle.active,
+.translate-toggle.active {
   color: var(--anubis-gold-bright);
   background: rgba(200, 162, 76, 0.18);
 }
@@ -493,7 +500,8 @@
 .latex-panel,
 .exercise-panel,
 .toc-panel,
-.content-tree-panel {
+.content-tree-panel,
+.translate-panel {
   position: absolute;
   top: 56px;
   right: 0;
@@ -522,7 +530,8 @@
   .reader.latex-open:not(.latex-focus-open) .reader-stage,
   .reader.exercises-open:not(.exercise-focus-open) .reader-stage,
   .reader.toc-open .reader-stage,
-  .reader.content-tree-open .reader-stage {
+  .reader.content-tree-open .reader-stage,
+  .reader.translate-open .reader-stage {
     padding-inline-end: var(--dg-panel-w);
   }
 }
