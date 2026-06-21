@@ -14,7 +14,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
-import { MarkdownComponent } from 'ngx-markdown';
+import { KatexOptions, MarkdownComponent } from 'ngx-markdown';
 import { forkJoin } from 'rxjs';
 import * as pdfjsLib from 'pdfjs-dist';
 import type {
@@ -59,6 +59,24 @@ import { NotificationsService } from '../../core/services/notifications';
 // Served as a static asset (see angular.json); must be an absolute URL so
 // production nginx does not fall through to the SPA index.html.
 pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+
+// KaTeX (for rendering $…$/$$…$$ in the AI and translation Markdown) loads
+// lazily: the CSS is a static asset and the JS globals are imported on demand,
+// keeping them out of the initial bundle. ngx-markdown's `katex` plugin reads
+// the `katex`/`renderMathInElement` window globals at render time.
+let katexCssRequested = false;
+function ensureKatexCss(): void {
+  if (katexCssRequested || document.querySelector('link[data-katex]')) {
+    katexCssRequested = true;
+    return;
+  }
+  katexCssRequested = true;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = '/katex/katex.min.css';
+  link.setAttribute('data-katex', '');
+  document.head.appendChild(link);
+}
 
 interface PdfPage {
   num: number;
@@ -267,6 +285,10 @@ export class Reader implements OnInit, OnDestroy {
   private translateAbort: AbortController | null = null;
   private translatingPage = 0;
   private autoTranslateTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // KaTeX math rendering for the AI/translation Markdown panels.
+  protected readonly katexReady = signal(false);
+  protected readonly katexOptions: KatexOptions = { throwOnError: false };
 
   // Study diagrams
   protected readonly diagramsOpen = signal(false);
@@ -482,6 +504,7 @@ export class Reader implements OnInit, OnDestroy {
       return;
     }
     this.document.addEventListener('keydown', this.readerKeydown);
+    void this.initKatex();
     this.library.get(this.bookId).subscribe({
       next: (book) => {
         this.book.set(book);
@@ -527,6 +550,22 @@ export class Reader implements OnInit, OnDestroy {
   private errorText(err: unknown, fallback: string): string {
     const detail = (err as { error?: { detail?: unknown } })?.error?.detail;
     return typeof detail === 'string' && detail.trim() ? detail : fallback;
+  }
+
+  /** Load KaTeX (CSS + JS globals) so ngx-markdown can render $…$/$$…$$ math. */
+  private async initKatex(): Promise<void> {
+    ensureKatexCss();
+    const w = window as unknown as { katex?: unknown; renderMathInElement?: unknown };
+    try {
+      if (!w.katex) w.katex = (await import('katex')).default;
+      if (!w.renderMathInElement) {
+        w.renderMathInElement = (await import('katex/contrib/auto-render')).default;
+      }
+      this.katexReady.set(true);
+    } catch {
+      // If KaTeX fails to load, Markdown still renders — just without math.
+      this.katexReady.set(false);
+    }
   }
 
   goBack() {

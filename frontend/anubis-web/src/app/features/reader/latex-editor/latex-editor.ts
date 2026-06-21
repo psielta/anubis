@@ -201,6 +201,12 @@ export class LatexEditor implements AfterViewInit, OnDestroy {
 
   protected readonly groups = TOOLBAR;
 
+  // The symbol palette is tall; let the user collapse it (persisted) to give
+  // the source + preview more room.
+  protected readonly toolbarCollapsed = signal(
+    localStorage.getItem('anubis_latex_toolbar_collapsed') === '1',
+  );
+
   private textarea = viewChild<ElementRef<HTMLTextAreaElement>>('source');
   private preview = viewChild<ElementRef<HTMLDivElement>>('preview');
 
@@ -239,6 +245,12 @@ export class LatexEditor implements AfterViewInit, OnDestroy {
   /** Latest source, read straight from the live textarea. */
   getSource(): string {
     return this.textarea()?.nativeElement.value ?? this.source();
+  }
+
+  protected toggleToolbar(): void {
+    const next = !this.toolbarCollapsed();
+    this.toolbarCollapsed.set(next);
+    localStorage.setItem('anubis_latex_toolbar_collapsed', next ? '1' : '0');
   }
 
   protected onInput(): void {

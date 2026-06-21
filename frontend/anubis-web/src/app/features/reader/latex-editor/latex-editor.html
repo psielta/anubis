@@ -1,20 +1,34 @@
-<div class="latex-toolbar">
-  @for (group of groups; track group.name) {
-    <div class="latex-toolbar-group">
-      @for (item of group.items; track item.snippet) {
-        <button
-          type="button"
-          class="latex-key"
-          [title]="item.title"
-          [attr.aria-label]="item.title"
-          (click)="insert(item)"
-        >
-          {{ item.label }}
-        </button>
-      }
-    </div>
-  }
+<div class="latex-toolbar-bar">
+  <button
+    type="button"
+    class="latex-toolbar-toggle"
+    [attr.aria-expanded]="!toolbarCollapsed()"
+    (click)="toggleToolbar()"
+    title="Mostrar/ocultar símbolos"
+  >
+    <span class="latex-toolbar-caret" [class.collapsed]="toolbarCollapsed()">▾</span>
+    Símbolos
+  </button>
 </div>
+@if (!toolbarCollapsed()) {
+  <div class="latex-toolbar">
+    @for (group of groups; track group.name) {
+      <div class="latex-toolbar-group">
+        @for (item of group.items; track item.snippet) {
+          <button
+            type="button"
+            class="latex-key"
+            [title]="item.title"
+            [attr.aria-label]="item.title"
+            (click)="insert(item)"
+          >
+            {{ item.label }}
+          </button>
+        }
+      </div>
+    }
+  </div>
+}
 
 <div class="latex-body">
   <textarea

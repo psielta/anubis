@@ -366,7 +366,7 @@
               @if (m.kind !== 'chat') {
                 <span class="ai-scope-label">{{ m.kind }} · {{ m.scope }}</span>
               }
-              <markdown class="md-body" [data]="m.content" />
+              <markdown class="md-body" [katex]="katexReady()" [katexOptions]="katexOptions" [data]="m.content" />
             </div>
           }
         }
@@ -385,7 +385,7 @@
               </details>
             }
             @if (streamingAnswer()) {
-              <markdown class="md-body" [data]="streamingAnswer()" />
+              <markdown class="md-body" [katex]="katexReady()" [katexOptions]="katexOptions" [data]="streamingAnswer()" />
             } @else if (!thinking()) {
               <p class="ai-working">Processando…</p>
             }
@@ -470,7 +470,7 @@
           <span class="ai-scope-label">Página {{ translatedPageReadout() }}</span>
         }
         @if (translatedMarkdown()) {
-          <markdown class="md-body" [data]="translatedMarkdown()" />
+          <markdown class="md-body" [katex]="katexReady()" [katexOptions]="katexOptions" [data]="translatedMarkdown()" />
         }
         @if (translateBusy() && !translatedMarkdown()) {
           <p class="ai-working">Traduzindo…</p>
@@ -1270,7 +1270,7 @@
                   <span class="exercise-ai-loading">A IA está pensando…</span>
                 }
                 @if (exerciseAiText()) {
-                  <markdown class="md-body" [data]="exerciseAiText()" />
+                  <markdown class="md-body" [katex]="katexReady()" [katexOptions]="katexOptions" [data]="exerciseAiText()" />
                 }
               </div>
             }

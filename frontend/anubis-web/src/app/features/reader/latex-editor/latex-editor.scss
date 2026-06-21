@@ -5,6 +5,43 @@
   min-height: 0;
 }
 
+.latex-toolbar-bar {
+  display: flex;
+  align-items: center;
+  padding: 4px 6px;
+  background: var(--anubis-surface);
+  border-bottom: 1px solid var(--anubis-line);
+}
+
+.latex-toolbar-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px;
+  border: none;
+  background: transparent;
+  color: var(--anubis-ink-soft);
+  font-family: 'Spectral', serif;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+
+  &:hover {
+    color: var(--anubis-gold-deep);
+  }
+}
+
+.latex-toolbar-caret {
+  display: inline-block;
+  font-size: 0.7rem;
+  transition: transform 0.15s ease;
+
+  &.collapsed {
+    transform: rotate(-90deg);
+  }
+}
+
 .latex-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -80,7 +117,7 @@
 
 .latex-preview {
   flex: 1 1 60%;
-  min-height: 0;
+  min-height: 120px;
   overflow: auto;
   padding: 14px 12px;
   background: var(--anubis-canvas);
