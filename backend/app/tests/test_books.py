@@ -436,6 +436,7 @@ def _reader_state_payload(**overrides):
             "active_group_id": None,
             "search": "",
         },
+        "exercises": {"view": "list", "active_id": None, "search": ""},
     }
     payload.update(overrides)
     return payload

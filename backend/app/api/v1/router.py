@@ -5,6 +5,7 @@ from app.api.v1.endpoints import (
     books,
     collections,
     diagrams,
+    exercise_resolutions,
     latex_notebooks,
     notes,
     sketches,
@@ -17,6 +18,7 @@ api_router.include_router(auth.router)
 api_router.include_router(books.router)
 api_router.include_router(collections.router)
 api_router.include_router(diagrams.router)
+api_router.include_router(exercise_resolutions.router)
 api_router.include_router(latex_notebooks.groups_router)
 api_router.include_router(latex_notebooks.router)
 api_router.include_router(notes.router)

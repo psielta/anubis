@@ -29,6 +29,7 @@ import { DiagramsService } from '../../core/services/diagrams';
 import { NotesService } from '../../core/services/notes';
 import { SketchesService } from '../../core/services/sketches';
 import { LatexNotebooksService } from '../../core/services/latex-notebooks';
+import { ExerciseResolutionsService } from '../../core/services/exercise-resolutions';
 import { TocService } from '../../core/services/toc';
 import { Book, ReaderPanel, ReaderState } from '../../core/models/book.model';
 import { StudyKind, StudyMessage, StudyRequest } from '../../core/models/study.model';
@@ -36,7 +37,16 @@ import { Diagram, DiagramType } from '../../core/models/diagram.model';
 import { Note } from '../../core/models/note.model';
 import { Sketch, SketchGroup } from '../../core/models/sketch.model';
 import { LatexNotebook, LatexNotebookGroup } from '../../core/models/latex-notebook.model';
+import {
+  ExerciseAIMode,
+  ExerciseAttempt,
+  ExerciseRegion,
+  ExerciseResolution,
+  ExerciseStatus,
+} from '../../core/models/exercise-resolution.model';
 import { ExcalidrawCanvas } from './excalidraw-canvas/excalidraw-canvas';
+import { ExerciseCrop } from './exercise-crop/exercise-crop';
+import { AreaSelectDirective, AreaSelection } from './area-select.directive';
 import { MermaidPreview } from './mermaid-preview/mermaid-preview';
 import { NoteEditor } from './note-editor/note-editor';
 import { LatexEditor } from './latex-editor/latex-editor';
@@ -103,6 +113,8 @@ type ReaderShortcutAction =
   | 'notes'
   | 'sketches'
   | 'latex'
+  | 'exercises'
+  | 'crop'
   | 'contents'
   | 'contentTree'
   | 'commandPalette';
@@ -111,6 +123,7 @@ const SAVE_DEBOUNCE_MS = 1200;
 const READER_STATE_DEBOUNCE_MS = 800;
 const SKETCH_AUTOSAVE_MS = 1500;
 const LATEX_AUTOSAVE_MS = 1500;
+const EXERCISE_AUTOSAVE_MS = 1500;
 
 @Component({
   selector: 'app-reader',
@@ -124,6 +137,8 @@ const LATEX_AUTOSAVE_MS = 1500;
     MermaidPreview,
     NoteEditor,
     LatexEditor,
+    ExerciseCrop,
+    AreaSelectDirective,
     PanelResizerDirective,
   ],
   templateUrl: './reader.html',
@@ -140,6 +155,7 @@ export class Reader implements OnInit, OnDestroy {
   private notes = inject(NotesService);
   private sketches = inject(SketchesService);
   private latexNotebooks = inject(LatexNotebooksService);
+  private exercises = inject(ExerciseResolutionsService);
   private tocService = inject(TocService);
   private prefs = inject(ReaderPrefsService);
   private notify = inject(NotificationsService);
@@ -153,7 +169,8 @@ export class Reader implements OnInit, OnDestroy {
       this.notesOpen() ||
       this.diagramsOpen() ||
       (this.sketchesOpen() && !this.sketchFocus()) ||
-      (this.latexOpen() && !this.latexFocus()),
+      (this.latexOpen() && !this.latexFocus()) ||
+      (this.exercisesOpen() && !this.exerciseFocus()),
   );
 
   private viewport = viewChild<ElementRef<HTMLDivElement>>('viewport');
@@ -161,6 +178,8 @@ export class Reader implements OnInit, OnDestroy {
   private excalidrawCanvas = viewChild(ExcalidrawCanvas);
   private noteEditor = viewChild(NoteEditor);
   private latexEditor = viewChild(LatexEditor);
+  private exerciseLatexEditor = viewChild('exLatexEditor', { read: LatexEditor });
+  private exerciseSketchCanvas = viewChild('exSketchCanvas', { read: ExcalidrawCanvas });
 
   protected readonly book = signal<Book | null>(null);
   protected readonly loading = signal(true);
@@ -202,6 +221,8 @@ export class Reader implements OnInit, OnDestroy {
     notes: 'Alt+Shift+N',
     sketches: 'Alt+Shift+S',
     latex: 'Alt+Shift+L',
+    exercises: 'Alt+Shift+X',
+    crop: 'Alt+Shift+E',
     contents: 'Alt+Shift+C',
     contentTree: 'Alt+Shift+M',
     commandPalette: 'Ctrl+K',
@@ -332,6 +353,49 @@ export class Reader implements OnInit, OnDestroy {
     return sections;
   });
 
+  // Exercise resolutions (cropped exercises → solving workspace)
+  protected readonly cropMode = signal(false);
+  protected readonly cropDraft = signal<AreaSelection | null>(null);
+  protected readonly cropDraftTitle = signal('');
+  protected readonly cropDraftStatement = signal('');
+  protected readonly cropAnchorTop = signal(0);
+  protected readonly cropAnchorLeft = signal(0);
+  protected readonly exercisesOpen = signal(false);
+  protected readonly exerciseView = signal<'list' | 'edit'>('list');
+  protected readonly exerciseList = signal<ExerciseResolution[]>([]);
+  protected readonly exercisesLoaded = signal(false);
+  protected readonly exercisesError = signal<string | null>(null);
+  protected readonly exerciseSearch = signal('');
+  protected readonly activeExercise = signal<ExerciseResolution | null>(null);
+  protected readonly exerciseTitle = signal('');
+  protected readonly exerciseStatement = signal('');
+  protected readonly exerciseLatex = signal('');
+  protected readonly exerciseSketch = signal('');
+  protected readonly exerciseStatus = signal<ExerciseStatus>('pending');
+  protected readonly exerciseTab = signal<'latex' | 'sketch'>('latex');
+  protected readonly exerciseEpoch = signal(0); // bump to force-remount the editors
+  protected readonly exerciseSaving = signal(false);
+  protected readonly exerciseSaveStatus = signal<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  protected readonly exerciseFocus = signal(false);
+  protected readonly readerPdfDoc = signal<PDFDocumentProxy | null>(null);
+  // Attempt history ("ver resolução anterior")
+  protected readonly attemptsOpen = signal(false);
+  protected readonly attemptList = signal<ExerciseAttempt[]>([]);
+  protected readonly attemptsLoading = signal(false);
+  // Exercise AI (clean statement / hint / review)
+  protected readonly exerciseAiBusy = signal(false);
+  protected readonly exerciseAiMode = signal<ExerciseAIMode | null>(null);
+  protected readonly exerciseAiText = signal('');
+  protected readonly exerciseAiError = signal<string | null>(null);
+  protected readonly filteredExercises = computed(() => {
+    const q = this.exerciseSearch().trim().toLowerCase();
+    const list = this.exerciseList();
+    if (!q) return list;
+    return list.filter(
+      (e) => e.title.toLowerCase().includes(q) || e.statement.toLowerCase().includes(q),
+    );
+  });
+
   private bookId = 0;
   private data: ArrayBuffer | null = null;
   private initialized = false;
@@ -368,6 +432,15 @@ export class Reader implements OnInit, OnDestroy {
     page: number | null;
     group_id: number | null;
   } | null = null;
+  private exerciseAutoSaveTimer: ReturnType<typeof setTimeout> | null = null;
+  private exerciseSaveQueued = false;
+  private exerciseLastSaved: {
+    title: string;
+    statement: string;
+    latex_content: string;
+    sketch_content: string;
+  } | null = null;
+  private exerciseAiController: AbortController | null = null;
   private readonly readerKeydown = (event: KeyboardEvent) => this.handleReaderKeydown(event);
 
   ngOnInit() {
@@ -403,9 +476,11 @@ export class Reader implements OnInit, OnDestroy {
     this.flushProgress();
     this.flushSketchAutosave();
     this.flushLatexAutosave();
+    this.flushExerciseAutosave();
     if (this.readerStateTimer) clearTimeout(this.readerStateTimer);
     this.flushReaderState();
     this.aiController?.abort();
+    this.exerciseAiController?.abort();
     this.observer?.disconnect();
     this.loadingTask?.destroy();
   }
@@ -452,6 +527,7 @@ export class Reader implements OnInit, OnDestroy {
     try {
       this.loadingTask = pdfjsLib.getDocument({ data });
       this.pdfDoc = await this.loadingTask.promise;
+      this.readerPdfDoc.set(this.pdfDoc);
       this.pageCount.set(this.pdfDoc.numPages);
       await this.loadPageLabels();
       await this.estimatePrintedPageOffset();
@@ -777,6 +853,10 @@ export class Reader implements OnInit, OnDestroy {
         return 'sketches';
       case 'KeyL':
         return 'latex';
+      case 'KeyX':
+        return 'exercises';
+      case 'KeyE':
+        return 'crop';
       case 'KeyC':
         return 'contents';
       case 'KeyM':
@@ -805,6 +885,12 @@ export class Reader implements OnInit, OnDestroy {
         break;
       case 'latex':
         this.toggleLatex();
+        break;
+      case 'exercises':
+        this.toggleExercises();
+        break;
+      case 'crop':
+        this.toggleCropMode();
         break;
       case 'contents':
         this.toggleToc();
@@ -1214,12 +1300,14 @@ export class Reader implements OnInit, OnDestroy {
     this.noteSearch.set(state.notes.search ?? '');
     this.sketchSearch.set(state.sketches?.search ?? '');
     this.latexSearch.set(state.latex?.search ?? '');
+    this.exerciseSearch.set(state.exercises?.search ?? '');
 
     this.panelOpen.set(false);
     this.diagramsOpen.set(false);
     this.notesOpen.set(false);
     this.sketchesOpen.set(false);
     this.latexOpen.set(false);
+    this.exercisesOpen.set(false);
     this.tocOpen.set(false);
     this.contentTreeOpen.set(false);
 
@@ -1245,6 +1333,10 @@ export class Reader implements OnInit, OnDestroy {
         this.latexOpen.set(true);
         this.restoreLatexState(state);
         break;
+      case 'exercises':
+        this.exercisesOpen.set(true);
+        this.restoreExercisesState(state);
+        break;
       case 'toc':
         this.tocOpen.set(true);
         this.tocDraft.set(this.cloneToc(this.toc()));
@@ -1267,6 +1359,7 @@ export class Reader implements OnInit, OnDestroy {
     if (this.notesOpen()) return 'notes';
     if (this.sketchesOpen()) return 'sketches';
     if (this.latexOpen()) return 'latex';
+    if (this.exercisesOpen()) return 'exercises';
     if (this.tocOpen()) return 'toc';
     if (this.contentTreeOpen()) return 'content_tree';
     return null;
@@ -1277,6 +1370,7 @@ export class Reader implements OnInit, OnDestroy {
     const activeDiagram = this.activeDiagram();
     const activeSketch = this.activeSketch();
     const activeLatex = this.activeLatex();
+    const activeExercise = this.activeExercise();
     return {
       version: 1,
       zoom_pct: this.zoomPct(),
@@ -1302,6 +1396,11 @@ export class Reader implements OnInit, OnDestroy {
         active_id: activeLatex?.id ?? null,
         active_group_id: this.selectedLatexGroupId(),
         search: this.latexSearch(),
+      },
+      exercises: {
+        view: activeExercise && this.exerciseView() === 'edit' ? 'edit' : 'list',
+        active_id: activeExercise?.id ?? null,
+        search: this.exerciseSearch(),
       },
     };
   }
@@ -1352,6 +1451,7 @@ export class Reader implements OnInit, OnDestroy {
       this.notesOpen.set(false);
       this.closeSketchesPanel();
       this.closeLatexPanel();
+      this.closeExercisesPanel();
       this.tocOpen.set(false);
       this.contentTreeOpen.set(false);
       if (!this.historyLoaded) this.loadHistory();
@@ -1360,6 +1460,7 @@ export class Reader implements OnInit, OnDestroy {
   }
 
   captureSelection() {
+    if (this.cropMode()) return;
     const selection = window.getSelection();
     const text = selection?.toString().trim() ?? '';
     if (!text || !selection || selection.rangeCount === 0) {
@@ -1426,6 +1527,7 @@ export class Reader implements OnInit, OnDestroy {
       this.notesOpen.set(false);
       this.closeSketchesPanel();
       this.closeLatexPanel();
+      this.closeExercisesPanel();
       this.tocOpen.set(false);
       this.contentTreeOpen.set(false);
       this.panelOpen.set(true);
@@ -1571,6 +1673,7 @@ export class Reader implements OnInit, OnDestroy {
       this.notesOpen.set(false);
       this.closeSketchesPanel();
       this.closeLatexPanel();
+      this.closeExercisesPanel();
       this.contentTreeOpen.set(false);
       this.tocDraft.set(this.cloneToc(this.toc()));
       this.tocError.set(null);
@@ -1762,6 +1865,7 @@ export class Reader implements OnInit, OnDestroy {
       this.notesOpen.set(false);
       this.closeSketchesPanel();
       this.closeLatexPanel();
+      this.closeExercisesPanel();
       this.tocOpen.set(false);
       this.contentTreeError.set(null);
     }
@@ -1880,6 +1984,7 @@ export class Reader implements OnInit, OnDestroy {
       this.notesOpen.set(false);
       this.closeSketchesPanel();
       this.closeLatexPanel();
+      this.closeExercisesPanel();
       this.tocOpen.set(false);
       this.contentTreeOpen.set(false);
       if (!this.diagramsLoaded()) this.loadDiagrams();
@@ -2042,6 +2147,7 @@ export class Reader implements OnInit, OnDestroy {
     this.tocOpen.set(false);
     this.contentTreeOpen.set(false);
     this.closeLatexPanel();
+    this.closeExercisesPanel();
     this.sketchesError.set(null);
     if (!this.sketchesLoaded()) this.loadSketches();
     this.scheduleReaderStateSave();
@@ -2396,6 +2502,7 @@ export class Reader implements OnInit, OnDestroy {
     this.diagramsOpen.set(false);
     this.notesOpen.set(false);
     this.closeSketchesPanel();
+    this.closeExercisesPanel();
     this.tocOpen.set(false);
     this.contentTreeOpen.set(false);
     this.latexError.set(null);
@@ -2739,6 +2846,614 @@ export class Reader implements OnInit, OnDestroy {
   }
 
   // --- Study notes (Markdown) ----------------------------------------------
+  // --- Exercise resolutions (cropped exercises) ----------------------------
+  toggleCropMode() {
+    if (this.loading() || this.error()) return;
+    const next = !this.cropMode();
+    this.cropMode.set(next);
+    this.cropDraft.set(null);
+    if (next) this.hideSelectionButton();
+  }
+
+  toggleExercises() {
+    const open = !this.exercisesOpen();
+    if (!open) {
+      this.closeExercisesPanel();
+      this.scheduleReaderStateSave();
+      return;
+    }
+    this.openExercisesPanel();
+    this.exercisesError.set(null);
+    if (!this.exercisesLoaded()) this.loadExercises();
+    this.scheduleReaderStateSave();
+  }
+
+  private openExercisesPanel() {
+    this.exercisesOpen.set(true);
+    this.panelOpen.set(false);
+    this.diagramsOpen.set(false);
+    this.notesOpen.set(false);
+    this.closeSketchesPanel();
+    this.closeLatexPanel();
+    this.tocOpen.set(false);
+    this.contentTreeOpen.set(false);
+  }
+
+  private closeExercisesPanel() {
+    if (!this.exercisesOpen()) return;
+    this.flushExerciseAutosave();
+    this.exerciseFocus.set(false);
+    this.attemptsOpen.set(false);
+    this.exercisesOpen.set(false);
+  }
+
+  private loadExercises(afterLoad?: () => void) {
+    this.exercises.list(this.bookId).subscribe({
+      next: (items) => {
+        this.exerciseList.set(items);
+        this.exercisesLoaded.set(true);
+        afterLoad?.();
+      },
+      error: (err) => {
+        const message = this.errorText(err, 'Não foi possível carregar as resoluções');
+        this.exercisesError.set(message);
+        this.notify.error(message);
+      },
+    });
+  }
+
+  private restoreExercisesState(state: ReaderState) {
+    const exState = state.exercises;
+    const activeId = exState?.view === 'edit' ? exState.active_id : null;
+    this.loadExercises(() => {
+      if (!this.exercisesOpen()) return;
+      if (!activeId) {
+        this.exerciseView.set('list');
+        return;
+      }
+      const found = this.exerciseList().find((e) => e.id === activeId);
+      if (found) {
+        this.setActiveExercise(found);
+      } else {
+        this.exercises.get(this.bookId, activeId).subscribe({
+          next: (item) => {
+            if (!this.exercisesOpen()) return;
+            this.exerciseList.update((list) =>
+              this.sortExercises([item, ...list.filter((e) => e.id !== item.id)]),
+            );
+            this.setActiveExercise(item);
+          },
+          error: () => this.exerciseView.set('list'),
+        });
+      }
+    });
+  }
+
+  onRegionSelected(sel: AreaSelection) {
+    this.cropMode.set(false);
+    this.cropDraft.set(sel);
+    this.cropDraftTitle.set('Exercício');
+    this.cropDraftStatement.set('');
+    this.cropAnchorLeft.set(Math.max(8, Math.min(sel.anchor.x, window.innerWidth - 320)));
+    this.cropAnchorTop.set(Math.max(8, Math.min(sel.anchor.y + 8, window.innerHeight - 200)));
+    void this.extractRegionText(sel.page, sel.region).then((text) => {
+      if (this.cropDraft() !== sel) return;
+      this.cropDraftStatement.set(text);
+      this.cropDraftTitle.set(this.suggestExerciseTitle(text));
+    });
+  }
+
+  private async extractRegionText(page: number, region: ExerciseRegion): Promise<string> {
+    const doc = this.pdfDoc;
+    if (!doc) return '';
+    try {
+      const p = await doc.getPage(page);
+      const viewport = p.getViewport({ scale: 1 });
+      const content = await p.getTextContent();
+      const x0 = region.x0 * viewport.width;
+      const x1 = region.x1 * viewport.width;
+      const y0 = region.y0 * viewport.height;
+      const y1 = region.y1 * viewport.height;
+      const parts: string[] = [];
+      for (const item of content.items) {
+        if (!this.isPdfTextItem(item)) continue;
+        const t = item.transform;
+        if (t.length < 6) continue;
+        const x = Number(t[4]);
+        // pdf.js text origins are bottom-left; flip to top-left viewport space.
+        const y = viewport.height - Number(t[5]);
+        if (x >= x0 - 2 && x <= x1 + 2 && y >= y0 - 2 && y <= y1 + 4 && item.str) {
+          parts.push(item.str);
+        }
+      }
+      return parts.join(' ').replace(/\s+/g, ' ').trim().slice(0, 8000);
+    } catch {
+      return '';
+    }
+  }
+
+  private suggestExerciseTitle(text: string): string {
+    const match = text.match(/exerc[íi]cio\s*[º°]?\s*[\dA-Za-z]+/i);
+    if (match) {
+      const label = match[0].replace(/\s+/g, ' ').trim();
+      return label.charAt(0).toUpperCase() + label.slice(1);
+    }
+    const firstLine = (text.split(/[.;\n]/)[0] ?? '').trim();
+    if (firstLine) return firstLine.length > 60 ? firstLine.slice(0, 60) + '…' : firstLine;
+    return 'Exercício';
+  }
+
+  setCropTitle(value: string) {
+    this.cropDraftTitle.set(value);
+  }
+
+  cancelCrop() {
+    this.cropDraft.set(null);
+  }
+
+  confirmCrop() {
+    const draft = this.cropDraft();
+    if (!draft) return;
+    const title = this.cropDraftTitle().trim() || 'Exercício';
+    const statement = this.cropDraftStatement();
+    this.cropDraft.set(null);
+    this.exercisesError.set(null);
+    this.exercises
+      .create(this.bookId, { title, page: draft.page, region: draft.region, statement })
+      .subscribe({
+        next: (saved) => {
+          this.exerciseList.update((list) => this.sortExercises([saved, ...list]));
+          this.exercisesLoaded.set(true);
+          this.openExercisesPanel();
+          this.setActiveExercise(saved);
+          this.scheduleReaderStateSave();
+          this.notify.success('Resolução criada');
+        },
+        error: (err) => {
+          const message = this.errorText(err, 'Não foi possível criar a resolução');
+          this.exercisesError.set(message);
+          this.notify.error(message);
+        },
+      });
+  }
+
+  openExercise(res: ExerciseResolution) {
+    if (this.activeExercise()?.id !== res.id) this.flushExerciseAutosave();
+    this.setActiveExercise(res);
+    this.scheduleReaderStateSave();
+  }
+
+  private setActiveExercise(res: ExerciseResolution) {
+    this.activeExercise.set(res);
+    this.exerciseTitle.set(res.title);
+    this.exerciseStatement.set(res.statement);
+    this.exerciseLatex.set(res.latex_content);
+    this.exerciseSketch.set(res.sketch_content);
+    this.exerciseStatus.set(res.status);
+    this.exerciseTab.set('latex');
+    this.attemptsOpen.set(false);
+    this.exerciseAiText.set('');
+    this.exerciseAiMode.set(null);
+    this.exerciseAiError.set(null);
+    this.exerciseLastSaved = {
+      title: res.title,
+      statement: res.statement,
+      latex_content: res.latex_content,
+      sketch_content: res.sketch_content,
+    };
+    this.exerciseSaveStatus.set('saved');
+    this.exercisesError.set(null);
+    this.bumpExerciseEpoch();
+    this.exerciseView.set('edit');
+  }
+
+  backToExerciseList() {
+    this.flushExerciseAutosave();
+    this.exerciseFocus.set(false);
+    this.attemptsOpen.set(false);
+    this.exerciseView.set('list');
+    this.scheduleReaderStateSave();
+  }
+
+  setExerciseSearch(value: string) {
+    this.exerciseSearch.set(value);
+    this.scheduleReaderStateSave();
+  }
+
+  setExerciseTitle(value: string) {
+    this.exerciseTitle.set(value);
+    this.scheduleExerciseAutosave();
+  }
+
+  setExerciseStatement(value: string) {
+    this.exerciseStatement.set(value);
+    this.scheduleExerciseAutosave();
+  }
+
+  setExerciseTab(tab: 'latex' | 'sketch') {
+    if (this.exerciseTab() === tab) return;
+    this.pullExerciseContent();
+    this.exerciseTab.set(tab);
+  }
+
+  onExerciseLatexChange(source: string) {
+    this.exerciseLatex.set(source);
+    this.scheduleExerciseAutosave();
+  }
+
+  onExerciseSketchChange(scene: string) {
+    this.exerciseSketch.set(scene);
+    this.scheduleExerciseAutosave();
+  }
+
+  setExerciseStatus(status: ExerciseStatus) {
+    const res = this.activeExercise();
+    if (!res) return;
+    this.exerciseStatus.set(status);
+    this.exercises.update(this.bookId, res.id, { status }).subscribe({
+      next: (saved) => this.applySavedExercise(saved),
+      error: (err) => this.notify.error(this.errorText(err, 'Não foi possível salvar o status')),
+    });
+  }
+
+  toggleExerciseFocus() {
+    this.exerciseFocus.update((v) => !v);
+  }
+
+  exerciseUpdatedLabel(res: ExerciseResolution): string {
+    return new Date(res.updated_at).toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  }
+
+  attemptLabel(attempt: ExerciseAttempt): string {
+    return new Date(attempt.created_at).toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }
+
+  deleteExercise(res: ExerciseResolution) {
+    const ok = window.confirm(`Excluir "${res.title}"?`);
+    if (!ok) return;
+    this.exercises.remove(this.bookId, res.id).subscribe({
+      next: () => {
+        this.exerciseList.update((list) => list.filter((e) => e.id !== res.id));
+        if (this.activeExercise()?.id === res.id) {
+          this.activeExercise.set(null);
+          this.exerciseLastSaved = null;
+          this.exerciseFocus.set(false);
+          this.attemptsOpen.set(false);
+          this.exerciseView.set('list');
+          this.exerciseSaveStatus.set('idle');
+        }
+        this.scheduleReaderStateSave();
+        this.notify.success('Resolução excluída');
+      },
+      error: (err) => {
+        const message = this.errorText(err, 'Não foi possível excluir a resolução');
+        this.exercisesError.set(message);
+        this.notify.error(message);
+      },
+    });
+  }
+
+  private bumpExerciseEpoch() {
+    this.exerciseEpoch.update((v) => v + 1);
+  }
+
+  toggleAttempts() {
+    const res = this.activeExercise();
+    if (!res) return;
+    const open = !this.attemptsOpen();
+    this.attemptsOpen.set(open);
+    if (!open) return;
+    this.attemptsLoading.set(true);
+    this.exercises.listAttempts(this.bookId, res.id).subscribe({
+      next: (list) => {
+        this.attemptList.set(list);
+        this.attemptsLoading.set(false);
+      },
+      error: (err) => {
+        this.attemptsLoading.set(false);
+        this.notify.error(this.errorText(err, 'Não foi possível carregar as tentativas'));
+      },
+    });
+  }
+
+  newAttempt() {
+    const res = this.activeExercise();
+    if (!res || this.exerciseSaving()) return;
+    const content = this.pullExerciseContent();
+    this.exerciseSaving.set(true);
+    this.exerciseSaveStatus.set('saving');
+    this.exercises.update(this.bookId, res.id, content).subscribe({
+      next: (saved) => {
+        this.applySavedExercise(saved);
+        this.exercises.createAttempt(this.bookId, res.id).subscribe({
+          next: (attempt) => {
+            this.attemptList.update((list) => [attempt, ...list]);
+            this.exercises
+              .update(this.bookId, res.id, { latex_content: '', sketch_content: '' })
+              .subscribe({
+                next: (cleared) => {
+                  this.applySavedExercise(cleared);
+                  this.exerciseLatex.set('');
+                  this.exerciseSketch.set('');
+                  this.exerciseTab.set('latex');
+                  this.exerciseAiText.set('');
+                  this.bumpExerciseEpoch();
+                  this.exerciseSaving.set(false);
+                  this.exerciseSaveStatus.set('saved');
+                  this.notify.success('Nova tentativa iniciada');
+                },
+                error: (err) => {
+                  this.exerciseSaving.set(false);
+                  this.notify.error(this.errorText(err, 'Não foi possível limpar a resolução'));
+                },
+              });
+          },
+          error: (err) => {
+            this.exerciseSaving.set(false);
+            this.notify.error(this.errorText(err, 'Não foi possível criar a tentativa'));
+          },
+        });
+      },
+      error: (err) => {
+        this.exerciseSaving.set(false);
+        this.exerciseSaveStatus.set('error');
+        this.notify.error(this.errorText(err, 'Não foi possível salvar a resolução'));
+      },
+    });
+  }
+
+  restoreAttempt(attempt: ExerciseAttempt) {
+    const res = this.activeExercise();
+    if (!res || this.exerciseSaving()) return;
+    const content = this.pullExerciseContent();
+    this.exerciseSaving.set(true);
+    this.exerciseSaveStatus.set('saving');
+    this.exercises.update(this.bookId, res.id, content).subscribe({
+      next: (saved) => {
+        this.applySavedExercise(saved);
+        this.exercises.createAttempt(this.bookId, res.id).subscribe({
+          next: (snap) => {
+            this.attemptList.update((list) => [snap, ...list]);
+            this.exercises
+              .update(this.bookId, res.id, {
+                latex_content: attempt.latex_content,
+                sketch_content: attempt.sketch_content,
+              })
+              .subscribe({
+                next: (restored) => {
+                  this.applySavedExercise(restored);
+                  this.exerciseLatex.set(restored.latex_content);
+                  this.exerciseSketch.set(restored.sketch_content);
+                  this.exerciseTab.set('latex');
+                  this.attemptsOpen.set(false);
+                  this.bumpExerciseEpoch();
+                  this.exerciseSaving.set(false);
+                  this.exerciseSaveStatus.set('saved');
+                  this.notify.success('Tentativa restaurada');
+                },
+                error: (err) => {
+                  this.exerciseSaving.set(false);
+                  this.notify.error(this.errorText(err, 'Não foi possível restaurar'));
+                },
+              });
+          },
+          error: (err) => {
+            this.exerciseSaving.set(false);
+            this.notify.error(this.errorText(err, 'Não foi possível criar a tentativa'));
+          },
+        });
+      },
+      error: (err) => {
+        this.exerciseSaving.set(false);
+        this.exerciseSaveStatus.set('error');
+        this.notify.error(this.errorText(err, 'Não foi possível salvar a resolução'));
+      },
+    });
+  }
+
+  askExerciseAI(mode: ExerciseAIMode) {
+    const res = this.activeExercise();
+    if (!res || this.exerciseAiBusy()) return;
+    const content = this.pullExerciseContent();
+    this.exerciseAiBusy.set(true);
+    this.exerciseAiMode.set(mode);
+    this.exerciseAiError.set(null);
+    this.exerciseAiText.set('');
+    // Persist the latest work first so the server-side AI reads the current state.
+    this.exercises.update(this.bookId, res.id, content).subscribe({
+      next: (saved) => {
+        this.applySavedExercise(saved);
+        if (mode === 'statement') this.exerciseStatement.set('');
+        this.streamExerciseAI(res.id, mode);
+      },
+      error: (err) => {
+        this.exerciseAiBusy.set(false);
+        const message = this.errorText(err, 'Não foi possível preparar a IA');
+        this.exerciseAiError.set(message);
+        this.notify.error(message);
+      },
+    });
+  }
+
+  private streamExerciseAI(id: number, mode: ExerciseAIMode) {
+    this.exerciseAiController?.abort();
+    const controller = new AbortController();
+    this.exerciseAiController = controller;
+    void this.exercises.askAI(
+      this.bookId,
+      id,
+      { mode },
+      {
+        onDelta: (text) => {
+          if (mode === 'statement') this.exerciseStatement.update((t) => t + text);
+          else this.exerciseAiText.update((t) => t + text);
+        },
+        onDone: (data) => {
+          this.exerciseAiBusy.set(false);
+          if (mode === 'statement') {
+            this.scheduleExerciseAutosave();
+          } else if (mode === 'review' && data.content && this.activeExercise()?.id === id) {
+            this.exercises.update(this.bookId, id, { ai_feedback: data.content }).subscribe({
+              next: (saved) => this.applySavedExercise(saved),
+              error: () => {},
+            });
+          }
+        },
+        onError: (message) => {
+          this.exerciseAiBusy.set(false);
+          this.exerciseAiError.set(message);
+          this.notify.error(message);
+        },
+      },
+      controller.signal,
+    );
+  }
+
+  private applySavedExercise(saved: ExerciseResolution) {
+    const stillActive = this.activeExercise()?.id === saved.id;
+    if (stillActive) {
+      this.activeExercise.set(saved);
+      this.exerciseStatus.set(saved.status);
+      this.exerciseLastSaved = {
+        title: saved.title,
+        statement: saved.statement,
+        latex_content: saved.latex_content,
+        sketch_content: saved.sketch_content,
+      };
+    }
+    this.exerciseList.update((list) =>
+      this.sortExercises(list.map((e) => (e.id === saved.id ? saved : e))),
+    );
+  }
+
+  private sortExercises(list: ExerciseResolution[]): ExerciseResolution[] {
+    return [...list].sort((a, b) => a.page - b.page || b.id - a.id);
+  }
+
+  private currentExercisePayload() {
+    let latex = this.exerciseLatex();
+    let sketch = this.exerciseSketch();
+    if (this.exercisesOpen() && this.exerciseView() === 'edit') {
+      const freshLatex = this.exerciseLatexEditor()?.getSource();
+      if (freshLatex != null) latex = freshLatex;
+      const freshSketch = this.exerciseSketchCanvas()?.getScene();
+      if (freshSketch != null) sketch = freshSketch;
+    }
+    return {
+      title: this.exerciseTitle().trim(),
+      statement: this.exerciseStatement(),
+      latex_content: latex,
+      sketch_content: sketch,
+    };
+  }
+
+  private pullExerciseContent(): {
+    statement: string;
+    latex_content: string;
+    sketch_content: string;
+  } {
+    const payload = this.currentExercisePayload();
+    this.exerciseLatex.set(payload.latex_content);
+    this.exerciseSketch.set(payload.sketch_content);
+    return {
+      statement: payload.statement,
+      latex_content: payload.latex_content,
+      sketch_content: payload.sketch_content,
+    };
+  }
+
+  private scheduleExerciseAutosave() {
+    if (!this.activeExercise()) return;
+    this.exerciseSaveStatus.set('idle');
+    if (this.exerciseAutoSaveTimer) clearTimeout(this.exerciseAutoSaveTimer);
+    this.exerciseAutoSaveTimer = setTimeout(() => {
+      this.exerciseAutoSaveTimer = null;
+      this.flushExerciseAutosave();
+    }, EXERCISE_AUTOSAVE_MS);
+  }
+
+  private flushExerciseAutosave() {
+    if (this.exerciseAutoSaveTimer) {
+      clearTimeout(this.exerciseAutoSaveTimer);
+      this.exerciseAutoSaveTimer = null;
+    }
+    const res = this.activeExercise();
+    if (!res) return;
+    if (this.exerciseSaving()) {
+      this.exerciseSaveQueued = true;
+      return;
+    }
+    const payload = this.currentExercisePayload();
+    if (!payload.title) {
+      this.exerciseSaveStatus.set('error');
+      this.exercisesError.set('O título não pode ficar vazio');
+      return;
+    }
+    if (
+      this.exerciseLastSaved &&
+      payload.title === this.exerciseLastSaved.title &&
+      payload.statement === this.exerciseLastSaved.statement &&
+      payload.latex_content === this.exerciseLastSaved.latex_content &&
+      payload.sketch_content === this.exerciseLastSaved.sketch_content
+    ) {
+      this.exerciseSaveStatus.set('saved');
+      return;
+    }
+    this.exerciseSaving.set(true);
+    this.exerciseSaveStatus.set('saving');
+    this.exercisesError.set(null);
+    this.exercises.update(this.bookId, res.id, payload).subscribe({
+      next: (saved) => {
+        const queued = this.exerciseSaveQueued;
+        const stillActive = this.activeExercise()?.id === saved.id;
+        if (stillActive) {
+          this.activeExercise.set(saved);
+          if (!queued) {
+            this.exerciseLatex.set(saved.latex_content);
+            this.exerciseSketch.set(saved.sketch_content);
+          }
+        }
+        this.exerciseList.update((list) =>
+          this.sortExercises(list.map((e) => (e.id === saved.id ? saved : e))),
+        );
+        if (stillActive) {
+          this.exerciseLastSaved = {
+            title: saved.title,
+            statement: saved.statement,
+            latex_content: saved.latex_content,
+            sketch_content: saved.sketch_content,
+          };
+        }
+        this.exerciseSaving.set(false);
+        if (stillActive) this.exerciseSaveStatus.set('saved');
+        this.scheduleReaderStateSave();
+        if (queued && stillActive) {
+          this.exerciseSaveQueued = false;
+          this.scheduleExerciseAutosave();
+        } else if (queued) {
+          this.exerciseSaveQueued = false;
+        }
+      },
+      error: (err) => {
+        const message = this.errorText(err, 'Não foi possível salvar a resolução');
+        this.exerciseSaving.set(false);
+        this.exerciseSaveStatus.set('error');
+        this.exercisesError.set(message);
+        this.notify.error(message);
+      },
+    });
+  }
+
+  // --- Study notes (Markdown) ----------------------------------------------
   toggleNotes() {
     const open = !this.notesOpen();
     this.notesOpen.set(open);
@@ -2747,6 +3462,7 @@ export class Reader implements OnInit, OnDestroy {
       this.diagramsOpen.set(false);
       this.closeSketchesPanel();
       this.closeLatexPanel();
+      this.closeExercisesPanel();
       this.tocOpen.set(false);
       this.contentTreeOpen.set(false);
       if (!this.notesLoaded()) this.loadNotes();

@@ -7,6 +7,7 @@ export interface TocEntry {
 export type ReaderPanel =
   | 'assistant'
   | 'diagrams'
+  | 'exercises'
   | 'notes'
   | 'sketches'
   | 'latex'
@@ -39,6 +40,12 @@ export interface ReaderLatexState {
   search: string;
 }
 
+export interface ReaderExercisesState {
+  view: ReaderSubView;
+  active_id: number | null;
+  search: string;
+}
+
 export interface ReaderState {
   version: 1;
   zoom_pct: number;
@@ -48,6 +55,7 @@ export interface ReaderState {
   diagrams: ReaderDiagramsState;
   sketches: ReaderSketchesState;
   latex: ReaderLatexState;
+  exercises: ReaderExercisesState;
 }
 
 export interface Book {

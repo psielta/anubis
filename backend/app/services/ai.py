@@ -32,6 +32,33 @@ _TASK_PROMPTS = {
     ),
 }
 
+_EXERCISE_PROMPTS = {
+    "statement": (
+        "The user cropped an exercise from the attached page. Here is the raw text "
+        "extracted from that crop (it may be noisy or out of order):\n\n"
+        '"""\n{statement}\n"""\n\n'
+        "Rewrite it as a single clean, faithful problem statement in Markdown. Keep "
+        "every given value, number and formula (use LaTeX, e.g. $x^2$). Do NOT solve "
+        "it. Output only the cleaned statement, with no preamble."
+    ),
+    "hint": (
+        "The user is solving this exercise, cropped from the attached page:\n\n"
+        '"""\n{statement}\n"""\n\n'
+        "Give a step-by-step guided hint that leads toward the solution without "
+        "stating the final answer up front. Use Markdown and LaTeX ($...$). Finish "
+        "by saying what to compute next."
+    ),
+    "review": (
+        "The user is solving this exercise, cropped from the attached page:\n\n"
+        '"""\n{statement}\n"""\n\n'
+        "Here is the user's attempted resolution (LaTeX source):\n\n"
+        '"""\n{work}\n"""\n\n'
+        "Review it: check each step, point out mistakes, and say whether the final "
+        "answer is correct. Be specific, concise and encouraging. Use Markdown and "
+        "LaTeX."
+    ),
+}
+
 
 def configured() -> bool:
     return bool(settings.GEMINI_API_KEY)
@@ -107,6 +134,34 @@ async def stream_reply(
     else:
         prompt = _TASK_PROMPTS[kind]
 
+    async for item in _stream_prompt(gemini, part, prompt):
+        yield item
+
+
+async def stream_exercise_reply(
+    gemini: genai.Client,
+    part: Any,
+    *,
+    mode: str,
+    statement: str,
+    work: str,
+    question: str | None = None,
+) -> AsyncIterator[tuple[str, str]]:
+    """Yield ('thinking'|'answer', chunk) for an exercise-resolution AI action."""
+    prompt = _EXERCISE_PROMPTS[mode].format(
+        statement=statement.strip() or "(no text extracted)",
+        work=work.strip() or "(empty)",
+    )
+    if question and question.strip():
+        prompt += f"\n\nThe user also asks: {question.strip()}"
+    async for item in _stream_prompt(gemini, part, prompt):
+        yield item
+
+
+async def _stream_prompt(
+    gemini: genai.Client, part: Any, prompt: str
+) -> AsyncIterator[tuple[str, str]]:
+    """Stream one prompt against the attached PDF part, splitting thinking/answer."""
     config = types.GenerateContentConfig(
         system_instruction=_SYSTEM_INSTRUCTION,
         thinking_config=types.ThinkingConfig(include_thoughts=True),

@@ -9,6 +9,8 @@
   [class.sketch-focus-open]="sketchFocus()"
   [class.latex-open]="latexOpen()"
   [class.latex-focus-open]="latexFocus()"
+  [class.exercises-open]="exercisesOpen()"
+  [class.exercise-focus-open]="exerciseFocus()"
   [class.toc-open]="tocOpen()"
   [class.content-tree-open]="contentTreeOpen()"
 >
@@ -67,6 +69,27 @@
         [attr.title]="'Cadernos LaTeX (' + shortcuts.latex + ')'"
       >
         <mat-icon>functions</mat-icon>
+      </button>
+      <button
+        mat-icon-button
+        class="crop-toggle"
+        [class.active]="cropMode()"
+        (click)="toggleCropMode()"
+        [disabled]="loading() || !!error()"
+        [attr.aria-label]="'Recortar exercício (' + shortcuts.crop + ')'"
+        [attr.title]="'Recortar exercício (' + shortcuts.crop + ')'"
+      >
+        <mat-icon>content_cut</mat-icon>
+      </button>
+      <button
+        mat-icon-button
+        class="exercises-toggle"
+        [class.active]="exercisesOpen()"
+        (click)="toggleExercises()"
+        [attr.aria-label]="'Resoluções de exercícios (' + shortcuts.exercises + ')'"
+        [attr.title]="'Resoluções de exercícios (' + shortcuts.exercises + ')'"
+      >
+        <mat-icon>assignment</mat-icon>
       </button>
       <button
         mat-icon-button
@@ -158,9 +181,18 @@
     <div
       #viewport
       class="reader-viewport"
+      appAreaSelect
+      [active]="cropMode()"
+      (regionSelected)="onRegionSelected($event)"
       (mouseup)="captureSelection()"
       (scroll)="onReaderScroll()"
     ></div>
+    @if (cropMode() && !cropDraft()) {
+      <div class="crop-hint">
+        <mat-icon>content_cut</mat-icon>
+        Arraste sobre o enunciado para recortar o exercício
+      </div>
+    }
   </div>
 
   @if (resizablePanelOpen()) {
@@ -186,6 +218,27 @@
     >
       <mat-icon>auto_awesome</mat-icon> Ask about this
     </button>
+  }
+
+  @if (cropDraft()) {
+    <div class="crop-popover" [style.top.px]="cropAnchorTop()" [style.left.px]="cropAnchorLeft()">
+      <label class="crop-popover-label" for="cropTitle">Título do exercício</label>
+      <input
+        id="cropTitle"
+        class="crop-popover-input"
+        type="text"
+        [value]="cropDraftTitle()"
+        (input)="setCropTitle($any($event.target).value)"
+        (keydown.enter)="confirmCrop()"
+        (keydown.escape)="cancelCrop()"
+      />
+      <div class="crop-popover-actions">
+        <button class="crop-popover-cancel" type="button" (click)="cancelCrop()">Cancelar</button>
+        <button class="crop-popover-create" type="button" (click)="confirmCrop()">
+          <mat-icon>add</mat-icon> Criar resolução
+        </button>
+      </div>
+    </div>
   }
 
   @if (commandPaletteOpen()) {
@@ -889,6 +942,276 @@
 
       @if (latexError()) {
         <p class="ai-error">{{ latexError() }}</p>
+      }
+    </aside>
+  }
+
+  @if (exercisesOpen()) {
+    <aside class="exercise-panel" [class.exercise-focus]="exerciseFocus()">
+      <header class="dg-head">
+        @if (exerciseView() === 'edit') {
+          <button mat-icon-button (click)="backToExerciseList()" aria-label="Voltar às resoluções">
+            <mat-icon>arrow_back</mat-icon>
+          </button>
+        }
+        <span class="dg-title"><mat-icon>assignment</mat-icon> Resoluções</span>
+        <kbd class="shortcut-key">{{ shortcuts.exercises }}</kbd>
+        <span class="ai-spacer"></span>
+        @if (exerciseView() === 'edit') {
+          <span class="sketch-save-status" [class.error]="exerciseSaveStatus() === 'error'">
+            {{
+              exerciseSaveStatus() === 'saving'
+                ? 'Salvando...'
+                : exerciseSaveStatus() === 'saved'
+                  ? 'Salvo'
+                  : exerciseSaveStatus() === 'error'
+                    ? 'Não salvo'
+                    : 'Sem salvar'
+            }}
+          </span>
+          @if (activeExercise(); as current) {
+            <button
+              mat-icon-button
+              (click)="deleteExercise(current)"
+              aria-label="Excluir resolução"
+            >
+              <mat-icon>delete</mat-icon>
+            </button>
+          }
+          <button
+            mat-icon-button
+            (click)="toggleExerciseFocus()"
+            [attr.aria-label]="exerciseFocus() ? 'Sair do modo foco' : 'Modo foco'"
+          >
+            <mat-icon>{{ exerciseFocus() ? 'fullscreen_exit' : 'fullscreen' }}</mat-icon>
+          </button>
+        }
+        <button mat-icon-button (click)="toggleExercises()" aria-label="Fechar">
+          <mat-icon>close</mat-icon>
+        </button>
+      </header>
+
+      @if (exerciseView() === 'list') {
+        <div class="dg-list">
+          @if (exerciseList().length) {
+            <input
+              class="note-search"
+              type="search"
+              placeholder="Buscar exercícios..."
+              aria-label="Buscar exercícios"
+              [value]="exerciseSearch()"
+              (input)="setExerciseSearch($any($event.target).value)"
+            />
+          }
+          @if (!exerciseList().length) {
+            <p class="dg-empty">
+              Nenhuma resolução ainda. Ative o modo recorte
+              (<kbd class="shortcut-key">{{ shortcuts.crop }}</kbd>) e arraste sobre um exercício no
+              PDF para criar uma página de resolução vinculada ao trecho.
+            </p>
+          } @else if (!filteredExercises().length) {
+            <p class="dg-empty">Nenhuma resolução corresponde à busca.</p>
+          }
+          @for (ex of filteredExercises(); track ex.id) {
+            <button class="dg-card exercise-card" (click)="openExercise(ex)">
+              <span class="exercise-status-dot" [class]="'status-' + ex.status"></span>
+              <span class="dg-card-main">
+                <span class="dg-card-title">{{ ex.title }}</span>
+                <span class="dg-card-meta">{{ exerciseUpdatedLabel(ex) }} · p. {{ ex.page }}</span>
+              </span>
+              <span
+                class="dg-card-del"
+                role="button"
+                aria-label="Excluir resolução"
+                (click)="$event.stopPropagation(); deleteExercise(ex)"
+              >
+                <mat-icon>delete</mat-icon>
+              </span>
+            </button>
+          }
+        </div>
+      } @else {
+        <div class="exercise-edit">
+          <div class="dg-edit-bar">
+            <input
+              class="dg-name"
+              [value]="exerciseTitle()"
+              (input)="setExerciseTitle($any($event.target).value)"
+              placeholder="Título do exercício"
+              maxlength="200"
+            />
+          </div>
+
+          <div class="exercise-top">
+            <div class="exercise-crop-wrap">
+              <app-exercise-crop
+                [pdfDoc]="readerPdfDoc()"
+                [page]="activeExercise()?.page ?? 0"
+                [region]="activeExercise()?.region ?? null"
+                [maxWidth]="exerciseFocus() ? 520 : 360"
+              />
+            </div>
+            <label class="exercise-statement-label">
+              Enunciado
+              <textarea
+                class="exercise-statement-input"
+                rows="3"
+                [value]="exerciseStatement()"
+                (input)="setExerciseStatement($any($event.target).value)"
+                placeholder="Texto do enunciado (extraído do recorte)"
+              ></textarea>
+            </label>
+
+            <div class="exercise-status-bar">
+              <button
+                class="exercise-status-btn done"
+                [class.active]="exerciseStatus() === 'completed'"
+                (click)="setExerciseStatus('completed')"
+              >
+                <mat-icon>check_circle</mat-icon> Concluído
+              </button>
+              <button
+                class="exercise-status-btn doubt"
+                [class.active]="exerciseStatus() === 'doubt'"
+                (click)="setExerciseStatus('doubt')"
+              >
+                <mat-icon>help</mat-icon> Dúvida
+              </button>
+              <button
+                class="exercise-status-btn wrong"
+                [class.active]="exerciseStatus() === 'wrong'"
+                (click)="setExerciseStatus('wrong')"
+              >
+                <mat-icon>cancel</mat-icon> Errei
+              </button>
+            </div>
+          </div>
+
+          <div class="exercise-tabs">
+            <button
+              class="exercise-tab"
+              [class.active]="exerciseTab() === 'latex'"
+              (click)="setExerciseTab('latex')"
+            >
+              <mat-icon>functions</mat-icon> Folha LaTeX
+            </button>
+            <button
+              class="exercise-tab"
+              [class.active]="exerciseTab() === 'sketch'"
+              (click)="setExerciseTab('sketch')"
+            >
+              <mat-icon>gesture</mat-icon> Quadro
+            </button>
+          </div>
+
+          <div class="exercise-workspace">
+            @for (epoch of [exerciseEpoch()]; track epoch) {
+              @if (exerciseTab() === 'latex') {
+                <app-latex-editor
+                  #exLatexEditor
+                  class="exercise-editor-host"
+                  [initialSource]="exerciseLatex()"
+                  [focus]="exerciseFocus()"
+                  (sourceChange)="onExerciseLatexChange($event)"
+                />
+              } @else {
+                <app-excalidraw-canvas
+                  #exSketchCanvas
+                  class="exercise-editor-host"
+                  [initialScene]="exerciseSketch() || null"
+                  (sceneChange)="onExerciseSketchChange($event)"
+                />
+              }
+            }
+          </div>
+
+          <div class="exercise-actions">
+            <button class="exercise-action" (click)="newAttempt()" [disabled]="exerciseSaving()">
+              <mat-icon>restart_alt</mat-icon> Nova tentativa
+            </button>
+            <button
+              class="exercise-action"
+              [class.active]="attemptsOpen()"
+              (click)="toggleAttempts()"
+            >
+              <mat-icon>history</mat-icon> Ver resolução anterior
+            </button>
+          </div>
+
+          @if (attemptsOpen()) {
+            <div class="exercise-attempts">
+              @if (attemptsLoading()) {
+                <p class="dg-empty">Carregando tentativas...</p>
+              } @else if (!attemptList().length) {
+                <p class="dg-empty">Nenhuma tentativa anterior ainda.</p>
+              }
+              @for (attempt of attemptList(); track attempt.id) {
+                <div class="exercise-attempt">
+                  <div class="exercise-attempt-head">
+                    <mat-icon>schedule</mat-icon>
+                    <span>{{ attemptLabel(attempt) }}</span>
+                    <button
+                      class="exercise-attempt-restore"
+                      (click)="restoreAttempt(attempt)"
+                      [disabled]="exerciseSaving()"
+                    >
+                      Restaurar
+                    </button>
+                  </div>
+                  @if (attempt.latex_content) {
+                    <pre class="exercise-attempt-latex">{{ attempt.latex_content }}</pre>
+                  }
+                  @if (attempt.ai_feedback) {
+                    <p class="exercise-attempt-feedback">{{ attempt.ai_feedback }}</p>
+                  }
+                </div>
+              }
+            </div>
+          }
+
+          <div class="exercise-ai">
+            <div class="exercise-ai-bar">
+              <button
+                class="exercise-ai-btn"
+                (click)="askExerciseAI('statement')"
+                [disabled]="exerciseAiBusy()"
+              >
+                <mat-icon>auto_fix_high</mat-icon> Limpar enunciado
+              </button>
+              <button
+                class="exercise-ai-btn"
+                (click)="askExerciseAI('hint')"
+                [disabled]="exerciseAiBusy()"
+              >
+                <mat-icon>lightbulb</mat-icon> Dica
+              </button>
+              <button
+                class="exercise-ai-btn"
+                (click)="askExerciseAI('review')"
+                [disabled]="exerciseAiBusy()"
+              >
+                <mat-icon>fact_check</mat-icon> Corrigir
+              </button>
+            </div>
+            @if (exerciseAiBusy() || exerciseAiText()) {
+              <div class="exercise-ai-output">
+                @if (exerciseAiBusy() && !exerciseAiText()) {
+                  <span class="exercise-ai-loading">A IA está pensando…</span>
+                }
+                @if (exerciseAiText()) {
+                  <markdown class="md-body" [data]="exerciseAiText()" />
+                }
+              </div>
+            }
+            @if (exerciseAiError()) {
+              <p class="ai-error">{{ exerciseAiError() }}</p>
+            }
+          </div>
+        </div>
+      }
+
+      @if (exercisesError()) {
+        <p class="ai-error">{{ exercisesError() }}</p>
       }
     </aside>
   }

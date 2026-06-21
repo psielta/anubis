@@ -491,6 +491,7 @@
 .notes-panel,
 .sketches-panel,
 .latex-panel,
+.exercise-panel,
 .toc-panel,
 .content-tree-panel {
   position: absolute;
@@ -519,6 +520,7 @@
   .reader.notes-open .reader-stage,
   .reader.sketches-open:not(.sketch-focus-open) .reader-stage,
   .reader.latex-open:not(.latex-focus-open) .reader-stage,
+  .reader.exercises-open:not(.exercise-focus-open) .reader-stage,
   .reader.toc-open .reader-stage,
   .reader.content-tree-open .reader-stage {
     padding-inline-end: var(--dg-panel-w);
@@ -533,6 +535,427 @@
 .reader.latex-focus-open .latex-panel {
   left: 0;
   width: auto;
+}
+
+.reader.exercise-focus-open .exercise-panel {
+  left: 0;
+  width: auto;
+}
+
+// --- Exercise resolutions (crop + solving workspace) ------------------------
+.crop-toggle.active,
+.exercises-toggle.active {
+  color: var(--anubis-gold-bright);
+  background: rgba(200, 162, 76, 0.18);
+}
+
+.reader-viewport.area-select-active {
+  cursor: crosshair;
+  user-select: none;
+
+  .pdf-page {
+    position: relative;
+  }
+
+  .textLayer {
+    pointer-events: none;
+  }
+}
+
+.crop-rubberband {
+  position: absolute;
+  z-index: 4;
+  border: 1px solid var(--anubis-gold-deep);
+  background: rgba(200, 162, 76, 0.18);
+  pointer-events: none;
+}
+
+.crop-hint {
+  position: absolute;
+  top: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 7;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.9rem;
+  background: var(--anubis-obsidian);
+  color: var(--anubis-gold-bright);
+  border: 1px solid var(--anubis-gold-deep);
+  font-size: 0.85rem;
+
+  mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+}
+
+.crop-popover {
+  position: fixed;
+  z-index: 20;
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.7rem;
+  background: var(--anubis-surface);
+  color: var(--anubis-ink);
+  border: 1px solid var(--anubis-gold-deep);
+  box-shadow: 0 16px 40px -18px rgba(0, 0, 0, 0.7);
+}
+
+.crop-popover-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--anubis-ink-soft);
+}
+
+.crop-popover-input {
+  padding: 0.45rem 0.5rem;
+  background: var(--anubis-canvas);
+  border: 1px solid var(--anubis-line);
+  color: var(--anubis-ink);
+  font: inherit;
+}
+
+.crop-popover-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.2rem;
+}
+
+.crop-popover-cancel,
+.crop-popover-create {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--anubis-line);
+  background: transparent;
+  color: var(--anubis-ink);
+  cursor: pointer;
+  font: inherit;
+
+  mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+}
+
+.crop-popover-create {
+  background: var(--anubis-gold);
+  border-color: var(--anubis-gold-deep);
+  color: var(--anubis-obsidian);
+}
+
+.exercise-edit {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  gap: 0.7rem;
+  padding: 0.6rem 0.8rem 1rem;
+}
+
+.exercise-top {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.exercise-crop-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 0.4rem;
+  background: var(--anubis-canvas);
+  border: 1px solid var(--anubis-line);
+}
+
+.exercise-statement-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--anubis-ink-soft);
+}
+
+.exercise-statement-input {
+  resize: vertical;
+  padding: 0.45rem 0.5rem;
+  background: var(--anubis-surface);
+  border: 1px solid var(--anubis-line);
+  color: var(--anubis-ink);
+  font: inherit;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.exercise-status-bar {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.exercise-status-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--anubis-line);
+  background: transparent;
+  color: var(--anubis-ink-soft);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+
+  mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+
+  &.done.active {
+    border-color: var(--anubis-gold-deep);
+    background: rgba(143, 115, 48, 0.16);
+    color: var(--anubis-gold-deep);
+  }
+
+  &.doubt.active {
+    border-color: var(--anubis-lapis);
+    background: rgba(34, 69, 110, 0.14);
+    color: var(--anubis-lapis);
+  }
+
+  &.wrong.active {
+    border-color: var(--anubis-danger);
+    background: rgba(168, 67, 45, 0.14);
+    color: var(--anubis-danger);
+  }
+}
+
+.exercise-status-dot {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  border: 1px solid var(--anubis-line);
+  background: var(--anubis-canvas);
+
+  &.status-completed {
+    background: var(--anubis-gold-deep);
+    border-color: var(--anubis-gold-deep);
+  }
+  &.status-doubt {
+    background: var(--anubis-lapis);
+    border-color: var(--anubis-lapis);
+  }
+  &.status-wrong {
+    background: var(--anubis-danger);
+    border-color: var(--anubis-danger);
+  }
+}
+
+.exercise-card {
+  align-items: center;
+}
+
+.exercise-tabs {
+  display: flex;
+  border-block-end: 1px solid var(--anubis-line);
+}
+
+.exercise-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.5rem 0.8rem;
+  border: none;
+  border-block-end: 2px solid transparent;
+  background: transparent;
+  color: var(--anubis-ink-soft);
+  cursor: pointer;
+  font: inherit;
+
+  mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+
+  &.active {
+    color: var(--anubis-ink);
+    border-block-end-color: var(--anubis-gold);
+  }
+}
+
+.exercise-workspace {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 320px;
+}
+
+.exercise-editor-host {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.exercise-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.exercise-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--anubis-line);
+  background: transparent;
+  color: var(--anubis-ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.85rem;
+
+  mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+
+  &.active {
+    border-color: var(--anubis-gold-deep);
+    background: rgba(200, 162, 76, 0.14);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+}
+
+.exercise-attempts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  background: var(--anubis-canvas);
+  border: 1px solid var(--anubis-line);
+}
+
+.exercise-attempt {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding-block-end: 0.4rem;
+  border-block-end: 1px solid var(--anubis-line);
+
+  &:last-child {
+    border-block-end: none;
+    padding-block-end: 0;
+  }
+}
+
+.exercise-attempt-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--anubis-ink-soft);
+
+  mat-icon {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+  }
+}
+
+.exercise-attempt-restore {
+  margin-inline-start: auto;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--anubis-line);
+  background: transparent;
+  color: var(--anubis-ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+}
+
+.exercise-attempt-latex {
+  margin: 0;
+  padding: 0.4rem;
+  max-height: 120px;
+  overflow: auto;
+  background: var(--anubis-surface);
+  border: 1px solid var(--anubis-line);
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.exercise-attempt-feedback {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--anubis-ink-soft);
+}
+
+.exercise-ai {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.exercise-ai-bar {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.exercise-ai-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--anubis-gold-deep);
+  background: rgba(200, 162, 76, 0.1);
+  color: var(--anubis-ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+
+  mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+}
+
+.exercise-ai-output {
+  padding: 0.5rem 0.7rem;
+  background: var(--anubis-canvas);
+  border: 1px solid var(--anubis-line);
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.exercise-ai-loading {
+  color: var(--anubis-ink-soft);
+  font-style: italic;
 }
 
 .panel-splitter {
