@@ -9,6 +9,9 @@ import {
   ExerciseAIMode,
   ExerciseAIRequest,
   ExerciseAttempt,
+  ExerciseChatHandlers,
+  ExerciseChatMessage,
+  ExerciseChatRequest,
   ExerciseResolution,
   ExerciseResolutionCreate,
   ExerciseResolutionUpdate,
@@ -59,6 +62,14 @@ export class ExerciseResolutionsService {
     return this.http.post<ExerciseAttempt>(`${this.url(bookId)}/${id}/attempts`, {});
   }
 
+  listChat(bookId: number, id: number): Observable<ExerciseChatMessage[]> {
+    return this.http.get<ExerciseChatMessage[]>(`${this.url(bookId)}/${id}/chat`);
+  }
+
+  clearChat(bookId: number, id: number): Observable<void> {
+    return this.http.delete<void>(`${this.url(bookId)}/${id}/chat`);
+  }
+
   /** Stream an AI action (clean statement / hint / review) over SSE. */
   async askAI(
     bookId: number,
@@ -79,6 +90,32 @@ export class ExerciseResolutionsService {
               mode: data['mode'] as ExerciseAIMode,
               content: (data['content'] as string) ?? '',
             });
+          else if (event === 'error')
+            handlers.onError((data['detail'] as string) ?? 'A requisição de IA falhou.');
+        },
+        onError: handlers.onError,
+      },
+      this.tokens.accessToken(),
+      signal,
+    );
+  }
+
+  /** Stream a tutor-chat reply over SSE (history is kept server-side). */
+  async chat(
+    bookId: number,
+    id: number,
+    body: ExerciseChatRequest,
+    handlers: ExerciseChatHandlers,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    await streamSse(
+      `${this.url(bookId)}/${id}/chat`,
+      body,
+      {
+        onFrame: ({ event, data }) => {
+          if (event === 'thinking') handlers.onThinking?.((data['text'] as string) ?? '');
+          else if (event === 'delta') handlers.onDelta((data['text'] as string) ?? '');
+          else if (event === 'done') handlers.onDone({ id: (data['id'] as number) ?? 0 });
           else if (event === 'error')
             handlers.onError((data['detail'] as string) ?? 'A requisição de IA falhou.');
         },

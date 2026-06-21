@@ -1,9 +1,14 @@
 from collections.abc import Sequence
 
+from sqlalchemy import delete as sql_delete
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.exercise_resolution import ExerciseAttempt, ExerciseResolution
+from app.models.exercise_resolution import (
+    ExerciseAttempt,
+    ExerciseChatMessage,
+    ExerciseResolution,
+)
 
 
 async def list_for_book(
@@ -129,3 +134,36 @@ async def create_attempt(
     await db.commit()
     await db.refresh(attempt)
     return attempt
+
+
+async def list_chat(
+    db: AsyncSession, *, resolution_id: int
+) -> Sequence[ExerciseChatMessage]:
+    return (
+        await db.scalars(
+            select(ExerciseChatMessage)
+            .where(ExerciseChatMessage.resolution_id == resolution_id)
+            .order_by(ExerciseChatMessage.created_at.asc(), ExerciseChatMessage.id.asc())
+        )
+    ).all()
+
+
+async def add_chat_message(
+    db: AsyncSession, *, resolution_id: int, role: str, content: str
+) -> ExerciseChatMessage:
+    message = ExerciseChatMessage(
+        resolution_id=resolution_id, role=role, content=content
+    )
+    db.add(message)
+    await db.commit()
+    await db.refresh(message)
+    return message
+
+
+async def clear_chat(db: AsyncSession, *, resolution_id: int) -> None:
+    await db.execute(
+        sql_delete(ExerciseChatMessage).where(
+            ExerciseChatMessage.resolution_id == resolution_id
+        )
+    )
+    await db.commit()

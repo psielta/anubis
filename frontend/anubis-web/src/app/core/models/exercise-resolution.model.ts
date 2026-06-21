@@ -1,5 +1,5 @@
 export type ExerciseStatus = 'pending' | 'completed' | 'doubt' | 'wrong';
-export type ExerciseAIMode = 'statement' | 'hint' | 'review' | 'hint_level' | 'ask';
+export type ExerciseAIMode = 'statement' | 'hint' | 'review' | 'hint_level';
 
 export interface ExerciseRegion {
   x0: number;
@@ -65,5 +65,27 @@ export interface ExerciseAIHandlers {
   onThinking?: (text: string) => void;
   onDelta: (text: string) => void;
   onDone: (data: ExerciseAIDone) => void;
+  onError: (message: string) => void;
+}
+
+export interface ExerciseChatMessage {
+  id: number;
+  role: 'user' | 'assistant';
+  content: string;
+  created_at: string;
+}
+
+export interface ExerciseChatRequest {
+  question: string;
+}
+
+export interface ExerciseChatDone {
+  id: number;
+}
+
+export interface ExerciseChatHandlers {
+  onThinking?: (text: string) => void;
+  onDelta: (text: string) => void;
+  onDone: (data: ExerciseChatDone) => void;
   onError: (message: string) => void;
 }

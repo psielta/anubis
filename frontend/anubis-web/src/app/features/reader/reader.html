@@ -1291,32 +1291,8 @@
                 <mat-icon>stairs</mat-icon> Dica em níveis
               </button>
             </div>
-            <form
-              class="exercise-ask"
-              (submit)="$event.preventDefault(); askCustomQuestion()"
-            >
-              <textarea
-                class="exercise-ask-input"
-                rows="2"
-                placeholder="Pergunte à IA sobre esta questão, como a um professor…"
-                [value]="askInput()"
-                (input)="askInput.set($any($event.target).value)"
-              ></textarea>
-              <button
-                class="exercise-ai-btn exercise-ask-send"
-                type="submit"
-                [disabled]="exerciseAiBusy() || !askInput().trim()"
-              >
-                <mat-icon>send</mat-icon> Perguntar
-              </button>
-            </form>
             @if (exerciseAiBusy() || exerciseAiText()) {
               <div class="exercise-ai-output">
-                @if (exerciseAiMode() === 'ask' && askedQuestion()) {
-                  <p class="exercise-ai-question">
-                    <mat-icon>help_outline</mat-icon> {{ askedQuestion() }}
-                  </p>
-                }
                 @if (exerciseAiBusy() && !exerciseAiText()) {
                   <span class="exercise-ai-loading">A IA está pensando…</span>
                 }
@@ -1369,6 +1345,78 @@
             @if (exerciseAiError()) {
               <p class="ai-error">{{ exerciseAiError() }}</p>
             }
+
+            <div class="exercise-chat">
+              <div class="exercise-chat-head">
+                <span class="exercise-chat-title">
+                  <mat-icon>forum</mat-icon> Conversa com a IA
+                </span>
+                @if (chatMessages().length) {
+                  <button
+                    type="button"
+                    class="exercise-chat-clear"
+                    (click)="clearChat()"
+                    [disabled]="chatBusy()"
+                  >
+                    Limpar
+                  </button>
+                }
+              </div>
+
+              @if (chatMessages().length || chatStreaming() || chatBusy()) {
+                <div class="exercise-chat-thread">
+                  @for (m of chatMessages(); track $index) {
+                    @if (m.role === 'user') {
+                      <div class="exercise-chat-msg user"><p>{{ m.content }}</p></div>
+                    } @else {
+                      <div class="exercise-chat-msg assistant">
+                        <markdown
+                          class="md-body"
+                          [katex]="katexReady()"
+                          [katexOptions]="katexOptions"
+                          [data]="m.content"
+                        />
+                      </div>
+                    }
+                  }
+                  @if (chatBusy()) {
+                    <div class="exercise-chat-msg assistant">
+                      @if (chatStreaming()) {
+                        <markdown
+                          class="md-body"
+                          [katex]="katexReady()"
+                          [katexOptions]="katexOptions"
+                          [data]="chatStreaming()"
+                        />
+                      } @else {
+                        <span class="exercise-ai-loading">A IA está pensando…</span>
+                      }
+                    </div>
+                  }
+                </div>
+              }
+
+              @if (chatError()) {
+                <p class="ai-error">{{ chatError() }}</p>
+              }
+
+              <form class="exercise-ask" (submit)="$event.preventDefault(); sendChat()">
+                <textarea
+                  class="exercise-ask-input"
+                  rows="2"
+                  placeholder="Pergunte à IA sobre esta questão, como a um professor…"
+                  [value]="askInput()"
+                  (input)="askInput.set($any($event.target).value)"
+                ></textarea>
+                <button
+                  class="exercise-ai-btn exercise-ask-send"
+                  type="submit"
+                  [disabled]="chatBusy() || !askInput().trim()"
+                >
+                  <mat-icon>send</mat-icon> Perguntar
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       }

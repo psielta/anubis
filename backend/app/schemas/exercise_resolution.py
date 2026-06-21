@@ -9,7 +9,7 @@ MAX_STATEMENT = 20_000
 MAX_FEEDBACK = 50_000
 
 ExerciseStatus = Literal["pending", "completed", "doubt", "wrong"]
-ExerciseAIMode = Literal["statement", "hint", "review", "hint_level", "ask"]
+ExerciseAIMode = Literal["statement", "hint", "review", "hint_level"]
 
 
 class RegionModel(BaseModel):
@@ -78,3 +78,16 @@ class ExerciseAIRequest(BaseModel):
     mode: ExerciseAIMode
     question: str | None = Field(default=None, max_length=2000)
     level: int = Field(default=1, ge=1, le=3)
+
+
+class ExerciseChatMessageRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    role: str
+    content: str
+    created_at: datetime
+
+
+class ExerciseChatRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=4000)

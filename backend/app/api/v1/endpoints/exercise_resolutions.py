@@ -11,6 +11,8 @@ from app.models.book import Book
 from app.schemas.exercise_resolution import (
     ExerciseAIRequest,
     ExerciseAttemptRead,
+    ExerciseChatMessageRead,
+    ExerciseChatRequest,
     ExerciseResolutionCreate,
     ExerciseResolutionRead,
     ExerciseResolutionUpdate,
@@ -216,6 +218,96 @@ async def exercise_resolution_ai(
             yield _sse("done", {"mode": mode, "content": content})
         except Exception:
             yield _sse("error", {"detail": "A requisição de IA falhou. Tente novamente."})
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.get("/{resolution_id}/chat", response_model=list[ExerciseChatMessageRead])
+async def list_exercise_chat(
+    book_id: int, resolution_id: int, current_user: CurrentUser, db: DbSession
+) -> list[ExerciseChatMessageRead]:
+    await _require_book(db, current_user.id, book_id)
+    await _require_resolution(
+        db, user_id=current_user.id, book_id=book_id, resolution_id=resolution_id
+    )
+    messages = await crud.list_chat(db, resolution_id=resolution_id)
+    return [ExerciseChatMessageRead.model_validate(m) for m in messages]
+
+
+@router.delete("/{resolution_id}/chat", status_code=204)
+async def clear_exercise_chat(
+    book_id: int, resolution_id: int, current_user: CurrentUser, db: DbSession
+) -> None:
+    await _require_book(db, current_user.id, book_id)
+    await _require_resolution(
+        db, user_id=current_user.id, book_id=book_id, resolution_id=resolution_id
+    )
+    await crud.clear_chat(db, resolution_id=resolution_id)
+
+
+@router.post("/{resolution_id}/chat")
+async def exercise_chat(
+    book_id: int,
+    resolution_id: int,
+    current_user: CurrentUser,
+    db: DbSession,
+    payload: ExerciseChatRequest,
+) -> StreamingResponse:
+    book = await _require_book(db, current_user.id, book_id)
+    resolution = await _require_resolution(
+        db, user_id=current_user.id, book_id=book_id, resolution_id=resolution_id
+    )
+    if not ai.configured():
+        raise HTTPException(503, "IA não configurada. Defina GEMINI_API_KEY.")
+    if book.file_format != "pdf":
+        raise HTTPException(400, "Apenas livros em PDF suportam o chat de IA.")
+    question = payload.question.strip()
+    if not question:
+        raise HTTPException(422, "A pergunta não pode estar vazia")
+
+    data = await storage.read_bytes(book.object_key)
+    gemini = ai.client()
+    pdf = await ai.extract_pages(data, resolution.page, resolution.page)
+    part = ai.inline_part(pdf)
+    statement = resolution.statement
+    work = resolution.latex_content
+    history = [
+        (m.role, m.content)
+        for m in await crud.list_chat(db, resolution_id=resolution_id)
+    ]
+    await crud.add_chat_message(
+        db, resolution_id=resolution_id, role="user", content=question
+    )
+
+    async def event_stream() -> AsyncIterator[str]:
+        answer: list[str] = []
+        try:
+            async for channel, text in ai.stream_exercise_chat(
+                gemini,
+                part,
+                statement=statement,
+                work=work,
+                history=history,
+                question=question,
+            ):
+                if channel == "thinking":
+                    yield _sse("thinking", {"text": text})
+                else:
+                    answer.append(text)
+                    yield _sse("delta", {"text": text})
+            content = "".join(answer).strip() or "_Sem resposta._"
+            message = await crud.add_chat_message(
+                db, resolution_id=resolution_id, role="assistant", content=content
+            )
+            yield _sse("done", {"id": message.id})
+        except Exception:
+            yield _sse(
+                "error", {"detail": "A requisição de IA falhou. Tente novamente."}
+            )
 
     return StreamingResponse(
         event_stream(),

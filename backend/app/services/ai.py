@@ -104,20 +104,6 @@ _HINT_LEVEL_PROMPTS = {
     ),
 }
 
-# Pergunta livre do usuário sobre o exercício — a IA responde como um professor.
-_ASK_PROMPT = (
-    "Você é um professor paciente ajudando o usuário com este exercício, "
-    "recortado da página anexada:\n\n"
-    '"""\n{statement}\n"""\n\n'
-    "Resolução parcial do usuário (LaTeX), pode estar vazia:\n\n"
-    '"""\n{work}\n"""\n\n'
-    "Pergunta do usuário:\n\n"
-    '"""\n{question}\n"""\n\n'
-    "Responda à pergunta de forma didática, orientando-o a progredir na "
-    "resolução. Baseie-se na imagem da página e no enunciado. Evite entregar a "
-    "resposta final de imediato, a menos que ele peça explicitamente. Use "
-    "Markdown e LaTeX. Escreva em português do Brasil."
-)
 
 
 def configured() -> bool:
@@ -210,15 +196,6 @@ async def stream_exercise_reply(
     level: int = 1,
 ) -> AsyncIterator[tuple[str, str]]:
     """Yield ('thinking'|'answer', chunk) for an exercise-resolution AI action."""
-    if mode == "ask":
-        prompt = _ASK_PROMPT.format(
-            statement=statement.strip() or "(no text extracted)",
-            work=work.strip() or "(empty)",
-            question=(question or "").strip() or "Me ajude a resolver este exercício.",
-        )
-        async for item in _stream_prompt(gemini, part, prompt):
-            yield item
-        return
     if mode == "hint_level":
         template = _HINT_LEVEL_PROMPTS.get(level, _HINT_LEVEL_PROMPTS[1])
     else:
@@ -296,3 +273,37 @@ async def stream_translation(gemini: genai.Client, part: Any) -> AsyncIterator[s
             text = getattr(piece, "text", None)
             if text:
                 yield text
+
+
+async def stream_exercise_chat(
+    gemini: genai.Client,
+    part: Any,
+    *,
+    statement: str,
+    work: str,
+    history: list[tuple[str, str]],
+    question: str,
+) -> AsyncIterator[tuple[str, str]]:
+    """Tutor chat about an exercise; prior turns are included as context."""
+    if history:
+        convo = "\n\n".join(
+            f"{'Aluno' if role == 'user' else 'Professor'}: {content}"
+            for role, content in history
+        )
+    else:
+        convo = "(início da conversa)"
+    prompt = (
+        "Você é um professor paciente conversando com o aluno sobre este "
+        "exercício (página anexada):\n\n"
+        f'"""\n{statement.strip() or "(sem texto)"}\n"""\n\n'
+        "Resolução parcial do aluno (LaTeX), pode estar vazia:\n\n"
+        f'"""\n{work.strip() or "(vazia)"}\n"""\n\n'
+        f"Conversa até agora:\n{convo}\n\n"
+        f"Nova pergunta do aluno:\n{question.strip()}\n\n"
+        "Responda à nova pergunta de forma didática, levando em conta a "
+        "conversa anterior. Oriente o aluno a progredir sem entregar a resposta "
+        "final de imediato, a menos que ele peça explicitamente. Use Markdown e "
+        "LaTeX. Escreva em português do Brasil."
+    )
+    async for item in _stream_prompt(gemini, part, prompt):
+        yield item

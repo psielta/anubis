@@ -42,6 +42,7 @@ import { LatexNotebook, LatexNotebookGroup } from '../../core/models/latex-noteb
 import {
   ExerciseAIMode,
   ExerciseAttempt,
+  ExerciseChatMessage,
   ExerciseRegion,
   ExerciseResolution,
   ExerciseStatus,
@@ -439,9 +440,12 @@ export class Reader implements OnInit, OnDestroy {
   protected readonly hintBusy = signal(false);
   protected readonly hintError = signal<string | null>(null);
   protected readonly nextHintLevel = computed(() => this.hintLevels().length + 1);
-  // Free-form question to the AI tutor about the exercise.
+  // Persistent tutor chat about the exercise (history kept server-side).
   protected readonly askInput = signal('');
-  protected readonly askedQuestion = signal('');
+  protected readonly chatMessages = signal<ExerciseChatMessage[]>([]);
+  protected readonly chatStreaming = signal('');
+  protected readonly chatBusy = signal(false);
+  protected readonly chatError = signal<string | null>(null);
   protected readonly filteredExercises = computed(() => {
     const q = this.exerciseSearch().trim().toLowerCase();
     const list = this.exerciseList();
@@ -497,6 +501,7 @@ export class Reader implements OnInit, OnDestroy {
   } | null = null;
   private exerciseAiController: AbortController | null = null;
   private hintController: AbortController | null = null;
+  private chatController: AbortController | null = null;
   private readonly readerKeydown = (event: KeyboardEvent) => this.handleReaderKeydown(event);
 
   constructor() {
@@ -550,6 +555,7 @@ export class Reader implements OnInit, OnDestroy {
     if (this.autoTranslateTimer) clearTimeout(this.autoTranslateTimer);
     this.exerciseAiController?.abort();
     this.hintController?.abort();
+    this.chatController?.abort();
     this.observer?.disconnect();
     this.loadingTask?.destroy();
   }
@@ -3236,7 +3242,8 @@ export class Reader implements OnInit, OnDestroy {
     this.exerciseAiMode.set(null);
     this.exerciseAiError.set(null);
     this.askInput.set('');
-    this.askedQuestion.set('');
+    this.resetChat();
+    this.loadChat(res.id);
     this.exerciseLastSaved = {
       title: res.title,
       statement: res.statement,
@@ -3493,14 +3500,14 @@ export class Reader implements OnInit, OnDestroy {
     });
   }
 
-  private streamExerciseAI(id: number, mode: ExerciseAIMode, question?: string) {
+  private streamExerciseAI(id: number, mode: ExerciseAIMode) {
     this.exerciseAiController?.abort();
     const controller = new AbortController();
     this.exerciseAiController = controller;
     void this.exercises.askAI(
       this.bookId,
       id,
-      question ? { mode, question } : { mode },
+      { mode },
       {
         onDelta: (text) => {
           if (mode === 'statement') this.exerciseStatement.update((t) => t + text);
@@ -3585,29 +3592,89 @@ export class Reader implements OnInit, OnDestroy {
     this.hintError.set(null);
   }
 
-  askCustomQuestion() {
+  sendChat() {
     const res = this.activeExercise();
     const question = this.askInput().trim();
-    if (!res || this.exerciseAiBusy() || !question) return;
+    if (!res || this.chatBusy() || !question) return;
     const content = this.pullExerciseContent();
-    this.exerciseAiBusy.set(true);
-    this.exerciseAiMode.set('ask');
-    this.exerciseAiError.set(null);
-    this.exerciseAiText.set('');
-    this.askedQuestion.set(question);
-    // Persist current work/statement first so the AI reads the latest state.
+    this.askInput.set('');
+    this.chatError.set(null);
+    this.chatStreaming.set('');
+    this.chatBusy.set(true);
+    // Optimistic user bubble; the server persists both turns.
+    this.chatMessages.update((list) => [
+      ...list,
+      { id: -1, role: 'user', content: question, created_at: '' },
+    ]);
+    // Persist current work first so the AI reads the latest state, then stream.
     this.exercises.update(this.bookId, res.id, content).subscribe({
       next: (saved) => {
         this.applySavedExercise(saved);
-        this.streamExerciseAI(res.id, 'ask', question);
+        this.streamChat(res.id, question);
       },
       error: (err) => {
-        this.exerciseAiBusy.set(false);
+        this.chatBusy.set(false);
         const message = this.errorText(err, 'Não foi possível enviar a pergunta');
-        this.exerciseAiError.set(message);
+        this.chatError.set(message);
         this.notify.error(message);
       },
     });
+  }
+
+  private streamChat(id: number, question: string) {
+    this.chatController?.abort();
+    const controller = new AbortController();
+    this.chatController = controller;
+    void this.exercises.chat(
+      this.bookId,
+      id,
+      { question },
+      {
+        onDelta: (text) => this.chatStreaming.update((t) => t + text),
+        onDone: () => {
+          this.chatStreaming.set('');
+          this.chatBusy.set(false);
+          this.loadChat(id);
+        },
+        onError: (message) => {
+          this.chatBusy.set(false);
+          this.chatError.set(message);
+          this.notify.error(message);
+        },
+      },
+      controller.signal,
+    );
+  }
+
+  private loadChat(id: number) {
+    this.exercises.listChat(this.bookId, id).subscribe({
+      next: (messages) => {
+        if (this.activeExercise()?.id === id) this.chatMessages.set(messages);
+      },
+      error: () => {},
+    });
+  }
+
+  clearChat() {
+    const res = this.activeExercise();
+    if (!res || this.chatBusy()) return;
+    this.exercises.clearChat(this.bookId, res.id).subscribe({
+      next: () => {
+        this.chatMessages.set([]);
+        this.chatStreaming.set('');
+        this.chatError.set(null);
+      },
+      error: (err) =>
+        this.notify.error(this.errorText(err, 'Não foi possível limpar a conversa')),
+    });
+  }
+
+  private resetChat() {
+    this.chatController?.abort();
+    this.chatMessages.set([]);
+    this.chatStreaming.set('');
+    this.chatBusy.set(false);
+    this.chatError.set(null);
   }
 
   private applySavedExercise(saved: ExerciseResolution) {
