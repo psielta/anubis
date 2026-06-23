@@ -57,5 +57,5 @@ def interpolate_progress(page_index: int, total_pages: int) -> int:
     """Map page progress into the 20–85% band."""
     if total_pages <= 0:
         return 20
-    ratio = page_index / total_pages
-    return 20 + int(ratio * 65)
+    # Ceiling-style steps so page 1 of a large book still moves off 20%.
+    return 20 + (page_index * 65 + total_pages - 1) // total_pages

@@ -10,7 +10,7 @@ import uuid
 from app.core.config import settings
 from app.crud import outbox as outbox_crud
 from app.db.session import AsyncSessionLocal
-from app.models.outbox import OutboxEventType
+from app.models.outbox import OutboxEvent, OutboxEventType
 from app.models.pdf_conversion import (
     PdfConversionErrorCode,
     PdfConversionJob,
@@ -38,6 +38,7 @@ async def process_one() -> bool:
         if event is None:
             return False
 
+        event_id = event.id
         try:
             if event.event_type == OutboxEventType.PDF_CONVERSION_CANCEL_REQUESTED.value:
                 await process_conversion(db, event)
@@ -59,10 +60,10 @@ async def process_one() -> bool:
                 await outbox_crud.mark_done(db, event)
             await db.commit()
         except Exception as exc:
-            logger.exception("Outbox event %s failed", event.id)
+            logger.exception("Outbox event %s failed", event_id)
             await db.rollback()
             async with AsyncSessionLocal() as err_db:
-                fresh = await err_db.get(type(event), event.id)
+                fresh = await err_db.get(OutboxEvent, event_id)
                 if fresh:
                     from app.crud import pdf_conversion as job_crud
 
