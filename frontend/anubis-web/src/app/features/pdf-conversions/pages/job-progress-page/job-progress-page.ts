@@ -23,6 +23,7 @@ export class JobProgressPage implements OnDestroy {
   private notify = inject(NotificationsService);
 
   protected job = signal<PdfConversionJob | null>(null);
+  protected loading = signal(true);
   protected liveMessage = signal<string | null>(null);
   protected loadError = signal<string | null>(null);
 
@@ -32,6 +33,7 @@ export class JobProgressPage implements OnDestroy {
   constructor() {
     const id = this.route.snapshot.paramMap.get('id');
     if (!id) {
+      this.loading.set(false);
       this.loadError.set('Job inválido');
       return;
     }
@@ -48,9 +50,14 @@ export class JobProgressPage implements OnDestroy {
     this.api.getJob(id).subscribe({
       next: (j) => {
         this.job.set(j);
+        this.loading.set(false);
+        this.loadError.set(null);
         if (this.sse.isTerminal(j.status)) return;
       },
-      error: () => this.loadError.set('Conversão não encontrada'),
+      error: () => {
+        this.loading.set(false);
+        this.loadError.set('Conversão não encontrada');
+      },
     });
   }
 

@@ -1,5 +1,7 @@
 <section class="job-progress-page">
-  @if (loadError()) {
+  @if (loading()) {
+    <p class="loading">Carregando conversão…</p>
+  } @else if (loadError()) {
     <p class="error">{{ loadError() }}</p>
   } @else if (job()) {
     <app-progress-card

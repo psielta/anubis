@@ -130,6 +130,34 @@ async def test_upload_creates_job_and_outbox_atomically(client):
 
 
 @pytest.mark.asyncio
+async def test_list_jobs_returns_only_current_user(client):
+    _, token_a = await _token(client)
+    _, token_b = await _token(client)
+    pdf = _make_text_pdf("List jobs test")
+
+    with patch(
+        "app.services.pdf_conversion_service.pdf_split_service.count_pages",
+        return_value=1,
+    ):
+        created = await client.post(
+            f"{API}/pdf-conversions",
+            headers=_auth(token_a),
+            files={"file": ("mine.pdf", pdf, "application/pdf")},
+        )
+    assert created.status_code == 201
+    job_id = created.json()["job_id"]
+
+    listed_a = await client.get(f"{API}/pdf-conversions", headers=_auth(token_a))
+    assert listed_a.status_code == 200
+    ids_a = {item["id"] for item in listed_a.json()}
+    assert job_id in ids_a
+
+    listed_b = await client.get(f"{API}/pdf-conversions", headers=_auth(token_b))
+    assert listed_b.status_code == 200
+    ids_b = {item["id"] for item in listed_b.json()}
+    assert job_id not in ids_b
+
+
 async def test_upload_rejects_non_pdf(client):
     _, token = await _token(client)
     resp = await client.post(

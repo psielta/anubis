@@ -55,6 +55,10 @@ export class PdfConversionApiService {
   private http = inject(HttpClient);
   private base = `${environment.apiUrl}/pdf-conversions`;
 
+  listJobs(): Observable<PdfConversionJob[]> {
+    return this.http.get<PdfConversionJob[]>(this.base);
+  }
+
   upload(file: File): Observable<{ job_id: string }> {
     const form = new FormData();
     form.append('file', file);

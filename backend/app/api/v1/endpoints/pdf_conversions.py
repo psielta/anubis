@@ -25,6 +25,12 @@ from app.services.storage import storage
 router = APIRouter(prefix="/pdf-conversions", tags=["pdf-conversions"])
 
 
+@router.get("", response_model=list[PdfConversionRead])
+async def list_jobs(current_user: CurrentUser, db: DbSession) -> list[PdfConversionRead]:
+    jobs = await job_crud.list_for_owner(db, current_user.id)
+    return [PdfConversionRead.model_validate(j) for j in jobs]
+
+
 @router.post("", response_model=PdfConversionCreateResponse, status_code=201)
 async def upload_pdf(
     current_user: CurrentUser,

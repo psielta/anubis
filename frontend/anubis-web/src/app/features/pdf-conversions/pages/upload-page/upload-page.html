@@ -2,7 +2,8 @@
   <p class="eyebrow">Arquivo morto</p>
   <h1>Converter PDF para Markdown</h1>
   <p class="lead">
-    Envie um PDF para conversão assíncrona. O progresso continua mesmo se você fechar esta tela.
+    Envie um PDF para conversão assíncrona. O progresso continua no servidor — use a lista
+    abaixo para retomar após recarregar a página.
   </p>
 
   <div
@@ -26,4 +27,32 @@
   @if (uploading()) {
     <p class="uploading">Enviando…</p>
   }
+
+  <section class="job-history">
+    <p class="eyebrow">Suas conversões</p>
+    @if (jobsLoading()) {
+      <p class="history-hint">Carregando…</p>
+    } @else if (jobs().length === 0) {
+      <p class="history-hint">Nenhuma conversão ainda.</p>
+    } @else {
+      <ul class="job-list">
+        @for (job of jobs(); track job.id) {
+          <li>
+            <a [routerLink]="['/pdf-conversions', job.id]" class="job-row">
+              <span class="job-name">{{ job.original_filename }}</span>
+              <span class="job-meta">
+                <span class="job-status" [attr.data-status]="job.status">
+                  {{ statusLabel(job.status) }}
+                </span>
+                @if (job.status !== 'completed' && job.status !== 'failed' && job.status !== 'canceled') {
+                  <span class="job-progress">{{ job.progress }}%</span>
+                }
+                <span class="job-date">{{ job.created_at | date: 'short' }}</span>
+              </span>
+            </a>
+          </li>
+        }
+      </ul>
+    }
+  </section>
 </section>

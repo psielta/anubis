@@ -31,6 +31,22 @@ async def create_job(
     return job
 
 
+async def list_for_owner(
+    db: AsyncSession,
+    owner_id: int,
+    *,
+    limit: int = 50,
+) -> list[PdfConversionJob]:
+    stmt = (
+        select(PdfConversionJob)
+        .where(PdfConversionJob.owner_id == owner_id)
+        .order_by(PdfConversionJob.created_at.desc())
+        .limit(limit)
+    )
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
+
+
 async def get_for_owner(
     db: AsyncSession, owner_id: int, job_id: uuid.UUID
 ) -> PdfConversionJob | None:

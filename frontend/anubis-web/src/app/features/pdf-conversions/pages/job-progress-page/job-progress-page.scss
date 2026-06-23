@@ -3,6 +3,10 @@
   max-width: 48rem;
   margin: 0 auto;
 
+  .loading {
+    color: var(--anubis-ink-soft);
+  }
+
   .error {
     color: var(--anubis-danger);
   }
