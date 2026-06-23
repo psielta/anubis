@@ -61,7 +61,7 @@ services:
       context: ./backend
     container_name: anubis-pdf-worker
     restart: unless-stopped
-    command: python -m app.workers.outbox_worker
+    entrypoint: ["python", "-m", "app.workers.outbox_worker"]
     env_file:
       - .env
     environment:
