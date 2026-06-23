@@ -23,14 +23,14 @@ class ConversionResult:
     """List of (char_offset, page_number) sorted by offset."""
 
 
-def convert_page(page_pdf: bytes) -> str:
+def convert_page(page_pdf: bytes, converter: MarkItDown | None = None) -> str:
     """Convert a single-page PDF blob to markdown."""
-    converter = MarkItDown()
+    md = converter or MarkItDown()
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
         tmp.write(page_pdf)
         tmp_path = Path(tmp.name)
     try:
-        result = converter.convert(str(tmp_path))
+        result = md.convert(str(tmp_path))
         return (result.text_content or "").strip()
     finally:
         tmp_path.unlink(missing_ok=True)

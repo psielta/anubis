@@ -34,8 +34,14 @@ def _next_seq() -> int:
     return _seq
 
 
-def _deadline() -> float:
-    return time.monotonic() + settings.PDF_CONVERSION_TIMEOUT_SECONDS
+def _timeout_seconds(page_count: int | None) -> int:
+    pages = page_count or 1
+    # Large books need more than the base timeout (~20s/page, cap 2h).
+    return max(settings.PDF_CONVERSION_TIMEOUT_SECONDS, min(pages * 20, 7200))
+
+
+def _deadline(page_count: int | None = None) -> float:
+    return time.monotonic() + _timeout_seconds(page_count)
 
 
 def _remaining(deadline: float) -> float:
@@ -73,10 +79,11 @@ async def _publish(
 
 
 async def _fail_timeout(db: AsyncSession, job) -> None:
+    limit = _timeout_seconds(job.page_count)
     pdf_conversion_service.mark_failed(
         job,
         error_code=PdfConversionErrorCode.TIMEOUT,
-        message=f"Conversão excedeu o limite de {settings.PDF_CONVERSION_TIMEOUT_SECONDS}s",
+        message=f"Conversão excedeu o limite de {limit}s",
     )
     await db.commit()
     await _publish(
@@ -96,6 +103,8 @@ async def _check_cancel(db: AsyncSession, job_id: uuid.UUID) -> bool:
 async def _convert_pages(
     db: AsyncSession, job, pdf_bytes: bytes, deadline: float
 ) -> tuple[str, list[tuple[int, int]]] | None:
+    from markitdown import MarkItDown
+
     try:
         page_pdfs = await _run_with_timeout(
             deadline, pdf_split_service.split_pages, pdf_bytes
@@ -107,6 +116,7 @@ async def _convert_pages(
     job.page_count = len(page_pdfs)
     await db.commit()
 
+    converter = MarkItDown()
     accumulated: list[str] = []
     offsets: list[tuple[int, int]] = []
     offset = 0
@@ -128,7 +138,10 @@ async def _convert_pages(
         offsets.append((offset, idx))
         try:
             md = await _run_with_timeout(
-                deadline, markitdown_service.convert_page, page_pdf
+                deadline,
+                markitdown_service.convert_page,
+                page_pdf,
+                converter,
             )
         except asyncio.TimeoutError:
             await _fail_timeout(db, job)
@@ -192,7 +205,7 @@ async def process_conversion(db: AsyncSession, event: OutboxEvent) -> None:
             await db.commit()
         return
 
-    deadline = _deadline()
+    deadline = _deadline(job.page_count)
 
     if job.status == PdfConversionStatus.PENDING.value:
         job.status = PdfConversionStatus.PROCESSING.value

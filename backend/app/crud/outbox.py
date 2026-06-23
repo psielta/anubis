@@ -37,10 +37,18 @@ async def claim_next(
     now = datetime.now(UTC)
     lease = timedelta(seconds=settings.PDF_CONVERSION_OUTBOX_LEASE_SECONDS)
 
-    conditions = [
+    pending_ready = and_(
         OutboxEvent.status == OutboxStatus.PENDING.value,
-        or_(OutboxEvent.next_retry_at.is_(None), OutboxEvent.next_retry_at <= now),
         or_(OutboxEvent.locked_until.is_(None), OutboxEvent.locked_until <= now),
+    )
+    stale_processing = and_(
+        OutboxEvent.status == OutboxStatus.PROCESSING.value,
+        OutboxEvent.locked_until.is_not(None),
+        OutboxEvent.locked_until <= now,
+    )
+    conditions = [
+        or_(pending_ready, stale_processing),
+        or_(OutboxEvent.next_retry_at.is_(None), OutboxEvent.next_retry_at <= now),
     ]
     if event_types:
         types = [t.value for t in event_types]

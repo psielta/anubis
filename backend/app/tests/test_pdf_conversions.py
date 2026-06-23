@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pymupdf
@@ -203,6 +203,42 @@ async def test_outbox_skip_locked_two_workers():
     claimed = [r for r in (r1, r2) if r is not None]
     assert len(claimed) == 1
     assert claimed[0].aggregate_id == agg_id
+
+
+@pytest.mark.asyncio
+async def test_outbox_reclaims_expired_processing_lease():
+    await engine.dispose()
+    async with AsyncSessionLocal() as db:
+        await db.execute(
+            update(OutboxEvent)
+            .where(OutboxEvent.status == OutboxStatus.PENDING.value)
+            .values(status=OutboxStatus.DONE.value, processed_at=datetime.now(UTC))
+        )
+        job = await job_crud.create_job(
+            db,
+            owner_id=1,
+            tenant_id=1,
+            original_filename="stale.pdf",
+            input_file_path="k",
+        )
+        event = await outbox_crud.enqueue(
+            db,
+            aggregate_id=job.id,
+            event_type=OutboxEventType.PDF_CONVERSION_REQUESTED,
+        )
+        event.status = OutboxStatus.PROCESSING.value
+        event.attempts = 1
+        event.locked_by = "dead-worker"
+        event.locked_until = datetime.now(UTC) - timedelta(seconds=60)
+        await db.commit()
+
+    async with AsyncSessionLocal() as session:
+        reclaimed = await outbox_crud.claim_next(session, worker_id="new-worker")
+        assert reclaimed is not None
+        assert reclaimed.status == OutboxStatus.PROCESSING.value
+        assert reclaimed.locked_by == "new-worker"
+        assert reclaimed.attempts == 2
+        await session.commit()
 
 
 @pytest.mark.asyncio
