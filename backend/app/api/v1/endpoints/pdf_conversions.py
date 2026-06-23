@@ -5,6 +5,7 @@ from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from fastapi.responses import PlainTextResponse, StreamingResponse
 
 from app.api.deps import CurrentUser, DbSession
+from app.db.session import AsyncSessionLocal
 from app.crud import pdf_conversion as job_crud
 from app.models.pdf_conversion import PdfConversionStatus
 from app.schemas.pdf_conversion import (
@@ -55,9 +56,17 @@ async def get_job(
 async def job_events(
     job_id: UUID, current_user: CurrentUser, db: DbSession
 ) -> StreamingResponse:
-    job = await pdf_conversion_service.get_owned_job(db, current_user.id, job_id)
+    await pdf_conversion_service.get_owned_job(db, current_user.id, job_id)
+    owner_id = current_user.id
+
+    async def fetch_snapshot():
+        async with AsyncSessionLocal() as session:
+            return await pdf_conversion_service.get_owned_job(
+                session, owner_id, job_id
+            )
+
     return StreamingResponse(
-        stream_job_events(job, redis_pubsub),
+        stream_job_events(job_id, redis_pubsub, fetch_snapshot),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

@@ -155,10 +155,22 @@ async def test_chunking_preserves_code_fence():
     fence = "```python\n" + ("x = 1\n" * 200) + "```\n\n"
     text = fence + ("tail paragraph.\n\n" * 50)
     specs = chunking_service.chunk_markdown(text, [(0, 1)], max_chars=500)
+    assert len(specs) >= 2
     for spec in specs:
         content = spec.content_markdown
-        opens = content.count("```")
-        assert opens % 2 == 0, "chunk must not split inside code fence"
+        assert content.count("```") % 2 == 0, "chunk must not split inside code fence"
+    rejoined = "".join(s.content_markdown for s in specs)
+    assert rejoined == text
+
+
+@pytest.mark.asyncio
+async def test_chunking_oversized_fence_stays_whole():
+    """Fence larger than cap must remain in a single chunk (balanced fences)."""
+    fence = "```\n" + ("line inside fence\n" * 400) + "```\n\nafter"
+    specs = chunking_service.chunk_markdown(fence, [(0, 1)], max_chars=200)
+    fence_chunks = [s for s in specs if "```" in s.content_markdown]
+    assert len(fence_chunks) == 1
+    assert fence_chunks[0].content_markdown.count("```") == 2
 
 
 @pytest.mark.asyncio
@@ -372,8 +384,9 @@ async def test_cancel_sets_flag(client):
 
 @pytest.mark.asyncio
 async def test_sse_subscribe_before_snapshot_order():
+    job_id = uuid.uuid4()
     job = PdfConversionJob(
-        id=uuid.uuid4(),
+        id=job_id,
         owner_id=1,
         tenant_id=1,
         original_filename="s.pdf",
@@ -383,6 +396,7 @@ async def test_sse_subscribe_before_snapshot_order():
     )
 
     subscribe_order: list[str] = []
+    fetch_order: list[str] = []
 
     class FakePubSub:
         async def subscribe(self, channel: str) -> None:
@@ -398,21 +412,26 @@ async def test_sse_subscribe_before_snapshot_order():
             await asyncio.sleep(0.05)
             return None
 
-    class FakeRedis:
-        def pubsub(self):
-            return FakePubSub()
-
     redis = MagicMock()
     redis.connect = AsyncMock()
     redis.pubsub = FakePubSub
 
+    async def fetch_job():
+        fetch_order.append("fetch")
+        return job
+
     frames: list[str] = []
-    async for frame in stream_job_events(job, redis, heartbeat_seconds=999):
+    async for frame in stream_job_events(
+        job_id, redis, fetch_job, heartbeat_seconds=999
+    ):
         frames.append(frame)
         if "data:" in frame:
             break
 
     assert subscribe_order == ["subscribe"]
+    assert fetch_order == ["fetch"]
+    assert subscribe_order[0] == "subscribe"
+    assert fetch_order[0] == "fetch"
     assert frames[0].startswith("event: progress")
 
 
@@ -445,6 +464,59 @@ async def test_authz_other_user_cannot_read_job(client):
         headers=_auth(token_b),
     )
     assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_worker_timeout_on_slow_convert():
+    await engine.dispose()
+    pdf = _make_text_pdf("slow", pages=1)
+    async with AsyncSessionLocal() as db:
+        job = await job_crud.create_job(
+            db,
+            owner_id=1,
+            tenant_id=1,
+            original_filename="slow.pdf",
+            input_file_path="users/1/conversions/slow/input.pdf",
+        )
+        job.status = PdfConversionStatus.PROCESSING.value
+        job_id = job.id
+        await storage_module.storage.upload(job.input_file_path, pdf, "application/pdf")
+        event = await outbox_crud.enqueue(
+            db,
+            aggregate_id=job.id,
+            event_type=OutboxEventType.PDF_CONVERSION_REQUESTED,
+        )
+        await db.commit()
+        event_id = event.id
+
+    def slow_convert(_page):
+        import time
+
+        time.sleep(2)
+        return "late"
+
+    async with AsyncSessionLocal() as db:
+        event = await db.get(OutboxEvent, event_id)
+        job = await db.get(PdfConversionJob, job_id)
+        assert event is not None and job is not None
+        with (
+            patch(
+                "app.workers.pdf_conversion_worker.settings.PDF_CONVERSION_TIMEOUT_SECONDS",
+                0.1,
+            ),
+            patch(
+                "app.workers.pdf_conversion_worker.markitdown_service.convert_page",
+                side_effect=slow_convert,
+            ),
+        ):
+            await process_conversion(db, event)
+            await db.commit()
+
+    async with AsyncSessionLocal() as db:
+        job = await job_crud.get_by_id(db, job_id)
+        assert job is not None
+        assert job.status == PdfConversionStatus.FAILED.value
+        assert job.error_code == PdfConversionErrorCode.TIMEOUT.value
 
 
 @pytest.mark.asyncio

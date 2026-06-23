@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any
+from uuid import UUID
 
 from app.models.pdf_conversion import PdfConversionJob
 from app.services.redis_pubsub_service import RedisPubSubService, channel_for_job
@@ -41,21 +42,23 @@ _TERMINAL = frozenset({"completed", "failed", "canceled"})
 
 
 async def stream_job_events(
-    job: PdfConversionJob,
+    job_id: UUID,
     redis: RedisPubSubService,
+    fetch_job: Callable[[], Awaitable[PdfConversionJob]],
     *,
     heartbeat_seconds: float = 15.0,
 ) -> AsyncIterator[str]:
     """
-    Subscribe to Redis BEFORE yielding the DB snapshot (subscribe-before-snapshot).
+    Subscribe to Redis first, then read DB snapshot (subscribe-before-snapshot).
     """
     await redis.connect()
-    channel = channel_for_job(job.id)
+    channel = channel_for_job(job_id)
     ps = redis.pubsub()
     await ps.subscribe(channel)
 
     seen: set[str] = set()
     try:
+        job = await fetch_job()
         snapshot = job_snapshot_event(job)
         seen.add(_event_key(snapshot))
         yield sse_frame("progress", snapshot)

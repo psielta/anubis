@@ -56,6 +56,25 @@ services:
       timeout: 5s
       retries: 5
 
+  pdf-worker:
+    build:
+      context: ./backend
+    container_name: anubis-pdf-worker
+    restart: unless-stopped
+    command: python -m app.workers.outbox_worker
+    env_file:
+      - .env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      S3_ENDPOINT_URL: http://minio:9000
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+
   minio-init:
     image: minio/mc:latest
     container_name: anubis-minio-init

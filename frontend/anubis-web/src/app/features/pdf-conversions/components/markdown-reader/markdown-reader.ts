@@ -4,7 +4,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import DOMPurify from 'dompurify';
 import MarkdownIt from 'markdown-it';
-import { ChunkRead, ChunkSummary } from '../../services/pdf-conversion-api.service';
+import { ChunkRead, ChunkSummary, TocEntry } from '../../services/pdf-conversion-api.service';
 import { ChunkSidebar } from '../chunk-sidebar/chunk-sidebar';
 import { SearchPanel } from '../search-panel/search-panel';
 
@@ -26,6 +26,7 @@ export class MarkdownReader {
   readonly jobId = input.required<string>();
   readonly filename = input.required<string>();
   readonly chunks = input.required<ChunkSummary[]>();
+  readonly toc = input<TocEntry[]>([]);
   readonly chunk = input<ChunkRead | null>(null);
   readonly loading = input(false);
   readonly navigate = output<number>();

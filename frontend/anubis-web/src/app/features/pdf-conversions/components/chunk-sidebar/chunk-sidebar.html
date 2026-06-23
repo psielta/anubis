@@ -1,19 +1,20 @@
 <aside class="chunk-sidebar">
-  <p class="eyebrow">Seções</p>
+  <p class="eyebrow">Sumário</p>
   <cdk-virtual-scroll-viewport itemSize="56" class="viewport">
     <mat-nav-list>
-      @for (chunk of chunks(); track chunk.chunk_index) {
+      @for (entry of toc().length ? toc() : chunks(); track entry.chunk_index) {
         <a
           mat-list-item
-          [class.active]="chunk.chunk_index === activeIndex()"
-          (click)="selectChunk.emit(chunk.chunk_index)"
+          [class.active]="entry.chunk_index === activeIndex()"
+          [style.padding-left.rem]="('depth' in entry ? entry.depth : 1) * 0.75"
+          (click)="selectChunk.emit(entry.chunk_index)"
         >
-          <span matListItemTitle>{{ chunk.title }}</span>
-          <span matListItemLine>
-            @if (chunk.page_start) {
-              p. {{ chunk.page_start }}@if (chunk.page_end && chunk.page_end !== chunk.page_start) {–{{ chunk.page_end }}}
-            }
-          </span>
+          <span matListItemTitle>{{ entry.title }}</span>
+          @if ('page_start' in entry && entry.page_start) {
+            <span matListItemLine>
+              p. {{ entry.page_start }}@if (entry.page_end && entry.page_end !== entry.page_start) {–{{ entry.page_end }}}
+            </span>
+          }
         </a>
       }
     </mat-nav-list>

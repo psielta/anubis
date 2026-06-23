@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.crud import pdf_conversion as job_crud
 from app.models.outbox import OutboxEvent
 from app.models.pdf_conversion import PdfConversionErrorCode, PdfConversionStatus
@@ -30,6 +32,21 @@ def _next_seq() -> int:
     global _seq
     _seq += 1
     return _seq
+
+
+def _deadline() -> float:
+    return time.monotonic() + settings.PDF_CONVERSION_TIMEOUT_SECONDS
+
+
+def _remaining(deadline: float) -> float:
+    return max(0.0, deadline - time.monotonic())
+
+
+async def _run_with_timeout(deadline: float, fn, *args):
+    remaining = _remaining(deadline)
+    if remaining <= 0:
+        raise asyncio.TimeoutError
+    return await asyncio.wait_for(asyncio.to_thread(fn, *args), timeout=remaining)
 
 
 async def _publish(
@@ -55,15 +72,38 @@ async def _publish(
         logger.exception("Redis publish failed for job %s", job_id)
 
 
+async def _fail_timeout(db: AsyncSession, job) -> None:
+    pdf_conversion_service.mark_failed(
+        job,
+        error_code=PdfConversionErrorCode.TIMEOUT,
+        message=f"Conversão excedeu o limite de {settings.PDF_CONVERSION_TIMEOUT_SECONDS}s",
+    )
+    await db.commit()
+    await _publish(
+        job.id,
+        status=job.status,
+        progress=job.progress,
+        error_code=job.error_code,
+        error_message=job.error_message,
+    )
+
+
 async def _check_cancel(db: AsyncSession, job_id: uuid.UUID) -> bool:
     job = await job_crud.get_by_id(db, job_id)
     return bool(job and job.cancel_requested)
 
 
 async def _convert_pages(
-    db: AsyncSession, job, pdf_bytes: bytes
+    db: AsyncSession, job, pdf_bytes: bytes, deadline: float
 ) -> tuple[str, list[tuple[int, int]]] | None:
-    page_pdfs = await asyncio.to_thread(pdf_split_service.split_pages, pdf_bytes)
+    try:
+        page_pdfs = await _run_with_timeout(
+            deadline, pdf_split_service.split_pages, pdf_bytes
+        )
+    except asyncio.TimeoutError:
+        await _fail_timeout(db, job)
+        return None
+
     job.page_count = len(page_pdfs)
     await db.commit()
 
@@ -86,7 +126,14 @@ async def _convert_pages(
             return None
 
         offsets.append((offset, idx))
-        md = await asyncio.to_thread(markitdown_service.convert_page, page_pdf)
+        try:
+            md = await _run_with_timeout(
+                deadline, markitdown_service.convert_page, page_pdf
+            )
+        except asyncio.TimeoutError:
+            await _fail_timeout(db, job)
+            return None
+
         if md:
             accumulated.append(md)
             offset += len(md)
@@ -145,6 +192,8 @@ async def process_conversion(db: AsyncSession, event: OutboxEvent) -> None:
             await db.commit()
         return
 
+    deadline = _deadline()
+
     if job.status == PdfConversionStatus.PENDING.value:
         job.status = PdfConversionStatus.PROCESSING.value
         job.started_at = datetime.now(UTC)
@@ -162,7 +211,13 @@ async def process_conversion(db: AsyncSession, event: OutboxEvent) -> None:
     elif job.output_markdown_path:
         full_md = (await storage.read_bytes(job.output_markdown_path)).decode("utf-8")
         pdf_bytes = await storage.read_bytes(job.input_file_path)
-        page_pdfs = await asyncio.to_thread(pdf_split_service.split_pages, pdf_bytes)
+        try:
+            page_pdfs = await _run_with_timeout(
+                deadline, pdf_split_service.split_pages, pdf_bytes
+            )
+        except asyncio.TimeoutError:
+            await _fail_timeout(db, job)
+            return
         offsets = []
         offset = 0
         for idx in range(1, len(page_pdfs) + 1):
@@ -170,7 +225,7 @@ async def process_conversion(db: AsyncSession, event: OutboxEvent) -> None:
             offset += max(1, len(full_md) // len(page_pdfs))
     else:
         pdf_bytes = await storage.read_bytes(job.input_file_path)
-        result = await _convert_pages(db, job, pdf_bytes)
+        result = await _convert_pages(db, job, pdf_bytes, deadline)
         if result is None:
             return
         full_md, offsets = result

@@ -37,8 +37,20 @@ def _pages_for_range(
     return min(pages), max(pages)
 
 
-def _inside_fence(text: str, pos: int) -> bool:
-    return text[:pos].count("```") % 2 == 1
+def _fence_spans(text: str) -> list[tuple[int, int]]:
+    spans: list[tuple[int, int]] = []
+    pos = 0
+    while pos < len(text):
+        open_idx = text.find("```", pos)
+        if open_idx == -1:
+            break
+        close_idx = text.find("```", open_idx + 3)
+        if close_idx == -1:
+            spans.append((open_idx, len(text)))
+            break
+        spans.append((open_idx, close_idx + 3))
+        pos = close_idx + 3
+    return spans
 
 
 def _is_table_line(line: str) -> bool:
@@ -46,90 +58,90 @@ def _is_table_line(line: str) -> bool:
     return bool(s) and s.startswith("|") and s.endswith("|")
 
 
-def _table_span_at(text: str, pos: int) -> tuple[int, int] | None:
-    """Return (start, end) char span of markdown table containing pos."""
-    line_start = text.rfind("\n", 0, pos) + 1
-    line_end = text.find("\n", pos)
-    if line_end == -1:
-        line_end = len(text)
-    line = text[line_start:line_end]
-    if not _is_table_line(line):
-        return None
-
-    tbl_start = line_start
-    while tbl_start > 0:
-        prev_end = tbl_start - 1
-        prev_start = text.rfind("\n", 0, prev_end) + 1
-        prev_line = text[prev_start:prev_end]
-        if _is_table_line(prev_line):
-            tbl_start = prev_start
-        else:
+def _table_spans(text: str) -> list[tuple[int, int]]:
+    spans: list[tuple[int, int]] = []
+    line_start = 0
+    in_table = False
+    tbl_start = 0
+    while line_start <= len(text):
+        line_end = text.find("\n", line_start)
+        if line_end == -1:
+            line_end = len(text)
+        line = text[line_start:line_end]
+        if _is_table_line(line):
+            if not in_table:
+                tbl_start = line_start
+                in_table = True
+        elif in_table:
+            spans.append((tbl_start, line_start))
+            in_table = False
+        if line_end == len(text):
+            if in_table:
+                spans.append((tbl_start, len(text)))
             break
-
-    tbl_end = line_end
-    while tbl_end < len(text):
-        next_start = tbl_end + 1 if tbl_end < len(text) else len(text)
-        next_end = text.find("\n", next_start)
-        if next_end == -1:
-            next_end = len(text)
-        next_line = text[next_start:next_end]
-        if _is_table_line(next_line):
-            tbl_end = next_end
-        else:
-            break
-    return tbl_start, tbl_end
+        line_start = line_end + 1
+    return spans
 
 
-def _fence_span_at(text: str, pos: int) -> tuple[int, int] | None:
-    if not _inside_fence(text, pos):
-        return None
-    open_fence = text.rfind("```", 0, pos)
-    close_fence = text.find("```", pos)
-    if open_fence == -1:
-        return None
-    if close_fence == -1:
-        return open_fence, len(text)
-    return open_fence, close_fence + 3
+def _protected_spans(text: str) -> list[tuple[int, int]]:
+    return _fence_spans(text) + _table_spans(text)
 
 
-def _adjust_split(text: str, start: int, split_at: int) -> int:
-    """Move split point out of code fences and tables."""
-    if split_at >= len(text):
-        return len(text)
+def _span_containing(spans: list[tuple[int, int]], pos: int) -> tuple[int, int] | None:
+    for start, end in spans:
+        if start <= pos < end:
+            return start, end
+    return None
 
-    fence = _fence_span_at(text, split_at)
-    if fence:
-        _, end = fence
-        return end
 
-    table = _table_span_at(text, split_at)
-    if table:
-        _, end = table
-        return end
+def _fences_balanced(text: str) -> bool:
+    return text.count("```") % 2 == 0
 
-    if _inside_fence(text, split_at) or (
-        _table_span_at(text, split_at) is not None
-    ):
-        return split_at
-    return split_at
+
+def _paragraph_split(text: str, start: int, before: int) -> int | None:
+    for sep in ("\n\n", "\n", " "):
+        idx = text.rfind(sep, start, before)
+        if idx != -1:
+            candidate = idx + len(sep)
+            if candidate > start:
+                return candidate
+    return None
 
 
 def _safe_split_point(text: str, start: int, target_end: int) -> int:
+    """Never split inside a code fence or markdown table."""
     if target_end >= len(text):
         return len(text)
+
+    protected = _protected_spans(text)
+    hit = _span_containing(protected, target_end - 1)
+    if hit is None:
+        hit = _span_containing(protected, target_end)
+
+    if hit:
+        span_start, span_end = hit
+        if span_start > start:
+            pre = _paragraph_split(text, start, span_start)
+            if pre is not None and _fences_balanced(text[start:pre]):
+                return pre
+            return span_start
+        return span_end
+
     search_from = min(target_end, len(text))
     for sep in ("\n\n", "\n", " "):
         idx = text.rfind(sep, start, search_from)
         while idx != -1:
-            split_at = _adjust_split(text, start, idx + len(sep))
-            if split_at > start and split_at <= len(text):
-                if not _inside_fence(text, split_at - 1):
-                    tbl = _table_span_at(text, split_at - 1)
-                    if tbl is None:
-                        return split_at
+            candidate = idx + len(sep)
+            if candidate > start and _fences_balanced(text[start:candidate]):
+                trailing = _span_containing(protected, candidate - 1)
+                if trailing is None:
+                    return candidate
             idx = text.rfind(sep, start, idx)
-    split_at = _adjust_split(text, start, search_from)
-    return split_at if split_at > start else search_from
+
+    trailing = _span_containing(protected, search_from - 1)
+    if trailing:
+        return trailing[1]
+    return search_from if search_from > start else len(text)
 
 
 def _split_by_size(
@@ -149,9 +161,14 @@ def _split_by_size(
         target = min(local + max_chars, len(text))
         if target < len(text):
             split_at = _safe_split_point(text, local, target)
+            if split_at <= local:
+                split_at = target
         else:
             split_at = len(text)
+
         piece = text[local:split_at]
+        assert _fences_balanced(piece), "chunk must not split inside code fence"
+
         g_start = global_start + local
         g_end = global_start + split_at
         chunk_title = base_title if part_num == 1 else f"{base_title} (parte {part_num})"
@@ -183,6 +200,7 @@ def chunk_markdown(
     Split markdown into sequential chunks.
 
     content_length unit for storage is Python len() = Unicode code points (chars).
+    Indivisible code fences/tables may produce chunks larger than max_chars.
     """
     cap = max_chars or settings.PDF_CONVERSION_CHUNK_MAX_CHARS
     if not full_md.strip():
@@ -214,7 +232,7 @@ def chunk_markdown(
         section_end = h12[i + 1].start() if i + 1 < len(h12) else len(full_md)
         section = full_md[section_start:section_end]
         title = match.group(2).strip() or f"Seção {next_index + 1}"
-        if len(section) <= cap:
+        if len(section) <= cap and _fences_balanced(section):
             ps, pe = _pages_for_range(section_start, section_end, page_offsets)
             chunks.append(
                 ChunkSpec(

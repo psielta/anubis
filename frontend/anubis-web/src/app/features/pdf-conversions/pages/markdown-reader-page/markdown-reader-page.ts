@@ -7,6 +7,7 @@ import {
   ChunkRead,
   ChunkSummary,
   PdfConversionApiService,
+  TocEntry,
 } from '../../services/pdf-conversion-api.service';
 
 @Component({
@@ -24,6 +25,7 @@ export class MarkdownReaderPage {
   protected jobId = signal('');
   protected filename = signal('');
   protected chunks = signal<ChunkSummary[]>([]);
+  protected toc = signal<TocEntry[]>([]);
   protected chunk = signal<ChunkRead | null>(null);
   protected loading = signal(false);
   protected error = signal<string | null>(null);
@@ -42,6 +44,9 @@ export class MarkdownReaderPage {
           this.error.set('Markdown ainda não está pronto');
           return;
         }
+        this.api.getToc(id).subscribe({
+          next: (entries) => this.toc.set(entries),
+        });
         this.api.listChunks(id).subscribe({
           next: (list) => {
             this.chunks.set(list);

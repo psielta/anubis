@@ -20,6 +20,7 @@
   <div class="reader-body">
     <app-chunk-sidebar
       [chunks]="chunks()"
+      [toc]="toc()"
       [activeIndex]="activeIndex()"
       (selectChunk)="navigate.emit($event)"
     />

@@ -19,17 +19,45 @@ export interface SseStreamHandlers {
 export interface SseGetHandlers extends SseStreamHandlers {
   /** Called when the stream ends cleanly (terminal state or server close). */
   onComplete?: () => void;
+  /** Called before each reconnect attempt after a non-terminal disconnect. */
+  onReconnecting?: (attempt: number) => void;
+}
+
+const TERMINAL_STATUSES = new Set(['completed', 'failed', 'canceled']);
+
+function isTerminalFrame(frame: SseFrame): boolean {
+  if (frame.event !== 'progress') return false;
+  const status = frame.data['status'];
+  return typeof status === 'string' && TERMINAL_STATUSES.has(status);
+}
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException('Aborted', 'AbortError'));
+      return;
+    }
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(timer);
+        reject(new DOMException('Aborted', 'AbortError'));
+      },
+      { once: true },
+    );
+  });
 }
 
 /**
- * Stream SSE from a GET endpoint (e.g. job progress). Supports Authorization header.
+ * Single SSE GET connection (no reconnect). Prefer streamSseGet for job progress.
  */
-export async function streamSseGet(
+export async function streamSseGetOnce(
   url: string,
   handlers: SseGetHandlers,
   token: string | null,
   signal?: AbortSignal,
-): Promise<void> {
+): Promise<'terminal' | 'disconnect' | 'error'> {
   let resp: Response;
   try {
     resp = await fetch(url, {
@@ -41,8 +69,8 @@ export async function streamSseGet(
       signal,
     });
   } catch {
-    handlers.onError('Erro de rede — o servidor está em execução?');
-    return;
+    if (!signal?.aborted) handlers.onError('Erro de rede — o servidor está em execução?');
+    return 'error';
   }
 
   if (!resp.ok || !resp.body) {
@@ -55,12 +83,13 @@ export async function streamSseGet(
     }
     if (resp.status === 401) detail = 'Sessão expirada — recarregue a página.';
     handlers.onError(detail);
-    return;
+    return 'error';
   }
 
   const reader = resp.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  let sawTerminal = false;
   try {
     for (;;) {
       const { value, done } = await reader.read();
@@ -72,12 +101,47 @@ export async function streamSseGet(
         buffer = buffer.slice(split + 2);
         if (frame.startsWith(':')) continue;
         const parsed = parseFrame(frame);
-        if (parsed) handlers.onFrame(parsed);
+        if (parsed) {
+          handlers.onFrame(parsed);
+          if (isTerminalFrame(parsed)) sawTerminal = true;
+        }
       }
     }
-    handlers.onComplete?.();
+    if (sawTerminal) {
+      handlers.onComplete?.();
+      return 'terminal';
+    }
+    return 'disconnect';
   } catch {
-    if (!signal?.aborted) handlers.onError('A transmissão foi interrompida.');
+    if (!signal?.aborted) return 'disconnect';
+    return 'error';
+  }
+}
+
+/**
+ * Stream SSE from a GET endpoint with automatic reconnect until terminal or abort.
+ */
+export async function streamSseGet(
+  url: string,
+  handlers: SseGetHandlers,
+  token: string | null,
+  signal?: AbortSignal,
+): Promise<void> {
+  let attempt = 0;
+  for (;;) {
+    if (signal?.aborted) return;
+    const outcome = await streamSseGetOnce(url, handlers, token, signal);
+    if (outcome === 'terminal' || outcome === 'error' || signal?.aborted) {
+      return;
+    }
+    attempt += 1;
+    handlers.onReconnecting?.(attempt);
+    const delay = Math.min(1000 * 2 ** Math.min(attempt, 4), 15000);
+    try {
+      await sleep(delay, signal);
+    } catch {
+      return;
+    }
   }
 }
 
