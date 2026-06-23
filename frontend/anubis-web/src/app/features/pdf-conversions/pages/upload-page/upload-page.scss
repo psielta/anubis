@@ -1,0 +1,62 @@
+.upload-page {
+  max-width: 36rem;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+
+  h1 {
+    margin: 0.5rem 0 1rem;
+  }
+
+  .lead {
+    color: var(--anubis-ink-soft);
+    margin-bottom: 2rem;
+  }
+
+  .dropzone {
+    background: var(--anubis-surface);
+    border: 2px dashed var(--anubis-line);
+    padding: 2.5rem 1.5rem;
+    text-align: center;
+    transition: border-color 0.15s;
+
+    mat-icon {
+      font-size: 2.5rem;
+      width: 2.5rem;
+      height: 2.5rem;
+      color: var(--anubis-gold-deep);
+    }
+
+    .file-label input {
+      display: none;
+    }
+
+    .file-label span {
+      display: inline-block;
+      margin-top: 0.75rem;
+      padding: 0.5rem 1.25rem;
+      background: var(--anubis-gold);
+      color: var(--anubis-obsidian-deep);
+      cursor: pointer;
+    }
+
+    .hint {
+      font-size: 0.85rem;
+      color: var(--anubis-ink-soft);
+      margin-top: 1rem;
+    }
+  }
+
+  &.dragging .dropzone {
+    border-color: var(--anubis-gold);
+  }
+
+  .error {
+    color: var(--anubis-danger);
+    margin-top: 1rem;
+  }
+
+  .uploading {
+    color: var(--anubis-lapis);
+    margin-top: 1rem;
+  }
+}

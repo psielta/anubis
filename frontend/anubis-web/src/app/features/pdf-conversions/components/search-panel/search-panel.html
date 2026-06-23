@@ -1,0 +1,24 @@
+<div class="search-panel">
+  <mat-form-field appearance="outline" class="search-field">
+    <mat-label>Buscar no documento</mat-label>
+    <input matInput [(ngModel)]="query" (keyup.enter)="search()" />
+    <button mat-icon-button matSuffix (click)="search()" [disabled]="searching()">
+      <mat-icon>search</mat-icon>
+    </button>
+  </mat-form-field>
+
+  @if (error()) {
+    <p class="error">{{ error() }}</p>
+  }
+
+  <ul class="hits">
+    @for (hit of hits(); track hit.chunk_index + hit.snippet) {
+      <li>
+        <button type="button" (click)="selectChunk.emit(hit.chunk_index)">
+          <strong>{{ hit.title }}</strong>
+          <span [innerHTML]="hit.snippet"></span>
+        </button>
+      </li>
+    }
+  </ul>
+</div>

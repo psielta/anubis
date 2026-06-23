@@ -1,0 +1,35 @@
+<section class="progress-card">
+  <p class="eyebrow">Conversão PDF → Markdown</p>
+  <h2>{{ job().original_filename }}</h2>
+  <p class="status">{{ statusLabel(job().status) }}</p>
+
+  <mat-progress-bar mode="determinate" [value]="job().progress" />
+
+  @if (liveMessage()) {
+    <p class="live-msg">{{ liveMessage() }}</p>
+  }
+  @if (job().error_message) {
+    <p class="error-msg">{{ job().error_message }}</p>
+  }
+
+  <div class="actions">
+    @if (job().status === 'failed') {
+      <button mat-flat-button color="primary" (click)="retry.emit()">
+        <mat-icon>refresh</mat-icon>
+        Tentar novamente
+      </button>
+    }
+    @if (job().status === 'pending' || job().status === 'processing' || job().status === 'chunking') {
+      <button mat-stroked-button (click)="cancel.emit()">
+        <mat-icon>cancel</mat-icon>
+        Cancelar
+      </button>
+    }
+    @if (job().status === 'completed') {
+      <button mat-flat-button color="primary" (click)="openReader.emit()">
+        <mat-icon>menu_book</mat-icon>
+        Abrir Markdown
+      </button>
+    }
+  </div>
+</section>

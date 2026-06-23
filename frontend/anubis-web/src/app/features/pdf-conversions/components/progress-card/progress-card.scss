@@ -1,0 +1,37 @@
+.progress-card {
+  background: var(--anubis-surface);
+  border: 1px solid var(--anubis-line);
+  padding: 1.5rem;
+  max-width: 40rem;
+
+  h2 {
+    margin: 0.5rem 0 1rem;
+    font-family: var(--mat-sys-title-large-font);
+  }
+
+  .status {
+    color: var(--anubis-ink-soft);
+    margin-bottom: 1rem;
+  }
+
+  mat-progress-bar {
+    margin-bottom: 1rem;
+  }
+
+  .live-msg {
+    color: var(--anubis-lapis);
+    font-size: 0.9rem;
+  }
+
+  .error-msg {
+    color: var(--anubis-danger);
+    margin-top: 0.75rem;
+  }
+
+  .actions {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 1.25rem;
+    flex-wrap: wrap;
+  }
+}

@@ -16,6 +16,71 @@ export interface SseStreamHandlers {
  * splits the body on blank lines into event/data frames. Shared by the study
  * assistant and the exercise-resolution AI actions.
  */
+export interface SseGetHandlers extends SseStreamHandlers {
+  /** Called when the stream ends cleanly (terminal state or server close). */
+  onComplete?: () => void;
+}
+
+/**
+ * Stream SSE from a GET endpoint (e.g. job progress). Supports Authorization header.
+ */
+export async function streamSseGet(
+  url: string,
+  handlers: SseGetHandlers,
+  token: string | null,
+  signal?: AbortSignal,
+): Promise<void> {
+  let resp: Response;
+  try {
+    resp = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Accept: 'text/event-stream',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      signal,
+    });
+  } catch {
+    handlers.onError('Erro de rede — o servidor está em execução?');
+    return;
+  }
+
+  if (!resp.ok || !resp.body) {
+    let detail = `A requisição falhou (${resp.status}).`;
+    try {
+      const err = await resp.json();
+      if (err?.detail) detail = err.detail;
+    } catch {
+      /* non-JSON error body */
+    }
+    if (resp.status === 401) detail = 'Sessão expirada — recarregue a página.';
+    handlers.onError(detail);
+    return;
+  }
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let split: number;
+      while ((split = buffer.indexOf('\n\n')) !== -1) {
+        const frame = buffer.slice(0, split);
+        buffer = buffer.slice(split + 2);
+        if (frame.startsWith(':')) continue;
+        const parsed = parseFrame(frame);
+        if (parsed) handlers.onFrame(parsed);
+      }
+    }
+    handlers.onComplete?.();
+  } catch {
+    if (!signal?.aborted) handlers.onError('A transmissão foi interrompida.');
+  }
+}
+
 export async function streamSse(
   url: string,
   body: unknown,

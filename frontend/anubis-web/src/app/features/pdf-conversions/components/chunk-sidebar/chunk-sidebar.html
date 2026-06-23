@@ -1,0 +1,21 @@
+<aside class="chunk-sidebar">
+  <p class="eyebrow">Seções</p>
+  <cdk-virtual-scroll-viewport itemSize="56" class="viewport">
+    <mat-nav-list>
+      @for (chunk of chunks(); track chunk.chunk_index) {
+        <a
+          mat-list-item
+          [class.active]="chunk.chunk_index === activeIndex()"
+          (click)="selectChunk.emit(chunk.chunk_index)"
+        >
+          <span matListItemTitle>{{ chunk.title }}</span>
+          <span matListItemLine>
+            @if (chunk.page_start) {
+              p. {{ chunk.page_start }}@if (chunk.page_end && chunk.page_end !== chunk.page_start) {–{{ chunk.page_end }}}
+            }
+          </span>
+        </a>
+      }
+    </mat-nav-list>
+  </cdk-virtual-scroll-viewport>
+</aside>

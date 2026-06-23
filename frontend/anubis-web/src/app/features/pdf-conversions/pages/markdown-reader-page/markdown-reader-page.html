@@ -1,0 +1,16 @@
+<section class="markdown-reader-page">
+  @if (error()) {
+    <p class="error">{{ error() }}</p>
+  } @else {
+    <app-markdown-reader
+      [jobId]="jobId()"
+      [filename]="filename()"
+      [chunks]="chunks()"
+      [chunk]="chunk()"
+      [loading]="loading()"
+      (navigate)="onNavigate($event)"
+      (copy)="onCopy()"
+      (download)="onDownload()"
+    />
+  }
+</section>

@@ -1,0 +1,13 @@
+<section class="job-progress-page">
+  @if (loadError()) {
+    <p class="error">{{ loadError() }}</p>
+  } @else if (job()) {
+    <app-progress-card
+      [job]="job()!"
+      [liveMessage]="liveMessage()"
+      (retry)="retry()"
+      (cancel)="cancel()"
+      (openReader)="openReader()"
+    />
+  }
+</section>

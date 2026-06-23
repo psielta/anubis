@@ -42,6 +42,27 @@ export const routes: Routes = [
         path: 'library',
         loadComponent: () => import('./features/library/library').then((m) => m.Library),
       },
+      {
+        path: 'pdf-conversions/upload',
+        loadComponent: () =>
+          import('./features/pdf-conversions/pages/upload-page/upload-page').then(
+            (m) => m.UploadPage,
+          ),
+      },
+      {
+        path: 'pdf-conversions/:id/read',
+        loadComponent: () =>
+          import(
+            './features/pdf-conversions/pages/markdown-reader-page/markdown-reader-page'
+          ).then((m) => m.MarkdownReaderPage),
+      },
+      {
+        path: 'pdf-conversions/:id',
+        loadComponent: () =>
+          import('./features/pdf-conversions/pages/job-progress-page/job-progress-page').then(
+            (m) => m.JobProgressPage,
+          ),
+      },
     ],
   },
   { path: '**', redirectTo: '' },

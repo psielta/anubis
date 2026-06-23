@@ -1,0 +1,9 @@
+.job-progress-page {
+  padding: 2rem 1rem;
+  max-width: 48rem;
+  margin: 0 auto;
+
+  .error {
+    color: var(--anubis-danger);
+  }
+}

@@ -44,6 +44,18 @@ services:
     volumes:
       - anubis_miniodata:/data
 
+  redis:
+    image: redis:7-alpine
+    container_name: anubis-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   minio-init:
     image: minio/mc:latest
     container_name: anubis-minio-init

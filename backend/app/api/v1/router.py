@@ -8,6 +8,7 @@ from app.api.v1.endpoints import (
     exercise_resolutions,
     latex_notebooks,
     notes,
+    pdf_conversions,
     sketches,
     study,
     translate,
@@ -23,6 +24,7 @@ api_router.include_router(exercise_resolutions.router)
 api_router.include_router(latex_notebooks.groups_router)
 api_router.include_router(latex_notebooks.router)
 api_router.include_router(notes.router)
+api_router.include_router(pdf_conversions.router)
 api_router.include_router(sketches.groups_router)
 api_router.include_router(sketches.router)
 api_router.include_router(study.router)

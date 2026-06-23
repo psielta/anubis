@@ -1,0 +1,10 @@
+.markdown-reader-page {
+  padding: 1rem;
+  max-width: 120rem;
+  margin: 0 auto;
+
+  .error {
+    color: var(--anubis-danger);
+    padding: 2rem;
+  }
+}

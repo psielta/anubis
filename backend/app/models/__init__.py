@@ -1,4 +1,6 @@
 from app.models.book import Book
+from app.models.outbox import OutboxEvent
+from app.models.pdf_conversion import PdfConversionChunk, PdfConversionJob
 from app.models.collection import Collection, book_collections
 from app.models.diagram import Diagram
 from app.models.exercise_resolution import (
@@ -23,7 +25,10 @@ __all__ = [
     "LatexNotebook",
     "LatexNotebookGroup",
     "Note",
+    "OutboxEvent",
     "PageTranslation",
+    "PdfConversionChunk",
+    "PdfConversionJob",
     "Sketch",
     "SketchGroup",
     "StudyMessage",

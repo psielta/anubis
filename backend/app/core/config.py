@@ -35,6 +35,17 @@ class Settings(BaseSettings):
     GEMINI_MODEL: str = "gemini-3.5-flash"
     AI_INLINE_MAX_MB: int = 15
 
+    REDIS_URL: str = "redis://localhost:6379/0"
+
+    # PDF → Markdown conversion limits
+    PDF_CONVERSION_MAX_UPLOAD_MB: int = 100
+    PDF_CONVERSION_MAX_PAGES: int = 500
+    PDF_CONVERSION_TIMEOUT_SECONDS: int = 600
+    PDF_CONVERSION_CHUNK_MAX_CHARS: int = 10000
+    PDF_CONVERSION_OUTBOX_MAX_ATTEMPTS: int = 3
+    PDF_CONVERSION_OUTBOX_LEASE_SECONDS: int = 300
+    PDF_CONVERSION_OUTBOX_POLL_SECONDS: float = 2.0
+
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     @classmethod
     def _split_cors(cls, v: object) -> object:

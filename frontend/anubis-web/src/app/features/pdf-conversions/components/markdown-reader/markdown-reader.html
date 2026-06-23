@@ -1,0 +1,47 @@
+<div class="reader-layout">
+  <header class="reader-toolbar">
+    <app-search-panel [jobId]="jobId()" (selectChunk)="navigate.emit($event)" />
+    <div class="toolbar-actions">
+      <button mat-stroked-button (click)="copy.emit()" [disabled]="!chunk()">
+        <mat-icon>content_copy</mat-icon>
+        Copiar seção
+      </button>
+      <button mat-stroked-button (click)="download.emit()">
+        <mat-icon>download</mat-icon>
+        Baixar .md
+      </button>
+      <button mat-stroked-button (click)="openRaw()" [disabled]="!chunk()">
+        <mat-icon>code</mat-icon>
+        Abrir bruto
+      </button>
+    </div>
+  </header>
+
+  <div class="reader-body">
+    <app-chunk-sidebar
+      [chunks]="chunks()"
+      [activeIndex]="activeIndex()"
+      (selectChunk)="navigate.emit($event)"
+    />
+
+    <article class="reader-content">
+      @if (loading()) {
+        <mat-spinner diameter="40" />
+      } @else if (chunk()) {
+        <h2>{{ chunk()!.title }}</h2>
+        <div class="md-body" [innerHTML]="renderedHtml()"></div>
+        <nav class="pager">
+          <button mat-stroked-button (click)="prev()" [disabled]="!canPrev()">
+            <mat-icon>chevron_left</mat-icon>
+            Anterior
+          </button>
+          <span>{{ activeIndex() + 1 }} / {{ chunks().length }}</span>
+          <button mat-stroked-button (click)="next()" [disabled]="!canNext()">
+            Próximo
+            <mat-icon>chevron_right</mat-icon>
+          </button>
+        </nav>
+      }
+    </article>
+  </div>
+</div>

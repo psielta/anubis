@@ -1,0 +1,22 @@
+.chunk-sidebar {
+  background: var(--anubis-surface);
+  border: 1px solid var(--anubis-line);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+
+  .eyebrow {
+    padding: 1rem 1rem 0.5rem;
+    margin: 0;
+  }
+
+  .viewport {
+    flex: 1;
+    min-height: 0;
+  }
+
+  a.active {
+    background: color-mix(in srgb, var(--anubis-gold) 12%, transparent);
+    border-left: 3px solid var(--anubis-gold);
+  }
+}

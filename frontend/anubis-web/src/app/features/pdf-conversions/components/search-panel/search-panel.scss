@@ -1,0 +1,36 @@
+.search-panel {
+  .search-field {
+    width: 100%;
+    max-width: 28rem;
+  }
+
+  .error {
+    color: var(--anubis-danger);
+  }
+
+  .hits {
+    list-style: none;
+    padding: 0;
+    margin: 0.75rem 0 0;
+
+    li button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: var(--anubis-surface);
+      border: 1px solid var(--anubis-line);
+      padding: 0.75rem;
+      margin-bottom: 0.5rem;
+      cursor: pointer;
+
+      &:hover {
+        border-color: var(--anubis-gold);
+      }
+
+      strong {
+        display: block;
+        margin-bottom: 0.25rem;
+      }
+    }
+  }
+}
