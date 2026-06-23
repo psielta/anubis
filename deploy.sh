@@ -34,10 +34,10 @@ pull_main() {
 
 update_api() {
   require_prod_files
-  echo ">>> Building API image"
-  "${COMPOSE[@]}" build anubis-api
-  echo ">>> Recreating API (migrations run via entrypoint)"
-  "${COMPOSE[@]}" up -d anubis-api
+  echo ">>> Building API and PDF worker images"
+  "${COMPOSE[@]}" build anubis-api anubis-pdf-worker
+  echo ">>> Recreating API and PDF worker (migrations run via entrypoint)"
+  "${COMPOSE[@]}" up -d anubis-api anubis-pdf-worker
 }
 
 update_front() {
@@ -51,7 +51,7 @@ update_front() {
 update_all() {
   require_prod_files
   echo ">>> Building application images"
-  "${COMPOSE[@]}" build anubis-api anubis-front
+  "${COMPOSE[@]}" build anubis-api anubis-pdf-worker anubis-front
   echo ">>> Starting full stack"
   "${COMPOSE[@]}" up -d
 }

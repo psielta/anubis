@@ -36,6 +36,18 @@ services:
     networks:
       - anubis-net
 
+  anubis-redis:
+    image: redis:7-alpine
+    container_name: anubis-redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - anubis-net
+
   anubis-createbucket:
     image: minio/mc:latest
     container_name: anubis-createbucket
@@ -69,11 +81,34 @@ services:
         condition: service_healthy
       anubis-minio:
         condition: service_healthy
+      anubis-redis:
+        condition: service_healthy
       anubis-createbucket:
         condition: service_completed_successfully
     networks:
       - anubis-net
       - trx_trxnet
+
+  anubis-pdf-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: anubis-pdf-worker
+    restart: unless-stopped
+    command: python -m app.workers.outbox_worker
+    env_file:
+      - .env
+    depends_on:
+      anubis-db:
+        condition: service_healthy
+      anubis-redis:
+        condition: service_healthy
+      anubis-minio:
+        condition: service_healthy
+      anubis-createbucket:
+        condition: service_completed_successfully
+    networks:
+      - anubis-net
 
   anubis-front:
     build:
