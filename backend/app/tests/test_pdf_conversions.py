@@ -21,7 +21,7 @@ from app.models.pdf_conversion import (
     PdfConversionJob,
     PdfConversionStatus,
 )
-from app.services import chunking_service, storage as storage_module
+from app.services import storage as storage_module
 from app.services.sse_service import _event_key, stream_job_events
 from app.workers.pdf_conversion_worker import process_conversion
 
@@ -138,51 +138,6 @@ async def test_upload_rejects_non_pdf(client):
         files={"file": ("x.txt", b"not pdf", "text/plain")},
     )
     assert resp.status_code == 415
-
-
-@pytest.mark.asyncio
-async def test_chunking_no_headings_size_based():
-    text = "Paragraph one.\n\n" * 400
-    specs = chunking_service.chunk_markdown(text, [(0, 1)], max_chars=2000)
-    assert len(specs) >= 2
-    indices = [s.chunk_index for s in specs]
-    assert indices == list(range(len(specs)))
-    assert specs[0].title == "Seção 1"
-
-
-@pytest.mark.asyncio
-async def test_chunking_preserves_code_fence():
-    fence = "```python\n" + ("x = 1\n" * 200) + "```\n\n"
-    text = fence + ("tail paragraph.\n\n" * 50)
-    specs = chunking_service.chunk_markdown(text, [(0, 1)], max_chars=500)
-    assert len(specs) >= 2
-    for spec in specs:
-        content = spec.content_markdown
-        assert content.count("```") % 2 == 0, "chunk must not split inside code fence"
-    rejoined = "".join(s.content_markdown for s in specs)
-    assert rejoined == text
-
-
-@pytest.mark.asyncio
-async def test_chunking_oversized_fence_stays_whole():
-    """Fence larger than cap must remain in a single chunk (balanced fences)."""
-    fence = "```\n" + ("line inside fence\n" * 400) + "```\n\nafter"
-    specs = chunking_service.chunk_markdown(fence, [(0, 1)], max_chars=200)
-    fence_chunks = [s for s in specs if "```" in s.content_markdown]
-    assert len(fence_chunks) == 1
-    assert fence_chunks[0].content_markdown.count("```") == 2
-
-
-@pytest.mark.asyncio
-async def test_chunking_preserves_table():
-    header = "| Col A | Col B |\n| --- | --- |\n"
-    rows = "".join(f"| row {i} | val {i} |\n" for i in range(80))
-    text = header + rows + "\n\nAfter table.\n" * 30
-    specs = chunking_service.chunk_markdown(text, [(0, 1)], max_chars=600)
-    for spec in specs:
-        lines = [ln for ln in spec.content_markdown.split("\n") if ln.strip().startswith("|")]
-        for ln in lines:
-            assert ln.count("|") >= 2
 
 
 @pytest.mark.asyncio

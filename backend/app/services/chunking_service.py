@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from app.core.config import settings
 
 _HEADING_RE = re.compile(r"^(#{1,2})\s+(.+)$", re.MULTILINE)
+_FENCE_MARKER = "```"
 
 
 @dataclass(frozen=True)
@@ -41,15 +42,15 @@ def _fence_spans(text: str) -> list[tuple[int, int]]:
     spans: list[tuple[int, int]] = []
     pos = 0
     while pos < len(text):
-        open_idx = text.find("```", pos)
+        open_idx = text.find(_FENCE_MARKER, pos)
         if open_idx == -1:
             break
-        close_idx = text.find("```", open_idx + 3)
+        close_idx = text.find(_FENCE_MARKER, open_idx + len(_FENCE_MARKER))
         if close_idx == -1:
             spans.append((open_idx, len(text)))
             break
-        spans.append((open_idx, close_idx + 3))
-        pos = close_idx + 3
+        spans.append((open_idx, close_idx + len(_FENCE_MARKER)))
+        pos = close_idx + len(_FENCE_MARKER)
     return spans
 
 
@@ -84,7 +85,7 @@ def _table_spans(text: str) -> list[tuple[int, int]]:
 
 
 def _protected_spans(text: str) -> list[tuple[int, int]]:
-    return _fence_spans(text) + _table_spans(text)
+    return sorted(_fence_spans(text) + _table_spans(text))
 
 
 def _span_containing(spans: list[tuple[int, int]], pos: int) -> tuple[int, int] | None:
@@ -94,8 +95,17 @@ def _span_containing(spans: list[tuple[int, int]], pos: int) -> tuple[int, int] 
     return None
 
 
-def _fences_balanced(text: str) -> bool:
-    return text.count("```") % 2 == 0
+def _chunk_fences_closed(text: str) -> bool:
+    """True when the chunk does not end inside an open code fence."""
+    in_fence = False
+    pos = 0
+    while pos < len(text):
+        idx = text.find(_FENCE_MARKER, pos)
+        if idx == -1:
+            break
+        in_fence = not in_fence
+        pos = idx + len(_FENCE_MARKER)
+    return not in_fence
 
 
 def _paragraph_split(text: str, start: int, before: int) -> int | None:
@@ -108,40 +118,45 @@ def _paragraph_split(text: str, start: int, before: int) -> int | None:
     return None
 
 
-def _safe_split_point(text: str, start: int, target_end: int) -> int:
-    """Never split inside a code fence or markdown table."""
-    if target_end >= len(text):
+def _compute_split(text: str, start: int, window_end: int) -> int:
+    """
+    Exclusive end index for the next chunk.
+
+    Code fences and markdown tables are atomic: they are never bisected.
+    Blocks larger than the window produce an oversized chunk.
+    """
+    if window_end >= len(text):
         return len(text)
 
     protected = _protected_spans(text)
-    hit = _span_containing(protected, target_end - 1)
-    if hit is None:
-        hit = _span_containing(protected, target_end)
 
-    if hit:
-        span_start, span_end = hit
-        if span_start > start:
+    active = _span_containing(protected, start)
+    if active and active[0] <= start < active[1]:
+        return active[1]
+
+    for span_start, span_end in protected:
+        if span_end <= start:
+            continue
+        if span_start >= window_end:
+            break
+        # Protected block begins inside this window — take the whole block.
+        if span_start >= start and span_start < window_end < span_end:
+            return span_end
+        # Window would cut into a later block — end before it.
+        if span_start > start and span_start < window_end:
             pre = _paragraph_split(text, start, span_start)
-            if pre is not None and _fences_balanced(text[start:pre]):
-                return pre
-            return span_start
-        return span_end
+            return pre if pre and pre > start else span_start
 
-    search_from = min(target_end, len(text))
-    for sep in ("\n\n", "\n", " "):
-        idx = text.rfind(sep, start, search_from)
-        while idx != -1:
-            candidate = idx + len(sep)
-            if candidate > start and _fences_balanced(text[start:candidate]):
-                trailing = _span_containing(protected, candidate - 1)
-                if trailing is None:
-                    return candidate
-            idx = text.rfind(sep, start, idx)
+    candidate = _paragraph_split(text, start, window_end)
+    if candidate and candidate > start:
+        if _span_containing(protected, candidate - 1) is None:
+            return candidate
+    return window_end
 
-    trailing = _span_containing(protected, search_from - 1)
-    if trailing:
-        return trailing[1]
-    return search_from if search_from > start else len(text)
+
+def _validate_chunk_piece(piece: str) -> None:
+    if not _chunk_fences_closed(piece):
+        raise ValueError("chunk splits inside a code fence")
 
 
 def _split_by_size(
@@ -158,16 +173,19 @@ def _split_by_size(
     part_num = 1
     base_title = title
     while local < len(text):
-        target = min(local + max_chars, len(text))
-        if target < len(text):
-            split_at = _safe_split_point(text, local, target)
+        window_end = min(local + max_chars, len(text))
+        split_at = (
+            _compute_split(text, local, window_end)
+            if window_end < len(text)
+            else len(text)
+        )
+        if split_at <= local:
+            split_at = min(local + max_chars, len(text))
             if split_at <= local:
-                split_at = target
-        else:
-            split_at = len(text)
+                split_at = len(text)
 
         piece = text[local:split_at]
-        assert _fences_balanced(piece), "chunk must not split inside code fence"
+        _validate_chunk_piece(piece)
 
         g_start = global_start + local
         g_end = global_start + split_at
@@ -232,7 +250,8 @@ def chunk_markdown(
         section_end = h12[i + 1].start() if i + 1 < len(h12) else len(full_md)
         section = full_md[section_start:section_end]
         title = match.group(2).strip() or f"Seção {next_index + 1}"
-        if len(section) <= cap and _fences_balanced(section):
+        if len(section) <= cap and _chunk_fences_closed(section):
+            _validate_chunk_piece(section)
             ps, pe = _pages_for_range(section_start, section_end, page_offsets)
             chunks.append(
                 ChunkSpec(
