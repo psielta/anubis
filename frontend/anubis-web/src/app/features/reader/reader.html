@@ -194,7 +194,7 @@
       #viewport
       class="reader-viewport"
       appAreaSelect
-      [active]="cropMode()"
+      [active]="areaSelectActive()"
       (regionSelected)="onRegionSelected($event)"
       (mouseup)="captureSelection()"
       (scroll)="onReaderScroll()"
@@ -203,6 +203,12 @@
       <div class="crop-hint">
         <mat-icon>content_cut</mat-icon>
         Arraste sobre o enunciado para recortar o exercício
+      </div>
+    }
+    @if (assistantCropMode()) {
+      <div class="crop-hint">
+        <mat-icon>image_search</mat-icon>
+        Arraste sobre a imagem para perguntar ao assistente
       </div>
     }
   </div>
@@ -335,19 +341,60 @@
       <div class="ai-scope">
         <button
           class="scope-chip"
-          [class.active]="effectiveAiScope() === 'book'"
-          (click)="aiScope.set('book')"
+          [class.active]="aiScope() === 'book'"
+          (click)="setAiScope('book')"
         >
           Livro inteiro
         </button>
         <button
           class="scope-chip"
-          [class.active]="effectiveAiScope() === 'chapter'"
+          [class.active]="aiScope() === 'chapter'"
           [disabled]="!chapterRange()"
-          (click)="aiScope.set('chapter')"
+          (click)="setAiScope('chapter')"
         >
           Este capítulo
         </button>
+        <button
+          class="scope-chip"
+          [class.active]="aiScope() === 'pages'"
+          (click)="setAiScope('pages')"
+        >
+          Páginas
+        </button>
+      </div>
+
+      <div class="ai-scope-detail">
+        @if (aiScope() === 'chapter') {
+          <span>{{ chapterContextLabel() }}</span>
+        } @else if (aiScope() === 'pages') {
+          <label class="ai-page-field">
+            <span>De</span>
+            <input
+              type="text"
+              inputmode="numeric"
+              [value]="aiCustomPageFrom() ?? ''"
+              (input)="setAiCustomPageFrom($any($event.target).value)"
+              [attr.aria-invalid]="aiCustomRangeInvalid()"
+            />
+          </label>
+          <label class="ai-page-field">
+            <span>Até</span>
+            <input
+              type="text"
+              inputmode="numeric"
+              [value]="aiCustomPageTo() ?? ''"
+              (input)="setAiCustomPageTo($any($event.target).value)"
+              [attr.aria-invalid]="aiCustomRangeInvalid()"
+            />
+          </label>
+          @if (aiCustomRange(); as range) {
+            <span>PDF pp. {{ range.from }}-{{ range.to }}</span>
+          } @else {
+            <span class="ai-scope-invalid">Intervalo inválido</span>
+          }
+        } @else {
+          <span>{{ pageCount() }} páginas do PDF</span>
+        }
       </div>
 
       <div class="ai-thread">
@@ -404,7 +451,38 @@
         <button class="ai-action" (click)="send('flashcards')" [disabled]="aiBusy()">
           <mat-icon>style</mat-icon> Flashcards
         </button>
+        <button
+          class="ai-action"
+          [class.active]="assistantCropMode()"
+          (click)="startAssistantImageSelection()"
+          [disabled]="aiBusy()"
+        >
+          <mat-icon>image_search</mat-icon> Imagem
+        </button>
       </div>
+
+      @if (pendingVisualSelection(); as visual) {
+        <div class="ai-visual-chip">
+          <mat-icon>image_search</mat-icon>
+          <div class="ai-visual-body">
+            <span>Imagem selecionada · PDF p. {{ visual.page }}</span>
+            <app-exercise-crop
+              [pdfDoc]="readerPdfDoc()"
+              [page]="visual.page"
+              [region]="visual.region"
+              [maxWidth]="220"
+            />
+          </div>
+          <button
+            type="button"
+            class="ai-selection-clear"
+            (click)="clearPendingVisualSelection()"
+            aria-label="Remover imagem selecionada"
+          >
+            <mat-icon>close</mat-icon>
+          </button>
+        </div>
+      }
 
       @if (pendingSelection()) {
         <div class="ai-selection-chip">

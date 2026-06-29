@@ -1,5 +1,7 @@
+import type { ExerciseRegion } from './exercise-resolution.model';
+
 export type StudyKind = 'chat' | 'summary' | 'flashcards';
-export type StudyScope = 'book' | 'chapter';
+export type StudyScope = 'book' | 'chapter' | 'pages';
 
 export interface StudyMessage {
   id: number;
@@ -17,6 +19,12 @@ export interface StudyRequest {
   page_from?: number;
   page_to?: number;
   selection?: string;
+  visual_selection?: StudyVisualSelection;
+}
+
+export interface StudyVisualSelection {
+  page: number;
+  region: ExerciseRegion;
 }
 
 export interface StudyDone {

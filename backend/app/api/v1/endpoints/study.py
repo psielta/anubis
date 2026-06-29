@@ -57,17 +57,36 @@ async def create_study_message(
         raise HTTPException(503, "IA não configurada. Defina GEMINI_API_KEY.")
     if book.file_format != "pdf":
         raise HTTPException(400, "Apenas livros em PDF suportam o assistente de estudo de IA.")
+    if payload.visual_selection and payload.kind != "chat":
+        raise HTTPException(422, "A seleção visual só pode ser usada em perguntas.")
+    if payload.scope in {"chapter", "pages"} and (
+        payload.page_from is None or payload.page_to is None
+    ):
+        raise HTTPException(422, "Informe o intervalo de páginas para este contexto.")
+    if (
+        book.page_count is not None
+        and payload.page_to is not None
+        and payload.page_to > book.page_count
+    ):
+        raise HTTPException(422, "Intervalo de páginas fora do livro.")
+    if (
+        book.page_count is not None
+        and payload.visual_selection is not None
+        and payload.visual_selection.page > book.page_count
+    ):
+        raise HTTPException(422, "Página da seleção visual fora do livro.")
 
     data = await storage.read_bytes(book.object_key)
     gemini = ai.client()
 
     # Resolve the PDF part to send and a human-readable scope label.
-    if payload.scope == "chapter" and payload.page_from and payload.page_to:
+    if payload.scope in {"chapter", "pages"} and payload.page_from and payload.page_to:
         pdf = await ai.extract_pages(data, payload.page_from, payload.page_to)
         part = ai.inline_part(pdf)
-        scope = f"pp. {payload.page_from}–{payload.page_to}"
+        prefix = "Capítulo atual" if payload.scope == "chapter" else "Páginas selecionadas"
+        scope = f"{prefix} · PDF pp. {payload.page_from}-{payload.page_to}"
     else:
-        scope = "Whole book"
+        scope = "Livro inteiro"
         size = book.file_size or len(data)
         if size <= settings.AI_INLINE_MAX_MB * 1024 * 1024:
             part = ai.inline_part(data)
@@ -84,8 +103,29 @@ async def create_study_message(
                 "Livro muito grande para IA do livro inteiro — escolha um capítulo.",
             )
 
+    visual_context: str | None = None
+    parts: list[object] = [part]
+    if payload.visual_selection is not None:
+        try:
+            png = await ai.extract_region_png(
+                data,
+                payload.visual_selection.page,
+                payload.visual_selection.region.model_dump(),
+            )
+        except Exception as exc:
+            raise HTTPException(422, "Não foi possível renderizar a seleção visual.") from exc
+        parts.append(ai.inline_png_part(png))
+        visual_context = f"PDF p. {payload.visual_selection.page}"
+    prompt_part: object | list[object] = parts if len(parts) > 1 else part
+
     if payload.kind == "chat":
-        if payload.selection:
+        if payload.visual_selection:
+            question = (payload.question or "").strip()
+            user_content = f"[Imagem selecionada no PDF p. {payload.visual_selection.page}]"
+            if question:
+                user_content = f"{user_content}\n\n{question}"
+            user_scope = "Imagem selecionada"
+        elif payload.selection:
             excerpt = payload.selection.strip()
             if len(excerpt) > 280:
                 excerpt = excerpt[:280] + "…"
@@ -108,7 +148,12 @@ async def create_study_message(
         answer: list[str] = []
         try:
             async for channel, text in ai.stream_reply(
-                gemini, part, payload.kind, payload.question, payload.selection
+                gemini,
+                prompt_part,
+                payload.kind,
+                payload.question,
+                payload.selection,
+                visual_context,
             ):
                 if channel == "thinking":
                     yield _sse("thinking", {"text": text})

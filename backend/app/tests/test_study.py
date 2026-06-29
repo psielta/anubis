@@ -12,7 +12,7 @@ from app.tests.test_books import _auth_headers, _token, _upload_pdf
 API = "/api/v1"
 
 
-async def _fake_stream(gemini, part, kind, question, selection=None):
+async def _fake_stream(gemini, part, kind, question, selection=None, visual_context=None):
     yield ("thinking", "Looking through the document…")
     yield ("answer", "# Answer\n\nGrounded in the PDF.")
 
@@ -29,6 +29,7 @@ def mock_ai_and_storage(monkeypatch):
     monkeypatch.setattr(
         ai_module, "extract_pages", AsyncMock(return_value=b"%PDF-1.4 fake")
     )
+    monkeypatch.setattr(ai_module, "extract_region_png", AsyncMock(return_value=b"png"))
     monkeypatch.setattr(ai_module.settings, "GEMINI_API_KEY", "test-key")
 
 
@@ -100,6 +101,105 @@ async def test_ask_about_selection_quotes_passage(client):
     assert user_msg["scope"] == "Selection"
     assert "weighing of the heart" in user_msg["content"].lower()
     assert "What does this mean?" in user_msg["content"]
+
+
+@pytest.mark.asyncio
+async def test_custom_pages_scope_extracts_range(client):
+    _, token = await _token(client)
+    book_id = (await _upload_pdf(client, token)).json()["id"]
+    ai_module.extract_pages.reset_mock()
+
+    resp = await client.post(
+        f"{API}/books/{book_id}/study",
+        headers=_auth_headers(token),
+        json={"kind": "summary", "scope": "pages", "page_from": 3, "page_to": 5},
+    )
+    assert resp.status_code == 200
+    ai_module.extract_pages.assert_awaited_once_with(b"%PDF-1.4 fake", 3, 5)
+
+    history = (
+        await client.get(f"{API}/books/{book_id}/study", headers=_auth_headers(token))
+    ).json()
+    assert history[0]["scope"] == "Páginas selecionadas · PDF pp. 3-5"
+
+
+@pytest.mark.asyncio
+async def test_custom_pages_scope_requires_range(client):
+    _, token = await _token(client)
+    book_id = (await _upload_pdf(client, token)).json()["id"]
+
+    resp = await client.post(
+        f"{API}/books/{book_id}/study",
+        headers=_auth_headers(token),
+        json={"kind": "chat", "question": "Explain", "scope": "pages"},
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_visual_selection_streams_with_cropped_image(client, monkeypatch):
+    captured = {}
+
+    async def _capture_stream(
+        gemini, part, kind, question, selection=None, visual_context=None
+    ):
+        captured["part"] = part
+        captured["visual_context"] = visual_context
+        captured["question"] = question
+        yield ("answer", "About the selected image.")
+
+    monkeypatch.setattr(ai_module, "stream_reply", _capture_stream)
+    _, token = await _token(client)
+    book_id = (await _upload_pdf(client, token)).json()["id"]
+    ai_module.extract_region_png.reset_mock()
+
+    resp = await client.post(
+        f"{API}/books/{book_id}/study",
+        headers=_auth_headers(token),
+        json={
+            "kind": "chat",
+            "question": "O que esta figura mostra?",
+            "scope": "book",
+            "visual_selection": {
+                "page": 1,
+                "region": {"x0": 0.1, "y0": 0.2, "x1": 0.6, "y1": 0.7},
+            },
+        },
+    )
+    assert resp.status_code == 200
+    assert captured["visual_context"] == "PDF p. 1"
+    assert captured["question"] == "O que esta figura mostra?"
+    assert isinstance(captured["part"], list)
+    assert len(captured["part"]) == 2
+    ai_module.extract_region_png.assert_awaited_once()
+
+    history = (
+        await client.get(f"{API}/books/{book_id}/study", headers=_auth_headers(token))
+    ).json()
+    assert history[0]["scope"] == "Imagem selecionada"
+    assert "[Imagem selecionada no PDF p. 1]" in history[0]["content"]
+    assert "O que esta figura mostra?" in history[0]["content"]
+
+
+@pytest.mark.asyncio
+async def test_visual_selection_rejects_invalid_region(client):
+    _, token = await _token(client)
+    book_id = (await _upload_pdf(client, token)).json()["id"]
+
+    resp = await client.post(
+        f"{API}/books/{book_id}/study",
+        headers=_auth_headers(token),
+        json={
+            "kind": "chat",
+            "question": "Explain",
+            "scope": "book",
+            "visual_selection": {
+                "page": 1,
+                "region": {"x0": 0.6, "y0": 0.2, "x1": 0.6, "y1": 0.7},
+            },
+        },
+    )
+    assert resp.status_code == 422
 
 
 @pytest.mark.asyncio

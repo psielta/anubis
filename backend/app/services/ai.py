@@ -6,7 +6,7 @@ Markdown, and surfacing the model's thinking so the API layer can stream it.
 
 import asyncio
 import io
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from typing import Any
 
 import pymupdf
@@ -118,6 +118,10 @@ def inline_part(data: bytes) -> types.Part:
     return types.Part.from_bytes(data=data, mime_type="application/pdf")
 
 
+def inline_png_part(data: bytes) -> types.Part:
+    return types.Part.from_bytes(data=data, mime_type="image/png")
+
+
 async def extract_pages(data: bytes, page_from: int, page_to: int) -> bytes:
     """Extract a 1-based inclusive page range into a new small PDF (off-loop)."""
 
@@ -135,6 +139,42 @@ async def extract_pages(data: bytes, page_from: int, page_to: int) -> bytes:
                 return out.tobytes()
             finally:
                 out.close()
+        finally:
+            doc.close()
+
+    return await asyncio.to_thread(_run)
+
+
+async def extract_region_png(
+    data: bytes, page_number: int, region: Mapping[str, float]
+) -> bytes:
+    """Render a normalized top-left PDF page region to PNG (off-loop)."""
+
+    def _run() -> bytes:
+        doc = pymupdf.open(stream=data, filetype="pdf")
+        try:
+            if page_number < 1 or page_number > doc.page_count:
+                raise ValueError("page out of range")
+
+            page = doc.load_page(page_number - 1)
+            page_rect = page.rect
+            clip = pymupdf.Rect(
+                page_rect.x0 + float(region["x0"]) * page_rect.width,
+                page_rect.y0 + float(region["y0"]) * page_rect.height,
+                page_rect.x0 + float(region["x1"]) * page_rect.width,
+                page_rect.y0 + float(region["y1"]) * page_rect.height,
+            )
+            if clip.is_empty or clip.width <= 0 or clip.height <= 0:
+                raise ValueError("empty region")
+
+            # High enough for formulas/figures, capped to avoid huge uploads.
+            scale = min(3.0, max(1.5, 1200 / max(clip.width, clip.height)))
+            pixmap = page.get_pixmap(
+                matrix=pymupdf.Matrix(scale, scale),
+                clip=clip,
+                alpha=False,
+            )
+            return pixmap.tobytes("png")
         finally:
             doc.close()
 
@@ -164,9 +204,26 @@ async def stream_reply(
     kind: str,
     question: str | None,
     selection: str | None = None,
+    visual_context: str | None = None,
 ) -> AsyncIterator[tuple[str, str]]:
     """Yield ('thinking'|'answer', text_chunk) from a streamed Gemini reply."""
-    if selection:
+    if visual_context:
+        focus = (question or "").strip() or "Explique esta imagem selecionada."
+        selected_text = (
+            f'\n\nO usuário também destacou este texto:\n\n"""\n{selection}\n"""\n'
+            if selection
+            else ""
+        )
+        prompt = (
+            f"O usuário demarcou uma região visual do PDF ({visual_context})."
+            f"{selected_text}\n\n"
+            f"Pergunta do usuário: {focus}\n\n"
+            "Responda especificamente sobre a IMAGEM selecionada. Use o PDF "
+            "anexado apenas como contexto para termos, seção e páginas ao redor. "
+            "Se a imagem não for suficiente para responder com segurança, diga "
+            "isso claramente. Responda em português do Brasil."
+        )
+    elif selection:
         focus = (question or "").strip() or "Explique esta passagem no seu contexto."
         prompt = (
             "O usuário destacou esta passagem do documento:\n\n"
@@ -219,9 +276,10 @@ async def _stream_prompt(
         thinking_config=types.ThinkingConfig(include_thoughts=True),
     )
 
+    parts = part if isinstance(part, list) else [part]
     stream = await gemini.aio.models.generate_content_stream(
         model=settings.GEMINI_MODEL,
-        contents=[part, prompt],
+        contents=[*parts, prompt],
         config=config,
     )
     async for chunk in stream:

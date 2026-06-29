@@ -437,6 +437,11 @@ def _reader_state_payload(**overrides):
             "search": "",
         },
         "exercises": {"view": "list", "active_id": None, "search": ""},
+        "study": {
+            "scope": "chapter",
+            "custom_page_from": None,
+            "custom_page_to": None,
+        },
     }
     payload.update(overrides)
     return payload

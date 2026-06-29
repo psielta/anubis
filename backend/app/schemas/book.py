@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 MAX_TOC_ENTRIES = 1000
 
@@ -50,6 +50,21 @@ class ReaderExercisesState(BaseModel):
     search: str = Field(default="", max_length=200)
 
 
+class ReaderStudyState(BaseModel):
+    scope: Literal["book", "chapter", "pages"] = "chapter"
+    custom_page_from: int | None = Field(default=None, ge=1)
+    custom_page_to: int | None = Field(default=None, ge=1)
+
+    @model_validator(mode="after")
+    def _check_custom_range(self) -> "ReaderStudyState":
+        if self.custom_page_from is not None and self.custom_page_to is not None:
+            if self.custom_page_to < self.custom_page_from:
+                raise ValueError(
+                    "custom_page_to must be greater than or equal to custom_page_from"
+                )
+        return self
+
+
 class ReaderState(BaseModel):
     version: Literal[1] = 1
     zoom_pct: int = Field(default=100, ge=50, le=300)
@@ -70,6 +85,7 @@ class ReaderState(BaseModel):
     sketches: ReaderSketchesState = Field(default_factory=ReaderSketchesState)
     latex: ReaderLatexState = Field(default_factory=ReaderLatexState)
     exercises: ReaderExercisesState = Field(default_factory=ReaderExercisesState)
+    study: ReaderStudyState = Field(default_factory=ReaderStudyState)
 
 
 class BookRead(BaseModel):

@@ -47,6 +47,12 @@ export interface ReaderExercisesState {
   search: string;
 }
 
+export interface ReaderStudyState {
+  scope: 'book' | 'chapter' | 'pages';
+  custom_page_from: number | null;
+  custom_page_to: number | null;
+}
+
 export interface ReaderState {
   version: 1;
   zoom_pct: number;
@@ -57,6 +63,7 @@ export interface ReaderState {
   sketches: ReaderSketchesState;
   latex: ReaderLatexState;
   exercises: ReaderExercisesState;
+  study: ReaderStudyState;
 }
 
 export interface Book {

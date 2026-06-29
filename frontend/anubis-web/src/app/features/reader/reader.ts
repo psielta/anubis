@@ -34,7 +34,7 @@ import { LatexNotebooksService } from '../../core/services/latex-notebooks';
 import { ExerciseResolutionsService } from '../../core/services/exercise-resolutions';
 import { TocService } from '../../core/services/toc';
 import { Book, ReaderPanel, ReaderState } from '../../core/models/book.model';
-import { StudyKind, StudyMessage, StudyRequest } from '../../core/models/study.model';
+import { StudyKind, StudyMessage, StudyRequest, StudyScope } from '../../core/models/study.model';
 import { Diagram, DiagramType } from '../../core/models/diagram.model';
 import { Note } from '../../core/models/note.model';
 import { Sketch, SketchGroup } from '../../core/models/sketch.model';
@@ -119,6 +119,12 @@ interface ReaderCommand {
 interface ReaderCommandSection {
   title: string;
   items: ReaderCommand[];
+}
+
+interface ChapterContext {
+  title: string;
+  from: number;
+  to: number;
 }
 
 interface PdfTextItemLike {
@@ -257,7 +263,25 @@ export class Reader implements OnInit, OnDestroy {
 
   // AI study assistant
   protected readonly panelOpen = signal(false);
-  protected readonly aiScope = signal<'book' | 'chapter'>('chapter');
+  protected readonly aiScope = signal<StudyScope>('chapter');
+  protected readonly aiCustomPageFrom = signal<number | null>(null);
+  protected readonly aiCustomPageTo = signal<number | null>(null);
+  protected readonly aiCustomRange = computed(() => {
+    const from = this.aiCustomPageFrom();
+    const to = this.aiCustomPageTo();
+    const total = this.pageCount();
+    if (!from || !to || to < from) return null;
+    if (total && (from > total || to > total)) return null;
+    return { from, to };
+  });
+  protected readonly aiCustomRangeInvalid = computed(() => {
+    if (this.aiScope() !== 'pages') return false;
+    const from = this.aiCustomPageFrom();
+    const to = this.aiCustomPageTo();
+    const total = this.pageCount();
+    if (!from || !to) return true;
+    return to < from || (!!total && (from > total || to > total));
+  });
   protected readonly messages = signal<StudyMessage[]>([]);
   protected readonly thinking = signal('');
   protected readonly streamingAnswer = signal('');
@@ -268,6 +292,7 @@ export class Reader implements OnInit, OnDestroy {
   protected readonly selButtonTop = signal(0);
   protected readonly selButtonLeft = signal(0);
   protected readonly pendingSelection = signal<string | null>(null);
+  protected readonly pendingVisualSelection = signal<AreaSelection | null>(null);
   private historyLoaded = false;
   private aiController: AbortController | null = null;
 
@@ -401,6 +426,8 @@ export class Reader implements OnInit, OnDestroy {
 
   // Exercise resolutions (cropped exercises → solving workspace)
   protected readonly cropMode = signal(false);
+  protected readonly assistantCropMode = signal(false);
+  protected readonly areaSelectActive = computed(() => this.cropMode() || this.assistantCropMode());
   protected readonly cropDraft = signal<AreaSelection | null>(null);
   protected readonly cropDraftTitle = signal('');
   protected readonly cropDraftStatement = signal('');
@@ -1397,6 +1424,9 @@ export class Reader implements OnInit, OnDestroy {
     this.sketchSearch.set(state.sketches?.search ?? '');
     this.latexSearch.set(state.latex?.search ?? '');
     this.exerciseSearch.set(state.exercises?.search ?? '');
+    this.aiScope.set(state.study?.scope ?? 'chapter');
+    this.aiCustomPageFrom.set(state.study?.custom_page_from ?? null);
+    this.aiCustomPageTo.set(state.study?.custom_page_to ?? null);
 
     this.panelOpen.set(false);
     this.diagramsOpen.set(false);
@@ -1410,7 +1440,6 @@ export class Reader implements OnInit, OnDestroy {
 
     switch (state.panel) {
       case 'assistant':
-        this.aiScope.set('chapter');
         this.panelOpen.set(true);
         if (!this.historyLoaded) this.loadHistory();
         break;
@@ -1503,6 +1532,11 @@ export class Reader implements OnInit, OnDestroy {
         active_id: activeExercise?.id ?? null,
         search: this.exerciseSearch(),
       },
+      study: {
+        scope: this.aiScope(),
+        custom_page_from: this.aiCustomPageFrom(),
+        custom_page_to: this.aiCustomPageTo(),
+      },
     };
   }
 
@@ -1547,7 +1581,6 @@ export class Reader implements OnInit, OnDestroy {
     this.panelOpen.set(open);
     if (open) {
       // The right-docked panels are mutually exclusive.
-      this.aiScope.set('chapter');
       this.diagramsOpen.set(false);
       this.notesOpen.set(false);
       this.closeSketchesPanel();
@@ -1657,7 +1690,7 @@ export class Reader implements OnInit, OnDestroy {
   }
 
   captureSelection() {
-    if (this.cropMode()) return;
+    if (this.areaSelectActive()) return;
     const selection = window.getSelection();
     const text = selection?.toString().trim() ?? '';
     if (!text || !selection || selection.rangeCount === 0) {
@@ -1716,10 +1749,10 @@ export class Reader implements OnInit, OnDestroy {
     const text = this.selectionText();
     if (!text) return;
     this.pendingSelection.set(text);
+    this.pendingVisualSelection.set(null);
     this.selectionText.set('');
     window.getSelection()?.removeAllRanges();
     if (!this.panelOpen()) {
-      this.aiScope.set('chapter');
       this.diagramsOpen.set(false);
       this.notesOpen.set(false);
       this.closeSketchesPanel();
@@ -1738,6 +1771,43 @@ export class Reader implements OnInit, OnDestroy {
     this.pendingSelection.set(null);
   }
 
+  clearPendingVisualSelection() {
+    this.pendingVisualSelection.set(null);
+  }
+
+  setAiScope(scope: StudyScope) {
+    this.aiScope.set(scope);
+    this.scheduleReaderStateSave();
+  }
+
+  setAiCustomPageFrom(value: string) {
+    this.aiCustomPageFrom.set(this.parseContextPageInput(value));
+    this.scheduleReaderStateSave();
+  }
+
+  setAiCustomPageTo(value: string) {
+    this.aiCustomPageTo.set(this.parseContextPageInput(value));
+    this.scheduleReaderStateSave();
+  }
+
+  private parseContextPageInput(value: string): number | null {
+    const raw = value.trim();
+    if (!raw) return null;
+    const labeled = this.pageLabelToPhysicalPage(raw);
+    if (labeled) return labeled;
+    const page = Number(raw);
+    if (!Number.isInteger(page) || page < 1) return null;
+    return page;
+  }
+
+  startAssistantImageSelection() {
+    if (this.loading() || this.error()) return;
+    this.cropMode.set(false);
+    this.cropDraft.set(null);
+    this.assistantCropMode.set(true);
+    this.hideSelectionButton();
+  }
+
   private loadHistory() {
     this.study.history(this.bookId).subscribe({
       next: (messages) => {
@@ -1750,65 +1820,93 @@ export class Reader implements OnInit, OnDestroy {
 
   /** Page span of the current chapter, derived from the PDF outline. */
   chapterRange(): { from: number; to: number } | null {
-    const preferLabel = this.tocCustom();
-    const entries = this.toc()
-      .map((entry) =>
-        entry.page == null ? null : this.resolveNavigationPage(entry.page, preferLabel),
-      )
-      .filter((page): page is number => page != null);
-    if (!entries.length) return null;
-    const page = this.currentPage();
-    let from = entries[0];
-    for (const p of entries) {
-      if (p <= page && p >= from) from = p;
-    }
-    const later = entries.filter((p) => p > from).sort((a, b) => a - b);
-    const to = later.length ? later[0] - 1 : this.pageCount();
-    return { from, to: Math.max(from, to) };
+    const context = this.chapterContext();
+    return context ? { from: context.from, to: context.to } : null;
   }
 
-  effectiveAiScope(): 'book' | 'chapter' {
-    return this.aiScope() === 'chapter' && this.chapterRange() ? 'chapter' : 'book';
+  chapterContextLabel(): string {
+    const context = this.chapterContext();
+    if (!context) return 'Capítulo atual indisponível';
+    return `${context.title} · PDF pp. ${context.from}-${context.to}`;
+  }
+
+  private chapterContext(): ChapterContext | null {
+    const preferLabel = this.tocCustom();
+    const entries = this.toc()
+      .map((entry) => {
+        if (entry.page == null) return null;
+        const page = this.resolveNavigationPage(entry.page, preferLabel);
+        return page == null ? null : { title: entry.title.trim() || 'Seção sem título', page };
+      })
+      .filter((entry): entry is { title: string; page: number } => entry != null);
+    if (!entries.length) return null;
+    const page = this.currentPage();
+    let current = entries[0];
+    for (const entry of entries) {
+      if (entry.page <= page && entry.page >= current.page) current = entry;
+    }
+    const later = entries
+      .map((entry) => entry.page)
+      .filter((p) => p > current.page)
+      .sort((a, b) => a - b);
+    const to = later.length ? later[0] - 1 : this.pageCount();
+    return { title: current.title, from: current.page, to: Math.max(current.page, to) };
+  }
+
+  effectiveAiScope(): StudyScope {
+    if (this.aiScope() === 'chapter') return this.chapterRange() ? 'chapter' : 'book';
+    if (this.aiScope() === 'pages') return this.aiCustomRange() ? 'pages' : 'book';
+    return 'book';
   }
 
   send(kind: StudyKind, input?: HTMLInputElement) {
     if (this.aiBusy()) return;
     const selection = kind === 'chat' ? this.pendingSelection() : null;
+    const visualSelection = kind === 'chat' ? this.pendingVisualSelection() : null;
     let question: string | undefined;
     if (kind === 'chat') {
       question = input?.value.trim() || undefined;
-      if (!question && !selection) return;
+      if (!question && !selection && !visualSelection) return;
     }
 
     const body: StudyRequest = { kind, scope: this.aiScope() };
+    const contextRange =
+      body.scope === 'chapter'
+        ? this.chapterRange()
+        : body.scope === 'pages'
+          ? this.aiCustomRange()
+          : null;
+    if (body.scope === 'pages' && !contextRange) {
+      const message = 'Informe um intervalo de páginas válido para o contexto personalizado.';
+      this.aiError.set(message);
+      this.notify.error(message);
+      return;
+    }
+    if (body.scope === 'chapter' && !contextRange) {
+      body.scope = 'book';
+    } else if (contextRange) {
+      body.page_from = contextRange.from;
+      body.page_to = contextRange.to;
+    }
+
+    if (visualSelection) {
+      body.visual_selection = {
+        page: visualSelection.page,
+        region: visualSelection.region,
+      };
+    }
     if (selection) {
       body.selection = selection;
-      // Ground a selection in its surrounding chapter when the TOC allows it.
-      const range = this.chapterRange();
-      if (range) {
-        body.scope = 'chapter';
-        body.page_from = range.from;
-        body.page_to = range.to;
-      } else if (body.scope === 'chapter') {
-        body.scope = 'book';
-      }
-    } else if (body.scope === 'chapter') {
-      const range = this.chapterRange();
-      if (range) {
-        body.page_from = range.from;
-        body.page_to = range.to;
-      } else {
-        body.scope = 'book';
-      }
     }
     if (question) body.question = question;
 
     let display: string | null = null;
     if (kind === 'chat') {
+      const image = visualSelection ? `[Imagem do PDF p. ${visualSelection.page}] ` : '';
       const quote = selection
         ? `“${selection.slice(0, 120)}${selection.length > 120 ? '…' : ''}” `
         : '';
-      display = (quote + (question ?? '')).trim() || null;
+      display = (image + quote + (question ?? '')).trim() || null;
     }
 
     this.aiError.set(null);
@@ -1816,6 +1914,7 @@ export class Reader implements OnInit, OnDestroy {
     this.streamingAnswer.set('');
     this.pendingQuestion.set(display);
     this.pendingSelection.set(null);
+    this.pendingVisualSelection.set(null);
     this.aiBusy.set(true);
     if (input) input.value = '';
 
@@ -3054,6 +3153,7 @@ export class Reader implements OnInit, OnDestroy {
     if (this.loading() || this.error()) return;
     const next = !this.cropMode();
     this.cropMode.set(next);
+    this.assistantCropMode.set(false);
     this.cropDraft.set(null);
     if (next) this.hideSelectionButton();
   }
@@ -3134,6 +3234,19 @@ export class Reader implements OnInit, OnDestroy {
   }
 
   onRegionSelected(sel: AreaSelection) {
+    if (this.assistantCropMode()) {
+      this.assistantCropMode.set(false);
+      this.pendingVisualSelection.set(sel);
+      this.pendingSelection.set(null);
+      this.selectionText.set('');
+      if (!this.panelOpen()) {
+        this.panelOpen.set(true);
+        if (!this.historyLoaded) this.loadHistory();
+        this.scheduleReaderStateSave();
+      }
+      return;
+    }
+
     this.cropMode.set(false);
     this.cropDraft.set(sel);
     this.cropDraftTitle.set('Exercício');
