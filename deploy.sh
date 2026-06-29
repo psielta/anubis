@@ -67,6 +67,7 @@ patch_onlyoffice_ai_plugin() {
   local plugin_root="/var/www/onlyoffice/documentserver/sdkjs-plugins/{9DC93CDB-B576-4F0C-B55E-FCC9C48DD007}"
   local helper_path="$plugin_root/scripts/helpers/helpers.js"
   local generate_path="$plugin_root/scripts/generate.js"
+  local config_path="$plugin_root/config.json"
   local restart_onlyoffice=0
   echo ">>> Patching ONLYOFFICE AI plugin helper"
 
@@ -217,6 +218,39 @@ PY
     echo "$generate_patch_output"
     docker exec anubis-onlyoffice sh -lc "gzip -kf9 '$generate_path'"
     if echo "$generate_patch_output" | grep -Eq 'generate_changed=[1-9]'; then
+      restart_onlyoffice=1
+    fi
+  fi
+
+  local version_patch_output
+  if ! version_patch_output="$(docker exec -i anubis-onlyoffice python3 - <<'PY'
+from pathlib import Path
+import json
+
+p = Path('/var/www/onlyoffice/documentserver/sdkjs-plugins/{9DC93CDB-B576-4F0C-B55E-FCC9C48DD007}/config.json')
+s = p.read_text()
+d = json.loads(s)
+changed = 0
+
+if d.get('version') != '3.2.4':
+    backup_dir = Path('/var/www/onlyoffice/Data/anubis-ai-helper-backups')
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    backup = backup_dir / 'config.json.before-anubis-ai-version-20260629'
+    if not backup.exists():
+        backup.write_text(s)
+    d['version'] = '3.2.4'
+    p.write_text(json.dumps(d, ensure_ascii=False, indent=4))
+    changed = 1
+
+print(f'version_changed={changed}')
+PY
+)"; then
+    echo "$version_patch_output"
+    echo "WARNING: could not patch ONLYOFFICE AI plugin version; continuing deploy"
+  else
+    echo "$version_patch_output"
+    docker exec anubis-onlyoffice sh -lc "gzip -kf9 '$config_path' || true"
+    if echo "$version_patch_output" | grep -Eq 'version_changed=[1-9]'; then
       restart_onlyoffice=1
     fi
   fi
