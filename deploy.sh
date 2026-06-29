@@ -182,7 +182,9 @@ new = """async function streamPromptResultToDocument(prompt)
 
 \t\tif (result) {
 \t\t\tlet text = Asc.Library.getMarkdownResult ? Asc.Library.getMarkdownResult(result, false) : result;
-\t\t\tawait Asc.Library.PasteText("\\n" + text);
+\t\t\tawait checkEndAction();
+\t\t\tawait Asc.Editor.callMethod("FocusEditor");
+\t\t\tawait Asc.Library.PasteText(String.fromCharCode(10) + text);
 \t\t}
 \t} finally {
 \t\tawait checkEndAction();
@@ -192,7 +194,7 @@ new = """async function streamPromptResultToDocument(prompt)
 """
 
 changed = 0
-if 'Plain-text Anubis patch marker' in old:
+if 'Plain-text Anubis patch marker' in old and 'String.fromCharCode(10) + text' in old:
     pass
 else:
     s = s[:start] + new + s[end:]
@@ -201,7 +203,7 @@ else:
 if changed:
     backup_dir = Path('/var/www/onlyoffice/Data/anubis-ai-helper-backups')
     backup_dir.mkdir(parents=True, exist_ok=True)
-    backup = backup_dir / 'generate.js.before-plain-text-insert-20260629'
+    backup = backup_dir / 'generate.js.before-unblock-before-paste-20260629'
     if not backup.exists():
         backup.write_text(p.read_text())
     p.write_text(s)
