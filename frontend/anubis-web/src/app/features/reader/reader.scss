@@ -554,6 +554,7 @@
 .diagrams-toggle.active,
 .notes-toggle.active,
 .sketches-toggle.active,
+.word-toggle.active,
 .toc-toggle.active,
 .content-tree-toggle.active,
 .translate-toggle.active {
@@ -569,6 +570,7 @@
 .notes-panel,
 .sketches-panel,
 .latex-panel,
+.word-panel,
 .exercise-panel,
 .toc-panel,
 .content-tree-panel,
@@ -599,6 +601,7 @@
   .reader.notes-open .reader-stage,
   .reader.sketches-open:not(.sketch-focus-open) .reader-stage,
   .reader.latex-open:not(.latex-focus-open) .reader-stage,
+  .reader.word-open:not(.word-focus-open) .reader-stage,
   .reader.exercises-open:not(.exercise-focus-open) .reader-stage,
   .reader.toc-open .reader-stage,
   .reader.content-tree-open .reader-stage,
@@ -613,6 +616,11 @@
 }
 
 .reader.latex-focus-open .latex-panel {
+  left: 0;
+  width: auto;
+}
+
+.reader.word-focus-open .word-panel {
   left: 0;
   width: auto;
 }
@@ -1646,6 +1654,21 @@
 .latex-edit .latex-editor-host {
   flex: 1;
   min-height: 0;
+}
+
+.word-edit .word-editor-host {
+  flex: 1;
+  min-height: 0;
+}
+
+.word-edit {
+  min-height: 0;
+}
+
+.word-panel.word-focus {
+  .word-editor-host {
+    min-height: 0;
+  }
 }
 
 @media (max-width: 720px) {

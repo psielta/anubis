@@ -14,6 +14,7 @@ from app.models.sketch import Sketch, SketchGroup
 from app.models.study import StudyMessage
 from app.models.translation import PageTranslation
 from app.models.user import User
+from app.models.word_document import WordDocument
 
 __all__ = [
     "Book",
@@ -33,5 +34,6 @@ __all__ = [
     "SketchGroup",
     "StudyMessage",
     "User",
+    "WordDocument",
     "book_collections",
 ]

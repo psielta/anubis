@@ -56,6 +56,23 @@ services:
       timeout: 5s
       retries: 5
 
+  onlyoffice:
+    image: ${ONLYOFFICE_IMAGE:-onlyoffice/documentserver:latest}
+    container_name: anubis-onlyoffice
+    restart: unless-stopped
+    environment:
+      JWT_ENABLED: "true"
+      JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-change-me-onlyoffice}
+      JWT_HEADER: ${ONLYOFFICE_JWT_HEADER:-Authorization}
+      ALLOW_PRIVATE_IP_ADDRESS: "true"
+    ports:
+      - "${ONLYOFFICE_PORT:-8082}:80"
+    volumes:
+      - anubis_onlyoffice_data:/var/www/onlyoffice/Data
+      - anubis_onlyoffice_logs:/var/log/onlyoffice
+      - anubis_onlyoffice_lib:/var/lib/onlyoffice
+      - anubis_onlyoffice_db:/var/lib/postgresql
+
   pdf-worker:
     build:
       context: ./backend
@@ -97,3 +114,7 @@ services:
 volumes:
   anubis_pgdata:
   anubis_miniodata:
+  anubis_onlyoffice_data:
+  anubis_onlyoffice_logs:
+  anubis_onlyoffice_lib:
+  anubis_onlyoffice_db:

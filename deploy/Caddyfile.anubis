@@ -5,3 +5,7 @@ mateussalgueiro.com.br, www.mateussalgueiro.com.br {
 api.mateussalgueiro.com.br {
     reverse_proxy anubis-api:8000
 }
+
+office.mateussalgueiro.com.br {
+    reverse_proxy anubis-onlyoffice:80
+}

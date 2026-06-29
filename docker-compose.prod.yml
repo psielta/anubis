@@ -48,6 +48,29 @@ services:
     networks:
       - anubis-net
 
+  anubis-onlyoffice:
+    image: ${ONLYOFFICE_IMAGE:-onlyoffice/documentserver:latest}
+    container_name: anubis-onlyoffice
+    restart: unless-stopped
+    environment:
+      JWT_ENABLED: "true"
+      JWT_SECRET: ${ONLYOFFICE_JWT_SECRET}
+      JWT_HEADER: ${ONLYOFFICE_JWT_HEADER:-Authorization}
+    volumes:
+      - anubis-onlyoffice-data:/var/www/onlyoffice/Data
+      - anubis-onlyoffice-logs:/var/log/onlyoffice
+      - anubis-onlyoffice-lib:/var/lib/onlyoffice
+      - anubis-onlyoffice-db:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1/healthcheck || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 15
+      start_period: 60s
+    networks:
+      - anubis-net
+      - trx_trxnet
+
   anubis-createbucket:
     image: minio/mc:latest
     container_name: anubis-createbucket
@@ -131,3 +154,7 @@ networks:
 volumes:
   anubis-pgdata:
   anubis-minio:
+  anubis-onlyoffice-data:
+  anubis-onlyoffice-logs:
+  anubis-onlyoffice-lib:
+  anubis-onlyoffice-db:

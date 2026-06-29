@@ -31,6 +31,7 @@ import { DiagramsService } from '../../core/services/diagrams';
 import { NotesService } from '../../core/services/notes';
 import { SketchesService } from '../../core/services/sketches';
 import { LatexNotebooksService } from '../../core/services/latex-notebooks';
+import { WordDocumentsService } from '../../core/services/word-documents';
 import { ExerciseResolutionsService } from '../../core/services/exercise-resolutions';
 import { TocService } from '../../core/services/toc';
 import { Book, ReaderPanel, ReaderState } from '../../core/models/book.model';
@@ -39,6 +40,7 @@ import { Diagram, DiagramType } from '../../core/models/diagram.model';
 import { Note } from '../../core/models/note.model';
 import { Sketch, SketchGroup } from '../../core/models/sketch.model';
 import { LatexNotebook, LatexNotebookGroup } from '../../core/models/latex-notebook.model';
+import { OnlyOfficeEditorConfig, WordDocument } from '../../core/models/word-document.model';
 import {
   ExerciseAIMode,
   ExerciseAttempt,
@@ -53,6 +55,7 @@ import { AreaSelectDirective, AreaSelection } from './area-select.directive';
 import { MermaidPreview } from './mermaid-preview/mermaid-preview';
 import { NoteEditor } from './note-editor/note-editor';
 import { LatexEditor } from './latex-editor/latex-editor';
+import { OnlyOfficeEditor } from './onlyoffice-editor/onlyoffice-editor';
 import { ReaderPrefsService } from '../../core/services/reader-prefs';
 import { PanelResizerDirective } from './panel-resizer.directive';
 import { NotificationsService } from '../../core/services/notifications';
@@ -140,6 +143,7 @@ type ReaderShortcutAction =
   | 'notes'
   | 'sketches'
   | 'latex'
+  | 'word'
   | 'exercises'
   | 'crop'
   | 'contents'
@@ -166,6 +170,7 @@ const EXERCISE_AUTOSAVE_MS = 1500;
     MermaidPreview,
     NoteEditor,
     LatexEditor,
+    OnlyOfficeEditor,
     ExerciseCrop,
     AreaSelectDirective,
     PanelResizerDirective,
@@ -185,6 +190,7 @@ export class Reader implements OnInit, OnDestroy {
   private notes = inject(NotesService);
   private sketches = inject(SketchesService);
   private latexNotebooks = inject(LatexNotebooksService);
+  private wordDocuments = inject(WordDocumentsService);
   private exercises = inject(ExerciseResolutionsService);
   private tocService = inject(TocService);
   private prefs = inject(ReaderPrefsService);
@@ -201,6 +207,7 @@ export class Reader implements OnInit, OnDestroy {
       this.diagramsOpen() ||
       (this.sketchesOpen() && !this.sketchFocus()) ||
       (this.latexOpen() && !this.latexFocus()) ||
+      (this.wordOpen() && !this.wordFocus()) ||
       (this.exercisesOpen() && !this.exerciseFocus()),
   );
 
@@ -252,6 +259,7 @@ export class Reader implements OnInit, OnDestroy {
     notes: 'Alt+Shift+N',
     sketches: 'Alt+Shift+S',
     latex: 'Alt+Shift+L',
+    word: 'Alt+Shift+W',
     exercises: 'Alt+Shift+X',
     crop: 'Alt+Shift+E',
     contents: 'Alt+Shift+C',
@@ -422,6 +430,28 @@ export class Reader implements OnInit, OnDestroy {
       sections.push({ group: null, notebooks: ungrouped });
     }
     return sections;
+  });
+
+  // Word documents (ONLYOFFICE)
+  protected readonly wordOpen = signal(false);
+  protected readonly wordView = signal<'list' | 'edit'>('list');
+  protected readonly wordList = signal<WordDocument[]>([]);
+  protected readonly wordLoaded = signal(false);
+  protected readonly wordError = signal<string | null>(null);
+  protected readonly wordSearch = signal('');
+  protected readonly activeWord = signal<WordDocument | null>(null);
+  protected readonly wordTitle = signal('');
+  protected readonly wordPage = signal<number | null>(null);
+  protected readonly wordDetailsSaving = signal(false);
+  protected readonly wordEditorLoading = signal(false);
+  protected readonly wordFocus = signal(false);
+  protected readonly wordEditorConfig = signal<OnlyOfficeEditorConfig | null>(null);
+  protected readonly wordEditorKey = signal(0);
+  protected readonly filteredWord = computed(() => {
+    const q = this.wordSearch().trim().toLowerCase();
+    const list = this.wordList();
+    if (!q) return list;
+    return list.filter((doc) => doc.title.toLowerCase().includes(q));
   });
 
   // Exercise resolutions (cropped exercises → solving workspace)
@@ -971,6 +1001,8 @@ export class Reader implements OnInit, OnDestroy {
         return 'sketches';
       case 'KeyL':
         return 'latex';
+      case 'KeyW':
+        return 'word';
       case 'KeyX':
         return 'exercises';
       case 'KeyE':
@@ -1006,6 +1038,9 @@ export class Reader implements OnInit, OnDestroy {
       case 'latex':
         this.toggleLatex();
         break;
+      case 'word':
+        this.toggleWord();
+        break;
       case 'exercises':
         this.toggleExercises();
         break;
@@ -1030,7 +1065,7 @@ export class Reader implements OnInit, OnDestroy {
   private shouldIgnoreReaderShortcut(target: EventTarget | null): boolean {
     if (!(target instanceof Element)) return false;
     const editable = target.closest(
-      'input, textarea, select, [contenteditable="true"], app-note-editor, app-excalidraw-canvas, app-latex-editor',
+      'input, textarea, select, [contenteditable="true"], app-note-editor, app-excalidraw-canvas, app-latex-editor, app-onlyoffice-editor',
     );
     if (editable) return true;
     return target instanceof HTMLElement && target.isContentEditable;
@@ -1423,6 +1458,7 @@ export class Reader implements OnInit, OnDestroy {
     this.noteSearch.set(state.notes.search ?? '');
     this.sketchSearch.set(state.sketches?.search ?? '');
     this.latexSearch.set(state.latex?.search ?? '');
+    this.wordSearch.set(state.word?.search ?? '');
     this.exerciseSearch.set(state.exercises?.search ?? '');
     this.aiScope.set(state.study?.scope ?? 'chapter');
     this.aiCustomPageFrom.set(state.study?.custom_page_from ?? null);
@@ -1433,6 +1469,7 @@ export class Reader implements OnInit, OnDestroy {
     this.notesOpen.set(false);
     this.sketchesOpen.set(false);
     this.latexOpen.set(false);
+    this.wordOpen.set(false);
     this.exercisesOpen.set(false);
     this.tocOpen.set(false);
     this.contentTreeOpen.set(false);
@@ -1458,6 +1495,10 @@ export class Reader implements OnInit, OnDestroy {
       case 'latex':
         this.latexOpen.set(true);
         this.restoreLatexState(state);
+        break;
+      case 'word':
+        this.wordOpen.set(true);
+        this.restoreWordState(state);
         break;
       case 'exercises':
         this.exercisesOpen.set(true);
@@ -1488,6 +1529,7 @@ export class Reader implements OnInit, OnDestroy {
     if (this.notesOpen()) return 'notes';
     if (this.sketchesOpen()) return 'sketches';
     if (this.latexOpen()) return 'latex';
+    if (this.wordOpen()) return 'word';
     if (this.exercisesOpen()) return 'exercises';
     if (this.tocOpen()) return 'toc';
     if (this.contentTreeOpen()) return 'content_tree';
@@ -1500,6 +1542,7 @@ export class Reader implements OnInit, OnDestroy {
     const activeDiagram = this.activeDiagram();
     const activeSketch = this.activeSketch();
     const activeLatex = this.activeLatex();
+    const activeWord = this.activeWord();
     const activeExercise = this.activeExercise();
     return {
       version: 1,
@@ -1526,6 +1569,11 @@ export class Reader implements OnInit, OnDestroy {
         active_id: activeLatex?.id ?? null,
         active_group_id: this.selectedLatexGroupId(),
         search: this.latexSearch(),
+      },
+      word: {
+        view: activeWord && this.wordView() === 'edit' ? 'edit' : 'list',
+        active_id: activeWord?.id ?? null,
+        search: this.wordSearch(),
       },
       exercises: {
         view: activeExercise && this.exerciseView() === 'edit' ? 'edit' : 'list',
@@ -1576,6 +1624,13 @@ export class Reader implements OnInit, OnDestroy {
     this.latexOpen.set(false);
   }
 
+  private closeWordPanel() {
+    if (!this.wordOpen()) return;
+    this.wordFocus.set(false);
+    this.wordOpen.set(false);
+    this.wordEditorConfig.set(null);
+  }
+
   togglePanel() {
     const open = !this.panelOpen();
     this.panelOpen.set(open);
@@ -1585,6 +1640,7 @@ export class Reader implements OnInit, OnDestroy {
       this.notesOpen.set(false);
       this.closeSketchesPanel();
       this.closeLatexPanel();
+      this.closeWordPanel();
       this.closeExercisesPanel();
       this.tocOpen.set(false);
       this.contentTreeOpen.set(false);
@@ -1604,6 +1660,7 @@ export class Reader implements OnInit, OnDestroy {
       this.notesOpen.set(false);
       this.closeSketchesPanel();
       this.closeLatexPanel();
+      this.closeWordPanel();
       this.closeExercisesPanel();
       this.tocOpen.set(false);
       this.contentTreeOpen.set(false);
@@ -1757,6 +1814,7 @@ export class Reader implements OnInit, OnDestroy {
       this.notesOpen.set(false);
       this.closeSketchesPanel();
       this.closeLatexPanel();
+      this.closeWordPanel();
       this.closeExercisesPanel();
       this.tocOpen.set(false);
       this.contentTreeOpen.set(false);
@@ -1970,6 +2028,7 @@ export class Reader implements OnInit, OnDestroy {
       this.notesOpen.set(false);
       this.closeSketchesPanel();
       this.closeLatexPanel();
+      this.closeWordPanel();
       this.closeExercisesPanel();
       this.contentTreeOpen.set(false);
       this.closeTranslatePanel();
@@ -2163,6 +2222,7 @@ export class Reader implements OnInit, OnDestroy {
       this.notesOpen.set(false);
       this.closeSketchesPanel();
       this.closeLatexPanel();
+      this.closeWordPanel();
       this.closeExercisesPanel();
       this.tocOpen.set(false);
       this.closeTranslatePanel();
@@ -2283,6 +2343,7 @@ export class Reader implements OnInit, OnDestroy {
       this.notesOpen.set(false);
       this.closeSketchesPanel();
       this.closeLatexPanel();
+      this.closeWordPanel();
       this.closeExercisesPanel();
       this.tocOpen.set(false);
       this.contentTreeOpen.set(false);
@@ -2448,6 +2509,7 @@ export class Reader implements OnInit, OnDestroy {
     this.contentTreeOpen.set(false);
     this.closeTranslatePanel();
     this.closeLatexPanel();
+    this.closeWordPanel();
     this.closeExercisesPanel();
     this.sketchesError.set(null);
     if (!this.sketchesLoaded()) this.loadSketches();
@@ -2803,6 +2865,7 @@ export class Reader implements OnInit, OnDestroy {
     this.diagramsOpen.set(false);
     this.notesOpen.set(false);
     this.closeSketchesPanel();
+    this.closeWordPanel();
     this.closeExercisesPanel();
     this.tocOpen.set(false);
     this.contentTreeOpen.set(false);
@@ -3147,6 +3210,241 @@ export class Reader implements OnInit, OnDestroy {
     });
   }
 
+  // --- Word documents (ONLYOFFICE) -----------------------------------------
+  toggleWord() {
+    const open = !this.wordOpen();
+    if (!open) {
+      this.closeWordPanel();
+      this.scheduleReaderStateSave();
+      return;
+    }
+
+    this.wordOpen.set(true);
+    this.panelOpen.set(false);
+    this.diagramsOpen.set(false);
+    this.notesOpen.set(false);
+    this.closeSketchesPanel();
+    this.closeLatexPanel();
+    this.closeExercisesPanel();
+    this.tocOpen.set(false);
+    this.contentTreeOpen.set(false);
+    this.closeTranslatePanel();
+    this.wordError.set(null);
+    if (!this.wordLoaded()) this.loadWord();
+    this.scheduleReaderStateSave();
+  }
+
+  private loadWord(afterLoad?: () => void) {
+    this.wordDocuments.list(this.bookId).subscribe({
+      next: (documents) => {
+        this.wordList.set(documents);
+        this.wordLoaded.set(true);
+        afterLoad?.();
+      },
+      error: (err) => {
+        const message = this.errorText(err, 'Nao foi possivel carregar os documentos Word');
+        this.wordError.set(message);
+        this.notify.error(message);
+      },
+    });
+  }
+
+  private restoreWordState(state: ReaderState) {
+    const wordState = state.word;
+    const activeId = wordState?.view === 'edit' ? wordState.active_id : null;
+    this.loadWord(() => {
+      if (!this.wordOpen()) return;
+      if (!activeId) {
+        this.wordView.set('list');
+        return;
+      }
+      const document = this.wordList().find((doc) => doc.id === activeId);
+      if (document) {
+        this.setActiveWord(document);
+      } else {
+        this.wordDocuments.get(this.bookId, activeId).subscribe({
+          next: (item) => {
+            if (!this.wordOpen()) return;
+            this.wordList.update((list) => [item, ...list.filter((doc) => doc.id !== item.id)]);
+            this.setActiveWord(item);
+          },
+          error: () => this.wordView.set('list'),
+        });
+      }
+    });
+  }
+
+  newWord() {
+    if (this.wordDetailsSaving()) return;
+    this.wordDetailsSaving.set(true);
+    this.wordEditorConfig.set(null);
+    this.wordError.set(null);
+    this.wordDocuments
+      .create(this.bookId, {
+        title: 'Documento sem titulo',
+        page: this.currentDisplayPageValue(),
+      })
+      .subscribe({
+        next: (saved) => {
+          this.wordDetailsSaving.set(false);
+          this.wordList.update((list) => [saved, ...list.filter((doc) => doc.id !== saved.id)]);
+          this.setActiveWord(saved);
+          this.scheduleReaderStateSave();
+          this.notify.success('Documento Word criado');
+        },
+        error: (err) => {
+          const message = this.errorText(err, 'Nao foi possivel criar o documento Word');
+          this.wordDetailsSaving.set(false);
+          this.wordError.set(message);
+          this.notify.error(message);
+        },
+      });
+  }
+
+  openWord(document: WordDocument) {
+    this.setActiveWord(document);
+    this.scheduleReaderStateSave();
+  }
+
+  private setActiveWord(document: WordDocument) {
+    this.activeWord.set(document);
+    this.wordTitle.set(document.title);
+    this.wordPage.set(document.page);
+    this.wordError.set(null);
+    this.wordView.set('edit');
+    this.loadWordEditor(document);
+  }
+
+  private loadWordEditor(document: WordDocument) {
+    this.wordEditorLoading.set(true);
+    this.wordEditorConfig.set(null);
+    this.wordDocuments.editorConfig(this.bookId, document.id).subscribe({
+      next: (config) => {
+        if (this.activeWord()?.id !== document.id) return;
+        this.wordEditorConfig.set(config);
+        this.wordEditorKey.update((value) => value + 1);
+        this.wordEditorLoading.set(false);
+      },
+      error: (err) => {
+        const message = this.errorText(err, 'Editor Word indisponivel');
+        this.wordEditorLoading.set(false);
+        this.wordError.set(message);
+        this.notify.error(message);
+      },
+    });
+  }
+
+  backToWordList() {
+    this.wordFocus.set(false);
+    this.wordView.set('list');
+    this.wordEditorConfig.set(null);
+    this.loadWord();
+    this.scheduleReaderStateSave();
+  }
+
+  setWordSearch(value: string) {
+    this.wordSearch.set(value);
+    this.scheduleReaderStateSave();
+  }
+
+  setWordTitle(value: string) {
+    this.wordTitle.set(value);
+  }
+
+  setWordPage(value: number) {
+    this.wordPage.set(value && value > 0 ? value : null);
+  }
+
+  saveWordDetails() {
+    const document = this.activeWord();
+    const title = this.wordTitle().trim();
+    if (!document || !title || this.wordDetailsSaving()) return;
+    this.wordDetailsSaving.set(true);
+    this.wordDocuments
+      .update(this.bookId, document.id, { title, page: this.wordPage() })
+      .subscribe({
+        next: (saved) => {
+          this.activeWord.set(saved);
+          this.wordTitle.set(saved.title);
+          this.wordPage.set(saved.page);
+          this.wordList.update((list) => [saved, ...list.filter((doc) => doc.id !== saved.id)]);
+          this.wordDetailsSaving.set(false);
+          this.scheduleReaderStateSave();
+          this.notify.success('Documento Word salvo');
+        },
+        error: (err) => {
+          const message = this.errorText(err, 'Nao foi possivel salvar o documento Word');
+          this.wordDetailsSaving.set(false);
+          this.wordError.set(message);
+          this.notify.error(message);
+        },
+      });
+  }
+
+  downloadWord(document: WordDocument) {
+    this.wordDocuments.download(this.bookId, document.id).subscribe({
+      next: (blob) => {
+        const win = this.document.defaultView;
+        if (!win) return;
+        const url = win.URL.createObjectURL(blob);
+        const a = this.document.createElement('a');
+        a.href = url;
+        a.download = this.wordFilename(document);
+        a.click();
+        win.URL.revokeObjectURL(url);
+      },
+      error: (err) => {
+        const message = this.errorText(err, 'Nao foi possivel baixar o documento Word');
+        this.wordError.set(message);
+        this.notify.error(message);
+      },
+    });
+  }
+
+  deleteWord(document: WordDocument) {
+    const ok = window.confirm(`Excluir "${document.title}"?`);
+    if (!ok) return;
+    this.wordDocuments.remove(this.bookId, document.id).subscribe({
+      next: () => {
+        this.wordList.update((list) => list.filter((doc) => doc.id !== document.id));
+        if (this.activeWord()?.id === document.id) {
+          this.activeWord.set(null);
+          this.wordEditorConfig.set(null);
+          this.wordFocus.set(false);
+          this.wordView.set('list');
+        }
+        this.scheduleReaderStateSave();
+        this.notify.success('Documento Word excluido');
+      },
+      error: (err) => {
+        const message = this.errorText(err, 'Nao foi possivel excluir o documento Word');
+        this.wordError.set(message);
+        this.notify.error(message);
+      },
+    });
+  }
+
+  toggleWordFocus() {
+    this.wordFocus.update((value) => !value);
+  }
+
+  wordUpdatedLabel(document: WordDocument): string {
+    return new Date(document.updated_at).toLocaleDateString('pt-BR', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  }
+
+  wordFilename(document: WordDocument): string {
+    const name = document.title.replace(/["\\\r\n]/g, '_').trim() || 'documento';
+    return name.toLowerCase().endsWith('.docx') ? name : `${name}.docx`;
+  }
+
+  onWordEditorError(message: string) {
+    this.wordError.set(message);
+  }
+
   // --- Study notes (Markdown) ----------------------------------------------
   // --- Exercise resolutions (cropped exercises) ----------------------------
   toggleCropMode() {
@@ -3178,6 +3476,7 @@ export class Reader implements OnInit, OnDestroy {
     this.notesOpen.set(false);
     this.closeSketchesPanel();
     this.closeLatexPanel();
+    this.closeWordPanel();
     this.tocOpen.set(false);
     this.contentTreeOpen.set(false);
     this.closeTranslatePanel();
@@ -3934,6 +4233,7 @@ export class Reader implements OnInit, OnDestroy {
       this.diagramsOpen.set(false);
       this.closeSketchesPanel();
       this.closeLatexPanel();
+      this.closeWordPanel();
       this.closeExercisesPanel();
       this.tocOpen.set(false);
       this.contentTreeOpen.set(false);

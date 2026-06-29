@@ -37,6 +37,16 @@ class Settings(BaseSettings):
 
     REDIS_URL: str = "redis://localhost:6379/0"
 
+    # ONLYOFFICE Document Server (Word documents linked to books)
+    ONLYOFFICE_ENABLED: bool = True
+    ONLYOFFICE_DOCSERVER_PUBLIC_URL: str = "http://localhost:8082"
+    ONLYOFFICE_DOCSERVER_INTERNAL_URL: str = ""
+    ONLYOFFICE_JWT_SECRET: str = ""
+    ONLYOFFICE_JWT_HEADER: str = "Authorization"
+    ONLYOFFICE_CALLBACK_BASE_URL: str = ""
+    ONLYOFFICE_CALLBACK_TOKEN_HOURS: int = 24
+    ONLYOFFICE_MAX_DOCX_MB: int = 50
+
     # PDF → Markdown conversion limits
     PDF_CONVERSION_MAX_UPLOAD_MB: int = 100
     PDF_CONVERSION_MAX_PAGES: int = 500

@@ -11,6 +11,7 @@ export type ReaderPanel =
   | 'notes'
   | 'sketches'
   | 'latex'
+  | 'word'
   | 'toc'
   | 'content_tree'
   | 'translate';
@@ -41,6 +42,12 @@ export interface ReaderLatexState {
   search: string;
 }
 
+export interface ReaderWordState {
+  view: ReaderSubView;
+  active_id: number | null;
+  search: string;
+}
+
 export interface ReaderExercisesState {
   view: ReaderSubView;
   active_id: number | null;
@@ -62,6 +69,7 @@ export interface ReaderState {
   diagrams: ReaderDiagramsState;
   sketches: ReaderSketchesState;
   latex: ReaderLatexState;
+  word: ReaderWordState;
   exercises: ReaderExercisesState;
   study: ReaderStudyState;
 }

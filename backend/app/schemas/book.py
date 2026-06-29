@@ -44,6 +44,12 @@ class ReaderLatexState(BaseModel):
     search: str = Field(default="", max_length=200)
 
 
+class ReaderWordState(BaseModel):
+    view: Literal["list", "edit"] = "list"
+    active_id: int | None = Field(default=None, ge=1)
+    search: str = Field(default="", max_length=200)
+
+
 class ReaderExercisesState(BaseModel):
     view: Literal["list", "edit"] = "list"
     active_id: int | None = Field(default=None, ge=1)
@@ -78,12 +84,14 @@ class ReaderState(BaseModel):
         "toc",
         "content_tree",
         "translate",
+        "word",
     ] | None = None
     panel_width_px: int = Field(default=400, ge=320, le=2000)
     notes: ReaderNotesState = Field(default_factory=ReaderNotesState)
     diagrams: ReaderDiagramsState = Field(default_factory=ReaderDiagramsState)
     sketches: ReaderSketchesState = Field(default_factory=ReaderSketchesState)
     latex: ReaderLatexState = Field(default_factory=ReaderLatexState)
+    word: ReaderWordState = Field(default_factory=ReaderWordState)
     exercises: ReaderExercisesState = Field(default_factory=ReaderExercisesState)
     study: ReaderStudyState = Field(default_factory=ReaderStudyState)
 

@@ -9,6 +9,8 @@
   [class.sketch-focus-open]="sketchFocus()"
   [class.latex-open]="latexOpen()"
   [class.latex-focus-open]="latexFocus()"
+  [class.word-open]="wordOpen()"
+  [class.word-focus-open]="wordFocus()"
   [class.exercises-open]="exercisesOpen()"
   [class.exercise-focus-open]="exerciseFocus()"
   [class.toc-open]="tocOpen()"
@@ -70,6 +72,16 @@
         [attr.title]="'Cadernos LaTeX (' + shortcuts.latex + ')'"
       >
         <mat-icon>functions</mat-icon>
+      </button>
+      <button
+        mat-icon-button
+        class="word-toggle"
+        [class.active]="wordOpen()"
+        (click)="toggleWord()"
+        [attr.aria-label]="'Documentos Word (' + shortcuts.word + ')'"
+        [attr.title]="'Documentos Word (' + shortcuts.word + ')'"
+      >
+        <mat-icon>description</mat-icon>
       </button>
       <button
         mat-icon-button
@@ -1091,6 +1103,143 @@
 
       @if (latexError()) {
         <p class="ai-error">{{ latexError() }}</p>
+      }
+    </aside>
+  }
+
+  @if (wordOpen()) {
+    <aside class="word-panel" [class.word-focus]="wordFocus()">
+      <header class="dg-head">
+        @if (wordView() === 'edit') {
+          <button mat-icon-button (click)="backToWordList()" aria-label="Voltar aos documentos">
+            <mat-icon>arrow_back</mat-icon>
+          </button>
+        }
+        <span class="dg-title"><mat-icon>description</mat-icon> Word</span>
+        <kbd class="shortcut-key">{{ shortcuts.word }}</kbd>
+        <span class="ai-spacer"></span>
+        @if (wordView() === 'edit') {
+          @if (activeWord(); as currentDocument) {
+            <button
+              mat-icon-button
+              (click)="downloadWord(currentDocument)"
+              aria-label="Baixar documento"
+            >
+              <mat-icon>download</mat-icon>
+            </button>
+            <button
+              mat-icon-button
+              (click)="deleteWord(currentDocument)"
+              aria-label="Excluir documento"
+            >
+              <mat-icon>delete</mat-icon>
+            </button>
+          }
+          <button
+            mat-icon-button
+            (click)="toggleWordFocus()"
+            [attr.aria-label]="wordFocus() ? 'Sair do modo foco' : 'Modo foco'"
+          >
+            <mat-icon>{{ wordFocus() ? 'fullscreen_exit' : 'fullscreen' }}</mat-icon>
+          </button>
+        }
+        <button mat-icon-button (click)="toggleWord()" aria-label="Fechar">
+          <mat-icon>close</mat-icon>
+        </button>
+      </header>
+
+      @if (wordView() === 'list') {
+        <div class="dg-list sketch-list">
+          <div class="dg-new">
+            <button class="dg-new-btn" (click)="newWord()" [disabled]="wordDetailsSaving()">
+              <mat-icon>add</mat-icon> Novo documento
+            </button>
+          </div>
+          @if (wordList().length) {
+            <input
+              class="note-search"
+              type="search"
+              placeholder="Buscar documentos..."
+              aria-label="Buscar documentos Word"
+              [value]="wordSearch()"
+              (input)="setWordSearch($any($event.target).value)"
+            />
+          }
+          @if (!wordList().length) {
+            <p class="dg-empty">
+              Nenhum documento Word ainda. Crie um documento para anotar este livro no editor
+              tradicional.
+            </p>
+          } @else if (!filteredWord().length) {
+            <p class="dg-empty">Nenhum documento corresponde a busca.</p>
+          }
+
+          @for (doc of filteredWord(); track doc.id) {
+            <button class="dg-card" (click)="openWord(doc)">
+              <mat-icon class="dg-card-icon">description</mat-icon>
+              <span class="dg-card-main">
+                <span class="dg-card-title">{{ doc.title }}</span>
+                <span class="dg-card-meta"
+                  >{{ wordUpdatedLabel(doc) }}
+                  @if (doc.page) {
+                    &middot; p. {{ doc.page }}
+                  }
+                </span>
+              </span>
+              <span
+                class="dg-card-del"
+                role="button"
+                aria-label="Excluir documento"
+                (click)="$event.stopPropagation(); deleteWord(doc)"
+              >
+                <mat-icon>delete</mat-icon>
+              </span>
+            </button>
+          }
+        </div>
+      } @else {
+        <div class="dg-edit word-edit">
+          <div class="dg-edit-bar sketch-edit-bar">
+            <input
+              class="dg-name"
+              [value]="wordTitle()"
+              (input)="setWordTitle($any($event.target).value)"
+              placeholder="Titulo do documento"
+              maxlength="200"
+            />
+            <label class="dg-page">
+              p.
+              <input
+                type="number"
+                min="1"
+                class="dg-page-input"
+                [value]="wordPage() ?? ''"
+                (input)="setWordPage($any($event.target).valueAsNumber)"
+              />
+            </label>
+            <button class="toc-action" (click)="saveWordDetails()" [disabled]="wordDetailsSaving()">
+              <mat-icon>save</mat-icon> Salvar dados
+            </button>
+          </div>
+
+          @if (wordEditorConfig(); as editor) {
+            <app-onlyoffice-editor
+              class="word-editor-host"
+              [documentServerUrl]="editor.document_server_url"
+              [config]="editor.config"
+              [refreshKey]="wordEditorKey()"
+              (loadError)="onWordEditorError($event)"
+            />
+          } @else {
+            <div class="dg-loading">
+              {{ wordEditorLoading() ? 'Carregando editor Word...' : 'Editor Word indisponivel' }}
+            </div>
+          }
+        </div>
+      }
+
+      @if (wordError()) {
+        <p class="ai-error">{{ wordError() }}</p>
       }
     </aside>
   }
