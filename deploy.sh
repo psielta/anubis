@@ -140,23 +140,68 @@ import sys
 p = Path('/var/www/onlyoffice/documentserver/sdkjs-plugins/{9DC93CDB-B576-4F0C-B55E-FCC9C48DD007}/scripts/generate.js')
 s = p.read_text()
 
-old = 'let markdownStreamer = new MarkDownStreamer();\n\n\tlet agentHistory = [];'
-new = 'let markdownStreamer = new MarkDownStreamer();\n\t\t// Browser-hosted ONLYOFFICE can fail to apply InsertStreamedContent; insert the final Markdown instead.\n\t\tmarkdownStreamer.isStreaming = false;\n\n\tlet agentHistory = [];'
+start = s.find('async function streamPromptResultToDocument(prompt)')
+end = s.find('async function getFormGenerationPrompt()', start)
+if start < 0 or end < 0:
+    print('generate=function-boundary-not-found', file=sys.stderr)
+    sys.exit(2)
+
+old = s[start:end]
+new = """async function streamPromptResultToDocument(prompt)
+{
+\tlet requestEngine = AI.Request.create(AI.ActionType.Chat);
+\tif (!requestEngine)
+\t\treturn;
+
+\tlet isSendedEndLongAction = false;
+\tasync function checkEndAction() {
+\t\tif (!isSendedEndLongAction) {
+\t\t\tawait Asc.Editor.callMethod("EndAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+\t\t\tisSendedEndLongAction = true
+\t\t}
+\t}
+
+\tawait Asc.Editor.callMethod("StartAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+
+\ttry {
+\t\tlet agentHistory = [];
+
+\t\tif (!Array.isArray(prompt)) {
+\t\t\tagentHistory.push({
+\t\t\t\trole: "user",
+\t\t\t\tcontent: prompt
+\t\t\t});
+\t\t} else {
+\t\t\tagentHistory = prompt;
+\t\t}
+
+\t\t/* Plain-text Anubis patch marker. */
+\t\tlet result = await requestEngine.chatRequest(agentHistory, false);
+\t\tif (window.AgentState && window.AgentState.isStopped)
+\t\t\treturn;
+
+\t\tif (result) {
+\t\t\tlet text = Asc.Library.getMarkdownResult ? Asc.Library.getMarkdownResult(result, false) : result;
+\t\t\tawait Asc.Library.PasteText("\\n" + text);
+\t\t}
+\t} finally {
+\t\tawait checkEndAction();
+\t}
+}
+
+"""
 
 changed = 0
-if old in s:
-    s = s.replace(old, new, 1)
-    changed = 1
-elif 'markdownStreamer.isStreaming = false;' in s:
+if 'Plain-text Anubis patch marker' in old:
     pass
 else:
-    print('generate=no-stream-pattern-not-found', file=sys.stderr)
-    sys.exit(2)
+    s = s[:start] + new + s[end:]
+    changed = 1
 
 if changed:
     backup_dir = Path('/var/www/onlyoffice/Data/anubis-ai-helper-backups')
     backup_dir.mkdir(parents=True, exist_ok=True)
-    backup = backup_dir / 'generate.js.before-disable-streamed-insert-20260629'
+    backup = backup_dir / 'generate.js.before-plain-text-insert-20260629'
     if not backup.exists():
         backup.write_text(p.read_text())
     p.write_text(s)
