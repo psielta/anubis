@@ -86,12 +86,12 @@ pairs = [
     (
         'generateDocx',
         'let fullPrompt = instructions + "\\nDescription:\\n\\n" + params.description;',
-        'const description = params.description || params.prompt || params.text || "";\\n\\t\\tlet fullPrompt = instructions + "\\nDescription:\\n\\n" + description;',
+        'const description = params.description || params.prompt || params.text || "";\n\t\tlet fullPrompt = instructions + "\\nDescription:\\n\\n" + description;',
     ),
     (
         'generateForm',
         'let fullPrompt = instructions + "\\n\\n# Document to Generate\\n\\n" + params.description;',
-        'const description = params.description || params.prompt || params.text || "";\\n\\t\\tlet fullPrompt = instructions + "\\n\\n# Document to Generate\\n\\n" + description;',
+        'const description = params.description || params.prompt || params.text || "";\n\t\tlet fullPrompt = instructions + "\\n\\n# Document to Generate\\n\\n" + description;',
     ),
 ]
 
