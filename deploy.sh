@@ -64,7 +64,10 @@ wait_onlyoffice_healthy() {
 patch_onlyoffice_ai_plugin() {
   require_prod_files
 
-  local helper_path="/var/www/onlyoffice/documentserver/sdkjs-plugins/{9DC93CDB-B576-4F0C-B55E-FCC9C48DD007}/scripts/helpers/helpers.js"
+  local plugin_root="/var/www/onlyoffice/documentserver/sdkjs-plugins/{9DC93CDB-B576-4F0C-B55E-FCC9C48DD007}"
+  local helper_path="$plugin_root/scripts/helpers/helpers.js"
+  local generate_path="$plugin_root/scripts/generate.js"
+  local restart_onlyoffice=0
   echo ">>> Patching ONLYOFFICE AI plugin helper"
 
   for _ in $(seq 1 30); do
@@ -126,6 +129,52 @@ PY
   docker exec anubis-onlyoffice sh -lc "gzip -kf9 '$helper_path'"
 
   if echo "$patch_output" | grep -Eq 'changed=[1-9]'; then
+    restart_onlyoffice=1
+  fi
+
+  local generate_patch_output
+  if ! generate_patch_output="$(docker exec -i anubis-onlyoffice python3 - <<'PY'
+from pathlib import Path
+import sys
+
+p = Path('/var/www/onlyoffice/documentserver/sdkjs-plugins/{9DC93CDB-B576-4F0C-B55E-FCC9C48DD007}/scripts/generate.js')
+s = p.read_text()
+
+old = 'let markdownStreamer = new MarkDownStreamer();\n\n\tlet agentHistory = [];'
+new = 'let markdownStreamer = new MarkDownStreamer();\n\t\t// Browser-hosted ONLYOFFICE can fail to apply InsertStreamedContent; insert the final Markdown instead.\n\t\tmarkdownStreamer.isStreaming = false;\n\n\tlet agentHistory = [];'
+
+changed = 0
+if old in s:
+    s = s.replace(old, new, 1)
+    changed = 1
+elif 'markdownStreamer.isStreaming = false;' in s:
+    pass
+else:
+    print('generate=no-stream-pattern-not-found', file=sys.stderr)
+    sys.exit(2)
+
+if changed:
+    backup_dir = Path('/var/www/onlyoffice/Data/anubis-ai-helper-backups')
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    backup = backup_dir / 'generate.js.before-disable-streamed-insert-20260629'
+    if not backup.exists():
+        backup.write_text(p.read_text())
+    p.write_text(s)
+
+print(f'generate_changed={changed}')
+PY
+)"; then
+    echo "$generate_patch_output"
+    echo "WARNING: could not patch ONLYOFFICE AI generate helper; continuing deploy"
+  else
+    echo "$generate_patch_output"
+    docker exec anubis-onlyoffice sh -lc "gzip -kf9 '$generate_path'"
+    if echo "$generate_patch_output" | grep -Eq 'generate_changed=[1-9]'; then
+      restart_onlyoffice=1
+    fi
+  fi
+
+  if [ "$restart_onlyoffice" = "1" ]; then
     echo ">>> Restarting ONLYOFFICE to reload patched helper"
     "${COMPOSE[@]}" restart anubis-onlyoffice
     wait_onlyoffice_healthy || echo "WARNING: ONLYOFFICE did not become healthy after AI helper patch"
