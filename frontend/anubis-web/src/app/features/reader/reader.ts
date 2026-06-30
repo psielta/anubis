@@ -3445,6 +3445,10 @@ export class Reader implements OnInit, OnDestroy {
     this.wordError.set(message);
   }
 
+  onWordEditorWarning(message: string) {
+    this.wordError.set(message);
+  }
+
   // --- Study notes (Markdown) ----------------------------------------------
   // --- Exercise resolutions (cropped exercises) ----------------------------
   toggleCropMode() {

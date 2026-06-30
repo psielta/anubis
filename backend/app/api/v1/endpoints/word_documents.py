@@ -149,8 +149,15 @@ def _editor_config(
         "documentType": "word",
         "editorConfig": {
             "callbackUrl": _signed_url(request, document, "callback"),
-            "lang": "pt-BR",
+            "lang": "pt",
             "mode": "edit",
+            "region": "pt-BR",
+            "customization": {
+                "autosave": True,
+                "comments": True,
+                "forcesave": True,
+                "unit": "cm",
+            },
             "user": {
                 "id": str(current_user.id),
                 "name": current_user.full_name or current_user.email,

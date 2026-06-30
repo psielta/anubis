@@ -21,6 +21,12 @@ interface OnlyOfficeApi {
   DocEditor: new (elementId: string, config: Record<string, unknown>) => OnlyOfficeDocumentEditor;
 }
 
+interface OnlyOfficeEvent {
+  data?: unknown;
+}
+
+type OnlyOfficeEventHandler = (event?: OnlyOfficeEvent) => unknown;
+
 declare global {
   interface Window {
     DocsAPI?: OnlyOfficeApi;
@@ -48,6 +54,7 @@ function loadOnlyOfficeApi(documentServerUrl: string): Promise<void> {
     script.onerror = () => reject(new Error('Nao foi possivel carregar o ONLYOFFICE'));
     if (!current) document.head.appendChild(script);
   });
+  promise.catch(() => scriptLoads.delete(src));
   scriptLoads.set(src, promise);
   return promise;
 }
@@ -94,6 +101,9 @@ export class OnlyOfficeEditor implements AfterViewInit, OnDestroy {
   readonly config = input.required<Record<string, unknown>>();
   readonly refreshKey = input.required<string | number>();
   readonly loadError = output<string>();
+  readonly documentReady = output<void>();
+  readonly documentStateChange = output<boolean>();
+  readonly editorWarning = output<string>();
 
   protected readonly error = signal<string | null>(null);
 
@@ -133,14 +143,78 @@ export class OnlyOfficeEditor implements AfterViewInit, OnDestroy {
       await loadOnlyOfficeApi(documentServerUrl);
       if (seq !== this.renderSeq) return;
       if (!window.DocsAPI) throw new Error('ONLYOFFICE nao ficou disponivel');
+      const runtimeConfig = this.withRuntimeEvents(config);
       this.zone.runOutsideAngular(() => {
-        this.editor = new window.DocsAPI!.DocEditor(this.hostId, config);
+        this.editor = new window.DocsAPI!.DocEditor(this.hostId, runtimeConfig);
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Nao foi possivel abrir o editor Word';
       this.error.set(message);
       this.loadError.emit(message);
     }
+  }
+
+  private withRuntimeEvents(config: Record<string, unknown>): Record<string, unknown> {
+    const existingEvents = this.eventMap(config['events']);
+    return {
+      ...config,
+      events: {
+        ...existingEvents,
+        onDocumentReady: (event?: OnlyOfficeEvent) => {
+          this.zone.run(() => {
+            this.callExistingEvent(existingEvents['onDocumentReady'], event);
+            this.error.set(null);
+            this.documentReady.emit();
+          });
+        },
+        onDocumentStateChange: (event?: OnlyOfficeEvent) => {
+          this.zone.run(() => {
+            this.callExistingEvent(existingEvents['onDocumentStateChange'], event);
+            this.documentStateChange.emit(Boolean(event?.data));
+          });
+        },
+        onError: (event?: OnlyOfficeEvent) => {
+          this.zone.run(() => {
+            this.callExistingEvent(existingEvents['onError'], event);
+            const message = this.onlyOfficeEventMessage(event, 'Erro interno do ONLYOFFICE');
+            this.error.set(message);
+            this.loadError.emit(message);
+          });
+        },
+        onWarning: (event?: OnlyOfficeEvent) => {
+          this.zone.run(() => {
+            this.callExistingEvent(existingEvents['onWarning'], event);
+            this.editorWarning.emit(this.onlyOfficeEventMessage(event, 'Aviso do ONLYOFFICE'));
+          });
+        },
+      },
+    };
+  }
+
+  private eventMap(value: unknown): Record<string, unknown> {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    return value as Record<string, unknown>;
+  }
+
+  private callExistingEvent(handler: unknown, event?: OnlyOfficeEvent): void {
+    if (typeof handler !== 'function') return;
+    (handler as OnlyOfficeEventHandler)(event);
+  }
+
+  private onlyOfficeEventMessage(event: OnlyOfficeEvent | undefined, fallback: string): string {
+    const data = event?.data;
+    if (typeof data === 'string' && data.trim()) return data.trim();
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return fallback;
+
+    const details = data as Record<string, unknown>;
+    const description = details['errorDescription'] ?? details['warningDescription'];
+    if (typeof description === 'string' && description.trim()) return description.trim();
+
+    const code = details['errorCode'] ?? details['warningCode'];
+    if (typeof code === 'string' || typeof code === 'number') {
+      return `${fallback} (${code})`;
+    }
+    return fallback;
   }
 
   private destroyEditor(): void {

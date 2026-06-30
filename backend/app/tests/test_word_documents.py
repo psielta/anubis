@@ -172,14 +172,19 @@ async def test_onlyoffice_config_contains_signed_docx_urls(client, monkeypatch):
     assert config["documentType"] == "word"
     assert config["document"]["fileType"] == "docx"
     assert config["document"]["key"] == f"word-{document['id']}-1"
+    assert config["editorConfig"]["lang"] == "pt"
+    assert config["editorConfig"]["region"] == "pt-BR"
+    assert config["editorConfig"]["customization"]["forcesave"] is True
+    assert config["editorConfig"]["customization"]["unit"] == "cm"
     assert "/onlyoffice/word-documents/" in config["document"]["url"]
     assert "/callback" in config["editorConfig"]["callbackUrl"]
     assert config["token"]
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("callback_status", [2, 6])
 async def test_onlyoffice_callback_saves_docx_and_increments_revision(
-    client, monkeypatch, mock_storage
+    client, monkeypatch, mock_storage, callback_status
 ):
     async def edited_docx(url: str) -> bytes:
         assert url == "http://documentserver/edited.docx"
@@ -209,7 +214,7 @@ async def test_onlyoffice_callback_saves_docx_and_increments_revision(
         f"{callback_path}?token={callback_token}",
         json={
             "key": f"word-{document['id']}-1",
-            "status": 2,
+            "status": callback_status,
             "url": "http://documentserver/edited.docx",
             "filetype": "docx",
         },

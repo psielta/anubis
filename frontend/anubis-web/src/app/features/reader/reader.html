@@ -1229,6 +1229,7 @@
               [config]="editor.config"
               [refreshKey]="wordEditorKey()"
               (loadError)="onWordEditorError($event)"
+              (editorWarning)="onWordEditorWarning($event)"
             />
           } @else {
             <div class="dg-loading">

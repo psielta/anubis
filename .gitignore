@@ -15,4 +15,5 @@ terminals/
 
 # Local verification artifacts (screenshots, agent scratch)
 /agent-tools/
+/.cache/
 /*.png
