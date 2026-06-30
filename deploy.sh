@@ -86,26 +86,42 @@ import sys
 p = Path('/var/www/onlyoffice/documentserver/sdkjs-plugins/{9DC93CDB-B576-4F0C-B55E-FCC9C48DD007}/scripts/helpers/helpers.js')
 s = p.read_text()
 
+locale = (
+    "\\n\\nRegras obrigatorias de idioma e formato:\\n"
+    "- Escreva em portugues do Brasil, salvo se o usuario pedir outro idioma explicitamente.\\n"
+    "- Entregue texto pronto para documento Word, nao Markdown.\\n"
+    "- Nao use simbolos de Markdown como #, **, _, blocos de codigo ou tabelas Markdown.\\n"
+    "- Escreva titulos como linhas normais, sem #.\\n"
+)
+
 pairs = [
     (
         'generateDocx',
-        'let fullPrompt = instructions + "\\nDescription:\\n\\n" + params.description;',
-        'const description = params.description || params.prompt || params.text || "";\n\t\tlet fullPrompt = instructions + "\\nDescription:\\n\\n" + description;',
+        [
+            'let fullPrompt = instructions + "\\nDescription:\\n\\n" + params.description;',
+            'const description = params.description || params.prompt || params.text || "";\n\t\tlet fullPrompt = instructions + "\\nDescription:\\n\\n" + description;',
+        ],
+        'const description = params.description || params.prompt || params.text || "";\n\t\tconst localeInstructions = "' + locale + '";\n\t\tlet fullPrompt = instructions + localeInstructions + "\\nDescription:\\n\\n" + description;',
     ),
     (
         'generateForm',
-        'let fullPrompt = instructions + "\\n\\n# Document to Generate\\n\\n" + params.description;',
-        'const description = params.description || params.prompt || params.text || "";\n\t\tlet fullPrompt = instructions + "\\n\\n# Document to Generate\\n\\n" + description;',
+        [
+            'let fullPrompt = instructions + "\\n\\n# Document to Generate\\n\\n" + params.description;',
+            'const description = params.description || params.prompt || params.text || "";\n\t\tlet fullPrompt = instructions + "\\n\\n# Document to Generate\\n\\n" + description;',
+        ],
+        'const description = params.description || params.prompt || params.text || "";\n\t\tconst localeInstructions = "' + locale + '";\n\t\tlet fullPrompt = instructions + localeInstructions + "\\nDocument to Generate:\\n\\n" + description;',
     ),
 ]
 
 changed = 0
-for label, old, new in pairs:
-    if old in s:
-        s = s.replace(old, new, 1)
-        changed += 1
-    elif new in s:
+for label, old_values, new in pairs:
+    if new in s:
         continue
+    for old in old_values:
+        if old in s:
+            s = s.replace(old, new, 1)
+            changed += 1
+            break
     else:
         print(f'{label}=pattern-not-found', file=sys.stderr)
         sys.exit(2)
@@ -183,6 +199,14 @@ new = """async function streamPromptResultToDocument(prompt)
 
 \t\tif (result) {
 \t\t\tlet text = Asc.Library.getMarkdownResult ? Asc.Library.getMarkdownResult(result, false) : result;
+\t\t\t/* Plain-text Anubis Markdown sanitizer marker. */
+\t\t\ttext = String(text)
+\t\t\t\t.replace(/\\r\\n/g, String.fromCharCode(10))
+\t\t\t\t.replace(/^\\s*```[a-zA-Z0-9_-]*\\s*$/gm, "")
+\t\t\t\t.replace(/^\\s{0,3}#{1,6}\\s+/gm, "")
+\t\t\t\t.replace(/\\*\\*([^*\\n]+)\\*\\*/g, "$1")
+\t\t\t\t.replace(/__([^_\\n]+)__/g, "$1")
+\t\t\t\t.trim();
 \t\t\tawait checkEndAction();
 \t\t\tawait Asc.Editor.callMethod("FocusEditor");
 \t\t\tawait Asc.Library.PasteText(String.fromCharCode(10) + text);
@@ -195,7 +219,7 @@ new = """async function streamPromptResultToDocument(prompt)
 """
 
 changed = 0
-if 'Plain-text Anubis patch marker' in old and 'String.fromCharCode(10) + text' in old:
+if 'Plain-text Anubis patch marker' in old and 'Plain-text Anubis Markdown sanitizer marker' in old and 'String.fromCharCode(10) + text' in old:
     pass
 else:
     s = s[:start] + new + s[end:]
@@ -232,13 +256,13 @@ s = p.read_text()
 d = json.loads(s)
 changed = 0
 
-if d.get('version') != '3.2.4':
+if d.get('version') != '3.2.5':
     backup_dir = Path('/var/www/onlyoffice/Data/anubis-ai-helper-backups')
     backup_dir.mkdir(parents=True, exist_ok=True)
     backup = backup_dir / 'config.json.before-anubis-ai-version-20260629'
     if not backup.exists():
         backup.write_text(s)
-    d['version'] = '3.2.4'
+    d['version'] = '3.2.5'
     p.write_text(json.dumps(d, ensure_ascii=False, indent=4))
     changed = 1
 
