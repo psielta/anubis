@@ -78,6 +78,25 @@ docker compose up -d db
 docker compose ps
 ```
 
+## Cache de Documentacao Externa
+
+Antes de pesquisar ou implementar algo relacionado ao ONLYOFFICE Docs:
+
+1. Verifique o cache local em `.cache/docs/onlyoffice/metadata.json`.
+2. Se `expires_at` ainda estiver no futuro e
+   `.cache/docs/onlyoffice/onlyoffice-docs-api.md` existir, use esse Markdown
+   como fonte principal.
+3. Se o cache estiver ausente ou vencido, use Firecrawl para extrair a
+   documentacao oficial relevante e recrie os arquivos de cache com TTL de 30
+   dias.
+4. Nao chame Firecrawl de novo quando o cache estiver fresco.
+
+Observacao: em 2026-06-30, `docs.onlyoffice.com` nao retornou paginas tecnicas
+uteis via Firecrawl. O cache atual foi obtido da documentacao oficial retornada
+pelo Firecrawl em `https://api.onlyoffice.com/docs/docs-api/`.
+
+`.cache/` e intencionalmente local e ignorado pelo Git; nao commitar esse cache.
+
 ## Checklist de Validação
 
 Execute as verificações relevantes antes de reportar sucesso:

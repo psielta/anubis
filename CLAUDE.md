@@ -25,6 +25,24 @@ Before planning or implementing, read:
 If a saved plan path is provided by the user, reopen that exact file and use it
 as the source of truth.
 
+## External Documentation Cache
+
+Before researching or implementing anything related to ONLYOFFICE Docs:
+
+1. Check the local cache at `.cache/docs/onlyoffice/metadata.json`.
+2. If `expires_at` is still in the future and
+   `.cache/docs/onlyoffice/onlyoffice-docs-api.md` exists, use that Markdown as
+   the primary source.
+3. If the cache is missing or expired, use Firecrawl to extract the relevant
+   official documentation and recreate the cache files with a 30-day TTL.
+4. Do not call Firecrawl again while the cache is fresh.
+
+Note: on 2026-06-30, `docs.onlyoffice.com` did not return useful technical pages
+through Firecrawl. The current cache was created from the official documentation
+Firecrawl returned at `https://api.onlyoffice.com/docs/docs-api/`.
+
+`.cache/` is intentionally local and Git-ignored; do not commit the cache files.
+
 ## Existing Foundation
 
 Backend:
