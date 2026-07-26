@@ -39,6 +39,11 @@ update_api() {
   "${COMPOSE[@]}" build anubis-api anubis-pdf-worker
   echo ">>> Recreating API and PDF worker (migrations run via entrypoint)"
   "${COMPOSE[@]}" up -d anubis-api anubis-pdf-worker
+  # Nginx in anubis-front caches upstream IPs at start; bounce it so login/proxy
+  # keep working after API IP changes on trx_trxnet.
+  echo ">>> Restarting frontend proxy to refresh anubis-api DNS"
+  "${COMPOSE[@]}" up -d --no-deps --force-recreate anubis-front || \
+    docker restart anubis-front || true
 }
 
 update_front() {
