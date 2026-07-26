@@ -130,8 +130,11 @@ services:
         condition: service_healthy
       anubis-createbucket:
         condition: service_completed_successfully
+    # anubis-net is internal (no egress). Worker needs external DNS/HTTPS for
+    # Gemini embeddings during RAG indexing, same as anubis-api for study AI.
     networks:
       - anubis-net
+      - trx_trxnet
 
   anubis-front:
     build:
