@@ -21,7 +21,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
 
-# Gemini embedding output dimensionality (gemini-embedding-001 supports 768/1536/3072).
+# Gemini embedding output dimensionality (gemini-embedding-2 / -001 support 768+).
 RAG_EMBEDDING_DIM = 768
 
 

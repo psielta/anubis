@@ -30,9 +30,9 @@ class Settings(BaseSettings):
     MAX_COVER_SIZE_MB: int = 5
 
     # AI study assistant + page translation (Gemini). Override GEMINI_MODEL via
-    # .env as the lineup evolves (e.g. gemini-3.5-flash, gemini-3-flash-preview).
+    # .env as the lineup evolves (e.g. gemini-3.6-flash, gemini-flash-latest).
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-3.5-flash"
+    GEMINI_MODEL: str = "gemini-3.6-flash"
     AI_INLINE_MAX_MB: int = 15
 
     REDIS_URL: str = "redis://localhost:6379/0"
@@ -58,8 +58,9 @@ class Settings(BaseSettings):
 
     # Book RAG (Gemini embeddings + LLM over pgvector)
     # GEMINI_API_KEY is shared with the study assistant (never hardcode secrets).
-    # text-embedding-004 was retired from v1beta embedContent; use gemini-embedding-*.
-    GEMINI_EMBEDDING_MODEL: str = "gemini-embedding-001"
+    # Prefer the latest Gemini embedding model available to the API key.
+    # Fallback if needed: gemini-embedding-001 (text-embedding-004 is retired).
+    GEMINI_EMBEDDING_MODEL: str = "gemini-embedding-2"
     RAG_CHUNK_MAX_CHARS: int = 2000
     RAG_CHUNK_OVERLAP_CHARS: int = 200
     RAG_EMBED_BATCH_SIZE: int = 32
