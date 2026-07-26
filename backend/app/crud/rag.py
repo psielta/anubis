@@ -201,6 +201,33 @@ async def count_chunks_for_book(db: AsyncSession, book_id: int) -> int:
     return len(result.all())
 
 
+async def count_chunks_for_document(
+    db: AsyncSession, document_id: uuid.UUID
+) -> int:
+    from sqlalchemy import func
+
+    result = await db.execute(
+        select(func.count())
+        .select_from(RagChunk)
+        .where(RagChunk.document_id == document_id)
+    )
+    return int(result.scalar_one())
+
+
+async def max_chunk_index_for_document(
+    db: AsyncSession, document_id: uuid.UUID
+) -> int | None:
+    from sqlalchemy import func
+
+    result = await db.execute(
+        select(func.max(RagChunk.chunk_index)).where(
+            RagChunk.document_id == document_id
+        )
+    )
+    val = result.scalar_one()
+    return int(val) if val is not None else None
+
+
 async def hnsw_index_exists(db: AsyncSession) -> bool:
     """Structural check used by tests: HNSW index on rag_chunks.embedding."""
     result = await db.execute(

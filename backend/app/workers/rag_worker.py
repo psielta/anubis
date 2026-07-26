@@ -1,4 +1,4 @@
-"""Idempotent RAG index pipeline invoked from the outbox worker."""
+"""Idempotent RAG index pipeline with incremental embed + resume."""
 
 from __future__ import annotations
 
@@ -26,12 +26,7 @@ class RagWorkerError(Exception):
 
 
 async def process_rag_event(db: AsyncSession, event: OutboxEvent) -> None:
-    """Extract → chunk → embed → store vectors; update document status.
-
-    Non-retryable failures mark the document ``failed`` and return.
-    Retryable failures leave the document in ``processing`` and raise
-    ``RagWorkerError`` so the outbox poller can schedule backoff.
-    """
+    """Extract → chunk → embed (incremental) → store; resume after retries."""
     document_id: uuid.UUID = event.aggregate_id
     doc = await rag_crud.get_document_by_id(db, document_id)
     if doc is None:
@@ -41,8 +36,6 @@ async def process_rag_event(db: AsyncSession, event: OutboxEvent) -> None:
             retryable=False,
         )
 
-    # Duplicate activate while already completed: no-op.
-    # Reprocess always resets status to pending before enqueueing.
     if (
         doc.status == RagStatus.COMPLETED.value
         and event.event_type == OutboxEventType.RAG_INDEX_REQUESTED.value
@@ -108,21 +101,58 @@ async def process_rag_event(db: AsyncSession, event: OutboxEvent) -> None:
                 retryable=False,
             )
 
-        await rag_crud.mark_progress(db, doc, progress=35, chunk_count=len(specs))
+        total = len(specs)
+        await rag_crud.mark_progress(db, doc, progress=35, chunk_count=total)
         await db.commit()
 
-        # Clear previous vectors before inserting new ones (reprocess-safe).
-        await rag_crud.delete_chunks_for_document(db, doc.id)
-        await db.commit()
+        # Resume: keep contiguous chunks already stored; wipe if inconsistent.
+        stored = await rag_crud.count_chunks_for_document(db, doc.id)
+        max_idx = await rag_crud.max_chunk_index_for_document(db, doc.id)
+        resume_from = 0
+        if stored > 0 and max_idx is not None:
+            contiguous = stored == max_idx + 1 and max_idx < total
+            if contiguous:
+                resume_from = stored
+                logger.info(
+                    "RAG resume document=%s from chunk %s/%s",
+                    doc.id,
+                    resume_from,
+                    total,
+                )
+            else:
+                logger.info(
+                    "RAG wipe stale chunks document=%s stored=%s max_idx=%s total=%s",
+                    doc.id,
+                    stored,
+                    max_idx,
+                    total,
+                )
+                await rag_crud.delete_chunks_for_document(db, doc.id)
+                await db.commit()
+                resume_from = 0
+        elif stored > 0:
+            await rag_crud.delete_chunks_for_document(db, doc.id)
+            await db.commit()
+            resume_from = 0
 
-        texts = [s.content for s in specs]
+        if resume_from >= total:
+            await rag_crud.mark_completed(db, doc, chunk_count=total)
+            await db.commit()
+            return
+
+        # True multi-content batch size for gemini-embedding-001; 1 for -2.
         batch = max(1, settings.RAG_EMBED_BATCH_SIZE)
-        all_rows: list[dict] = []
-        for start in range(0, len(texts), batch):
-            end = min(start + batch, len(texts))
+        model = (settings.GEMINI_EMBEDDING_MODEL or "").lower()
+        if "embedding-2" in model:
+            batch = 8  # smaller windows when forced to per-item inside embed_texts
+
+        for start in range(resume_from, total, batch):
+            end = min(start + batch, total)
+            window = specs[start:end]
+            texts = [s.content for s in window]
             try:
                 vectors = await gemini_embeddings.embed_texts_with_retry(
-                    texts[start:end],
+                    texts,
                     task_type="RETRIEVAL_DOCUMENT",
                 )
             except gemini_embeddings.EmbeddingError as exc:
@@ -132,42 +162,54 @@ async def process_rag_event(db: AsyncSession, event: OutboxEvent) -> None:
                     retryable=True,
                 ) from exc
 
-            for i, spec in enumerate(specs[start:end]):
-                all_rows.append(
-                    {
-                        "chunk_index": spec.chunk_index,
-                        "title": spec.title,
-                        "content": spec.content,
-                        "page_start": spec.page_start,
-                        "page_end": spec.page_end,
-                        "embedding": vectors[i],
-                    }
+            if len(vectors) != len(window):
+                raise RagWorkerError(
+                    f"embedding count mismatch: {len(vectors)} vs {len(window)}",
+                    error_code=RagErrorCode.EMBEDDING_FAILED.value,
+                    retryable=True,
                 )
 
-            progress = 35 + int(55 * end / len(texts))
-            await rag_crud.mark_progress(
-                db, doc, progress=progress, chunk_count=len(specs)
-            )
-            await db.commit()
-
-        # Insert in sub-batches to keep transactions bounded.
-        insert_batch = 50
-        for start in range(0, len(all_rows), insert_batch):
+            rows = [
+                {
+                    "chunk_index": spec.chunk_index,
+                    "title": spec.title,
+                    "content": spec.content,
+                    "page_start": spec.page_start,
+                    "page_end": spec.page_end,
+                    "embedding": vectors[i],
+                }
+                for i, spec in enumerate(window)
+            ]
+            # Persist immediately so retries resume (do not wipe earlier rows).
             await rag_crud.insert_chunks(
                 db,
                 document_id=doc.id,
                 book_id=doc.book_id,
-                rows=all_rows[start : start + insert_batch],
+                rows=rows,
             )
+            progress = 35 + int(60 * end / total)
+            await rag_crud.mark_progress(
+                db, doc, progress=min(95, progress), chunk_count=total
+            )
+            # Clear transient error once progress resumes.
+            doc.error_code = None
+            doc.error_message = None
             await db.commit()
+            logger.info(
+                "RAG embedded %s/%s document=%s book=%s",
+                end,
+                total,
+                doc.id,
+                doc.book_id,
+            )
 
-        await rag_crud.mark_completed(db, doc, chunk_count=len(specs))
+        await rag_crud.mark_completed(db, doc, chunk_count=total)
         await db.commit()
         logger.info(
             "RAG index completed document=%s book=%s chunks=%s",
             doc.id,
             doc.book_id,
-            len(specs),
+            total,
         )
     except RagWorkerError as exc:
         await db.rollback()
@@ -178,7 +220,6 @@ async def process_rag_event(db: AsyncSession, event: OutboxEvent) -> None:
             return
 
         if not exc.retryable:
-            # Terminal document failure; outbox marks done/failed without retry.
             await rag_crud.mark_failed(
                 db,
                 fresh,
@@ -188,8 +229,6 @@ async def process_rag_event(db: AsyncSession, event: OutboxEvent) -> None:
             await db.commit()
             return
 
-        # Retryable: keep processing lifecycle; record last error for status.
-        # Do NOT mark document failed — outbox still has retries left.
         fresh.status = RagStatus.PROCESSING.value
         fresh.error_code = exc.error_code
         fresh.error_message = str(exc)[:2000]
@@ -199,5 +238,4 @@ async def process_rag_event(db: AsyncSession, event: OutboxEvent) -> None:
     except Exception:
         logger.exception("RAG worker unexpected error for %s", document_id)
         await db.rollback()
-        # Leave document processing; outbox handler schedules retry or terminal fail.
         raise

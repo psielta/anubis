@@ -58,15 +58,15 @@ class Settings(BaseSettings):
 
     # Book RAG (Gemini embeddings + LLM over pgvector)
     # GEMINI_API_KEY is shared with the study assistant (never hardcode secrets).
-    # Prefer the latest Gemini embedding model available to the API key.
-    # Fallback if needed: gemini-embedding-001 (text-embedding-004 is retired).
-    GEMINI_EMBEDDING_MODEL: str = "gemini-embedding-2"
+    # gemini-embedding-001 supports true multi-text batches (fast + fewer 503s).
+    # gemini-embedding-2 currently returns 1 vector per request for multi-input.
+    GEMINI_EMBEDDING_MODEL: str = "gemini-embedding-001"
     RAG_CHUNK_MAX_CHARS: int = 2000
     RAG_CHUNK_OVERLAP_CHARS: int = 200
     RAG_EMBED_BATCH_SIZE: int = 32
     RAG_TOP_K_DEFAULT: int = 5
-    RAG_OUTBOX_MAX_ATTEMPTS: int = 5
-    RAG_OUTBOX_LEASE_SECONDS: int = 600
+    RAG_OUTBOX_MAX_ATTEMPTS: int = 12
+    RAG_OUTBOX_LEASE_SECONDS: int = 900
 
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     @classmethod
