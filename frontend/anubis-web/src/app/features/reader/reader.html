@@ -3,6 +3,7 @@
   #readerRoot
   [style.--dg-user-panel-w]="panelWidth() + 'px'"
   [class.ai-open]="panelOpen()"
+  [class.rag-open]="ragOpen()"
   [class.diagrams-open]="diagramsOpen()"
   [class.notes-open]="notesOpen()"
   [class.sketches-open]="sketchesOpen()"
@@ -32,6 +33,16 @@
         [attr.title]="'Assistente de estudo (' + shortcuts.assistant + ')'"
       >
         <mat-icon>auto_awesome</mat-icon>
+      </button>
+      <button
+        mat-icon-button
+        class="rag-toggle"
+        [class.active]="ragOpen()"
+        (click)="toggleRagPanel()"
+        [attr.aria-label]="'Q&A do livro (' + shortcuts.rag + ')'"
+        [attr.title]="'Q&A do livro — perguntas com fontes e páginas (' + shortcuts.rag + ')'"
+      >
+        <mat-icon>psychology</mat-icon>
       </button>
       <button
         mat-icon-button
@@ -514,6 +525,113 @@
       <form class="ai-ask" (submit)="$event.preventDefault(); send('chat', q)">
         <input #q class="ai-input" placeholder="Pergunte sobre este livro…" [disabled]="aiBusy()" />
         <button class="ai-send" type="submit" [disabled]="aiBusy()" aria-label="Perguntar">
+          <mat-icon>send</mat-icon>
+        </button>
+      </form>
+    </aside>
+  }
+
+  @if (ragOpen()) {
+    <aside class="ai-panel rag-panel" aria-label="Q&A do livro">
+      <header class="ai-head">
+        <span class="ai-title"><mat-icon>psychology</mat-icon> Q&A do livro</span>
+        <kbd class="shortcut-key">{{ shortcuts.rag }}</kbd>
+        <span class="ai-spacer"></span>
+        <button mat-icon-button (click)="toggleRagPanel()" aria-label="Fechar">
+          <mat-icon>close</mat-icon>
+        </button>
+      </header>
+
+      <div class="rag-status-bar">
+        <span class="eyebrow">Indexação</span>
+        <strong>{{ ragStatusText() }}</strong>
+        @if (ragStatus()?.uiStatus === 'failed' && ragStatus()?.errorMessage) {
+          <p class="rag-error-inline">{{ ragStatus()!.errorMessage }}</p>
+        }
+        <div class="rag-status-actions">
+          @if (
+            !ragStatus() ||
+            ragStatus()?.uiStatus === 'not_indexed' ||
+            ragStatus()?.uiStatus === 'unknown'
+          ) {
+            <button type="button" class="ai-action" (click)="activateRag()" [disabled]="ragStatusLoading()">
+              <mat-icon>play_arrow</mat-icon> Ativar Q&A
+            </button>
+          }
+          @if (ragStatus()?.uiStatus === 'failed' || ragStatus()?.uiStatus === 'completed') {
+            <button type="button" class="ai-action" (click)="reprocessRag()" [disabled]="ragStatusLoading()">
+              <mat-icon>refresh</mat-icon> Reprocessar
+            </button>
+          }
+        </div>
+      </div>
+
+      <div class="ai-thread rag-thread">
+        @if (!ragAnswer() && !ragBusy() && !ragLastQuestion()) {
+          <p class="ai-empty">
+            Pergunte sobre o conteúdo indexado deste PDF. As respostas citam trechos com número de página.
+            Diferente do assistente de estudo, este painel usa o índice vetorial (RAG).
+          </p>
+        }
+        @if (ragLastQuestion()) {
+          <div class="ai-msg ai-user">
+            <p>{{ ragLastQuestion() }}</p>
+          </div>
+        }
+        @if (ragBusy()) {
+          <div class="ai-msg ai-assistant">
+            <p class="ai-working">Buscando nos trechos indexados…</p>
+          </div>
+        }
+        @if (ragAnswer()) {
+          <div class="ai-msg ai-assistant">
+            <markdown
+              class="md-body"
+              [katex]="katexReady()"
+              [katexOptions]="katexOptions"
+              [data]="ragAnswer()"
+            />
+          </div>
+        }
+        @if (ragSources().length) {
+          <div class="rag-sources">
+            <span class="eyebrow">Fontes</span>
+            @for (src of ragSources(); track src.chunk_index + '-' + $index) {
+              <button
+                type="button"
+                class="rag-source"
+                (click)="jumpToRagSource(src)"
+                [disabled]="src.page_start == null && src.page_end == null"
+              >
+                <span class="rag-source-page">{{ formatRagSourcePages(src) }}</span>
+                @if (src.title) {
+                  <span class="rag-source-title">{{ src.title }}</span>
+                }
+                <span class="rag-source-excerpt">{{ src.excerpt }}</span>
+              </button>
+            }
+          </div>
+        }
+      </div>
+
+      @if (ragError()) {
+        <p class="ai-error">{{ ragError() }}</p>
+      }
+
+      <form class="ai-ask" (submit)="$event.preventDefault(); askRag()">
+        <input
+          class="ai-input"
+          placeholder="Pergunte com base no índice do livro…"
+          [value]="ragQuestion()"
+          (input)="onRagQuestionInput($any($event.target).value)"
+          [disabled]="ragBusy() || !ragCanQuery()"
+        />
+        <button
+          class="ai-send"
+          type="submit"
+          [disabled]="ragBusy() || !ragCanQuery() || !ragQuestion().trim()"
+          aria-label="Perguntar ao índice"
+        >
           <mat-icon>send</mat-icon>
         </button>
       </form>

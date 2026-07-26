@@ -140,7 +140,8 @@
 }
 
 // --- AI study assistant panel ----------------------------------------------
-.ai-toggle.active {
+.ai-toggle.active,
+.rag-toggle.active {
   color: var(--anubis-gold-bright);
   background: rgba(200, 162, 76, 0.18);
 }
@@ -158,6 +159,103 @@
   border-inline-start: 1px solid rgba(200, 162, 76, 0.4);
   box-shadow: -16px 0 40px -24px rgba(0, 0, 0, 0.7);
   z-index: 5;
+}
+
+.rag-status-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.75rem 1rem;
+  border-block-end: 1px solid var(--anubis-line);
+  background: var(--anubis-canvas);
+
+  .eyebrow {
+    color: var(--anubis-gold-deep);
+  }
+
+  strong {
+    font-family: 'Cinzel', serif;
+    font-size: 0.95rem;
+    color: var(--anubis-ink);
+  }
+}
+
+.rag-error-inline {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--anubis-danger);
+}
+
+.rag-status-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.25rem;
+}
+
+.rag-thread {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.rag-sources {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--anubis-line);
+
+  .eyebrow {
+    color: var(--anubis-gold-deep);
+  }
+}
+
+.rag-source {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  width: 100%;
+  padding: 0.55rem 0.65rem;
+  text-align: left;
+  font: inherit;
+  color: var(--anubis-ink);
+  background: var(--anubis-canvas);
+  border: 1px solid var(--anubis-line);
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    border-color: var(--anubis-gold);
+    background: rgba(200, 162, 76, 0.1);
+  }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
+}
+
+.rag-source-page {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--anubis-lapis);
+}
+
+.rag-source-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.rag-source-excerpt {
+  font-size: 0.78rem;
+  color: var(--anubis-ink-soft);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .ai-head {
@@ -597,6 +695,7 @@
   }
 
   .reader.ai-open .reader-stage,
+  .reader.rag-open .reader-stage,
   .reader.diagrams-open .reader-stage,
   .reader.notes-open .reader-stage,
   .reader.sketches-open:not(.sketch-focus-open) .reader-stage,

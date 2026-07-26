@@ -116,6 +116,18 @@
                 <span [style.width.%]="pct"></span>
               </div>
             }
+            @if (ragView(book.id); as rag) {
+              <span
+                class="rag-badge"
+                [class.rag-badge--ready]="ragBadge(book.id) === 'ready'"
+                [class.rag-badge--pending]="ragBadge(book.id) === 'pending'"
+                [class.rag-badge--error]="ragBadge(book.id) === 'error'"
+                [class.rag-badge--muted]="ragBadge(book.id) === 'muted'"
+                [attr.title]="rag.errorMessage || ragLabel(book.id)"
+              >
+                Q&A · {{ ragLabel(book.id) }}
+              </span>
+            }
             @if (collectionsFor(book).length) {
               <div class="book-tags">
                 @for (c of collectionsFor(book); track c.id) {
@@ -163,6 +175,37 @@
                 <mat-icon>download</mat-icon>
                 <span>Baixar</span>
               </button>
+              <span class="menu-cap">Q&A do livro (RAG)</span>
+              @if (!ragView(book.id) || ragView(book.id)?.uiStatus === 'not_indexed' || ragView(book.id)?.uiStatus === 'unknown') {
+                <button mat-menu-item (click)="activateRag(book)">
+                  <mat-icon>psychology</mat-icon>
+                  <span>Ativar Q&A</span>
+                </button>
+              }
+              @if (ragView(book.id)?.uiStatus === 'pending' || ragView(book.id)?.uiStatus === 'processing') {
+                <span class="menu-empty">{{ ragLabel(book.id) }}…</span>
+              }
+              @if (ragView(book.id)?.uiStatus === 'failed') {
+                <span class="menu-empty">{{ ragView(book.id)?.errorMessage || 'Indexação falhou' }}</span>
+                <button mat-menu-item (click)="reprocessRag(book)">
+                  <mat-icon>refresh</mat-icon>
+                  <span>Reprocessar Q&A</span>
+                </button>
+              }
+              @if (ragView(book.id)?.uiStatus === 'completed') {
+                <a
+                  mat-menu-item
+                  [routerLink]="ragAskCommands(book)"
+                  [queryParams]="ragAskQueryParams()"
+                >
+                  <mat-icon>forum</mat-icon>
+                  <span>Perguntar ao livro</span>
+                </a>
+                <button mat-menu-item (click)="reprocessRag(book)">
+                  <mat-icon>refresh</mat-icon>
+                  <span>Reprocessar Q&A</span>
+                </button>
+              }
               <span class="menu-cap">Séries</span>
               @if (!collections().length) {
                 <span class="menu-empty">Nenhuma série ainda</span>

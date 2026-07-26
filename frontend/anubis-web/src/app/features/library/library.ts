@@ -9,10 +9,19 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
+import { Subscription, catchError, forkJoin, of } from 'rxjs';
 import { Book, BookSort, BookStatus } from '../../core/models/book.model';
 import { Collection } from '../../core/models/collection.model';
 import { LibraryService } from '../../core/services/library';
 import { NotificationsService } from '../../core/services/notifications';
+import { RagService, RagStatusView } from '../../core/services/rag';
+import {
+  ragBadgeKind,
+  ragStatusLabel,
+  readerRagCommands,
+  readerRagQueryParams,
+  shouldContinuePolling,
+} from '../../core/utils/rag-ui';
 import { EditBookDialog } from './edit-book-dialog/edit-book-dialog';
 import { UploadDialog } from './upload-dialog/upload-dialog';
 
@@ -40,6 +49,7 @@ type ViewMode = 'grid' | 'list';
 })
 export class Library implements OnInit, OnDestroy {
   private library = inject(LibraryService);
+  private rag = inject(RagService);
   private sanitizer = inject(DomSanitizer);
   private dialog = inject(MatDialog);
   private notify = inject(NotificationsService);
@@ -63,9 +73,13 @@ export class Library implements OnInit, OnDestroy {
   protected readonly loading = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly coverUrls = signal<Record<number, SafeUrl>>({});
+  /** Per-book RAG status for badges / menu actions. */
+  protected readonly ragByBook = signal<Record<number, RagStatusView>>({});
 
   private coverRawUrls: Record<number, string> = {};
   private searchTimer: ReturnType<typeof setTimeout> | null = null;
+  private ragPollSubs = new Map<number, Subscription>();
+  private ragLoadSub: Subscription | null = null;
 
   ngOnInit() {
     this.loadCollections();
@@ -75,6 +89,8 @@ export class Library implements OnInit, OnDestroy {
   ngOnDestroy() {
     if (this.searchTimer) clearTimeout(this.searchTimer);
     for (const url of Object.values(this.coverRawUrls)) URL.revokeObjectURL(url);
+    this.stopAllRagPolls();
+    this.ragLoadSub?.unsubscribe();
   }
 
   protected onSearch(event: Event) {
@@ -200,6 +216,7 @@ export class Library implements OnInit, OnDestroy {
           URL.revokeObjectURL(raw);
           delete this.coverRawUrls[book.id];
         }
+        this.stopRagPoll(book.id);
         if (this.books().length === 1 && this.page() > 0) {
           this.page.update((p) => p - 1);
         }
@@ -209,6 +226,50 @@ export class Library implements OnInit, OnDestroy {
       },
       error: (e) => this.reportError(e, 'Não foi possível excluir'),
     });
+  }
+
+  protected activateRag(book: Book) {
+    this.rag.activate(book.id).subscribe({
+      next: () => {
+        this.notify.success('Indexação Q&A enfileirada');
+        this.startRagPoll(book.id);
+      },
+      error: (e) => this.reportError(e, 'Não foi possível ativar o Q&A'),
+    });
+  }
+
+  protected reprocessRag(book: Book) {
+    this.rag.reprocess(book.id).subscribe({
+      next: () => {
+        this.notify.success('Reindexação Q&A enfileirada');
+        this.startRagPoll(book.id);
+      },
+      error: (e) => this.reportError(e, 'Não foi possível reprocessar o Q&A'),
+    });
+  }
+
+  protected ragView(bookId: number): RagStatusView | null {
+    return this.ragByBook()[bookId] ?? null;
+  }
+
+  protected ragLabel(bookId: number): string {
+    const view = this.ragView(bookId);
+    if (!view) return 'Q&A…';
+    return ragStatusLabel(view.uiStatus, view.progress);
+  }
+
+  protected ragBadge(bookId: number): string {
+    const view = this.ragView(bookId);
+    if (!view) return 'muted';
+    return ragBadgeKind(view.uiStatus);
+  }
+
+  protected ragAskCommands(book: Book): (string | number)[] {
+    return readerRagCommands(book.id);
+  }
+
+  protected ragAskQueryParams(): Record<string, string> {
+    return readerRagQueryParams({ openRag: true });
   }
 
   protected collectionsFor(book: Book): Collection[] {
@@ -255,12 +316,71 @@ export class Library implements OnInit, OnDestroy {
           this.total.set(result.total);
           this.loading.set(false);
           this.refreshCovers(result.items);
+          this.refreshRagStatuses(result.items);
         },
         error: (e) => {
           this.error.set(this.errorText(e, 'Não foi possível carregar a biblioteca'));
           this.loading.set(false);
         },
       });
+  }
+
+  private refreshRagStatuses(books: Book[]) {
+    this.ragLoadSub?.unsubscribe();
+    this.stopAllRagPolls();
+    if (!books.length) {
+      this.ragByBook.set({});
+      return;
+    }
+    this.ragLoadSub = forkJoin(
+      books.map((b) =>
+        this.rag.statusView(b.id).pipe(
+          catchError(() =>
+            of({
+              uiStatus: 'unknown' as const,
+              progress: 0,
+              chunkCount: 0,
+              errorMessage: null,
+              raw: null,
+            }),
+          ),
+        ),
+      ),
+    ).subscribe((views) => {
+      const map: Record<number, RagStatusView> = {};
+      books.forEach((b, i) => {
+        map[b.id] = views[i];
+        if (shouldContinuePolling(views[i].uiStatus)) {
+          this.startRagPoll(b.id);
+        }
+      });
+      this.ragByBook.set(map);
+    });
+  }
+
+  private patchRagView(bookId: number, view: RagStatusView) {
+    this.ragByBook.update((m) => ({ ...m, [bookId]: view }));
+  }
+
+  private startRagPoll(bookId: number) {
+    this.stopRagPoll(bookId);
+    const sub = this.rag.pollStatus(bookId, 2000).subscribe({
+      next: (view) => this.patchRagView(bookId, view),
+      error: () => {
+        /* leave last known status */
+      },
+    });
+    this.ragPollSubs.set(bookId, sub);
+  }
+
+  private stopRagPoll(bookId: number) {
+    this.ragPollSubs.get(bookId)?.unsubscribe();
+    this.ragPollSubs.delete(bookId);
+  }
+
+  private stopAllRagPolls() {
+    for (const sub of this.ragPollSubs.values()) sub.unsubscribe();
+    this.ragPollSubs.clear();
   }
 
   private loadCollections() {

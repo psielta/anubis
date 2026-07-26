@@ -15,7 +15,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { KatexOptions, MarkdownComponent } from 'ngx-markdown';
-import { forkJoin } from 'rxjs';
+import { Subscription, forkJoin } from 'rxjs';
 import * as pdfjsLib from 'pdfjs-dist';
 import type {
   PDFDocumentProxy,
@@ -26,6 +26,15 @@ import type {
 } from 'pdfjs-dist';
 import { LibraryService } from '../../core/services/library';
 import { StudyService } from '../../core/services/study';
+import { RagService, RagStatusView } from '../../core/services/rag';
+import { RagQueryResponse, RagSource } from '../../core/models/rag.model';
+import {
+  canSubmitQuery,
+  formatSourcePages,
+  ragStatusLabel,
+  shouldContinuePolling,
+  sourcePageTarget,
+} from '../../core/utils/rag-ui';
 import { TranslationService } from '../../core/services/translation';
 import { DiagramsService } from '../../core/services/diagrams';
 import { NotesService } from '../../core/services/notes';
@@ -139,6 +148,7 @@ interface PdfTextItemLike {
 
 type ReaderShortcutAction =
   | 'assistant'
+  | 'rag'
   | 'diagrams'
   | 'notes'
   | 'sketches'
@@ -185,6 +195,7 @@ export class Reader implements OnInit, OnDestroy {
   private document = inject(DOCUMENT);
   private library = inject(LibraryService);
   private study = inject(StudyService);
+  private rag = inject(RagService);
   private translation = inject(TranslationService);
   private diagrams = inject(DiagramsService);
   private notes = inject(NotesService);
@@ -200,6 +211,7 @@ export class Reader implements OnInit, OnDestroy {
   protected readonly resizablePanelOpen = computed(
     () =>
       this.panelOpen() ||
+      this.ragOpen() ||
       this.translateOpen() ||
       this.tocOpen() ||
       this.contentTreeOpen() ||
@@ -255,6 +267,7 @@ export class Reader implements OnInit, OnDestroy {
   );
   protected readonly shortcuts = {
     assistant: 'Alt+Shift+A',
+    rag: 'Alt+Shift+Q',
     diagrams: 'Alt+Shift+D',
     notes: 'Alt+Shift+N',
     sketches: 'Alt+Shift+S',
@@ -268,6 +281,28 @@ export class Reader implements OnInit, OnDestroy {
     commandPalette: 'Ctrl+K',
     commandPaletteAlt: 'Alt+Shift+K',
   } as const;
+
+  // Book Q&A (RAG) — separate from the study SSE assistant
+  protected readonly ragOpen = signal(false);
+  protected readonly ragStatus = signal<RagStatusView | null>(null);
+  protected readonly ragStatusLoading = signal(false);
+  protected readonly ragQuestion = signal('');
+  protected readonly ragBusy = signal(false);
+  protected readonly ragError = signal<string | null>(null);
+  protected readonly ragAnswer = signal('');
+  protected readonly ragSources = signal<RagSource[]>([]);
+  protected readonly ragLastQuestion = signal('');
+  protected readonly ragCanQuery = computed(() =>
+    canSubmitQuery(this.ragStatus()?.uiStatus ?? 'not_indexed'),
+  );
+  protected readonly ragStatusText = computed(() => {
+    const s = this.ragStatus();
+    if (!s) return 'Carregando status…';
+    return ragStatusLabel(s.uiStatus, s.progress);
+  });
+  private ragPollSub: Subscription | null = null;
+  private pendingResumePageFromQuery: number | null = null;
+  private openRagFromQuery = false;
 
   // AI study assistant
   protected readonly panelOpen = signal(false);
@@ -576,6 +611,12 @@ export class Reader implements OnInit, OnDestroy {
       this.fail('Livro inválido');
       return;
     }
+    const qp = this.route.snapshot.queryParamMap;
+    const pageQ = Number(qp.get('page'));
+    if (Number.isInteger(pageQ) && pageQ >= 1) {
+      this.pendingResumePageFromQuery = pageQ;
+    }
+    this.openRagFromQuery = qp.get('rag') === '1';
     this.document.addEventListener('keydown', this.readerKeydown);
     void this.initKatex();
     this.library.get(this.bookId).subscribe({
@@ -585,10 +626,16 @@ export class Reader implements OnInit, OnDestroy {
           this.fail('Este formato de livro não pode ser lido no app');
           return;
         }
-        this.resumePage = book.last_page && book.last_page > 1 ? book.last_page : null;
+        this.resumePage =
+          this.pendingResumePageFromQuery ??
+          (book.last_page && book.last_page > 1 ? book.last_page : null);
         this.lastSavedPage = book.last_page ?? 0;
         this.applySavedReaderState(book.reader_state);
         this.loadFile(this.bookId);
+        if (this.openRagFromQuery) {
+          // Defer so other restored panels from reader_state settle first.
+          queueMicrotask(() => this.openRagPanel());
+        }
       },
       error: () => this.fail('Livro não encontrado'),
     });
@@ -613,6 +660,7 @@ export class Reader implements OnInit, OnDestroy {
     this.exerciseAiController?.abort();
     this.hintController?.abort();
     this.chatController?.abort();
+    this.stopRagPoll();
     this.observer?.disconnect();
     this.loadingTask?.destroy();
   }
@@ -993,6 +1041,8 @@ export class Reader implements OnInit, OnDestroy {
     switch (event.code) {
       case 'KeyA':
         return 'assistant';
+      case 'KeyQ':
+        return 'rag';
       case 'KeyD':
         return 'diagrams';
       case 'KeyN':
@@ -1025,6 +1075,9 @@ export class Reader implements OnInit, OnDestroy {
     switch (action) {
       case 'assistant':
         this.togglePanel();
+        break;
+      case 'rag':
+        this.toggleRagPanel();
         break;
       case 'diagrams':
         this.toggleDiagrams();
@@ -1465,6 +1518,7 @@ export class Reader implements OnInit, OnDestroy {
     this.aiCustomPageTo.set(state.study?.custom_page_to ?? null);
 
     this.panelOpen.set(false);
+    this.ragOpen.set(false);
     this.diagramsOpen.set(false);
     this.notesOpen.set(false);
     this.sketchesOpen.set(false);
@@ -1636,6 +1690,7 @@ export class Reader implements OnInit, OnDestroy {
     this.panelOpen.set(open);
     if (open) {
       // The right-docked panels are mutually exclusive.
+      this.ragOpen.set(false);
       this.diagramsOpen.set(false);
       this.notesOpen.set(false);
       this.closeSketchesPanel();
@@ -1650,12 +1705,144 @@ export class Reader implements OnInit, OnDestroy {
     this.scheduleReaderStateSave();
   }
 
+  // --- Book Q&A (RAG) ------------------------------------------------------
+  toggleRagPanel() {
+    if (this.ragOpen()) {
+      this.closeRagPanel();
+      return;
+    }
+    this.openRagPanel();
+  }
+
+  private openRagPanel() {
+    this.ragOpen.set(true);
+    this.panelOpen.set(false);
+    this.diagramsOpen.set(false);
+    this.notesOpen.set(false);
+    this.closeSketchesPanel();
+    this.closeLatexPanel();
+    this.closeWordPanel();
+    this.closeExercisesPanel();
+    this.tocOpen.set(false);
+    this.contentTreeOpen.set(false);
+    this.closeTranslatePanel();
+    this.ragError.set(null);
+    this.refreshRagStatus(true);
+  }
+
+  private closeRagPanel() {
+    this.ragOpen.set(false);
+    this.stopRagPoll();
+  }
+
+  private refreshRagStatus(startPollIfBusy = false) {
+    if (!this.bookId) return;
+    this.ragStatusLoading.set(true);
+    this.rag.statusView(this.bookId).subscribe({
+      next: (view) => {
+        this.ragStatus.set(view);
+        this.ragStatusLoading.set(false);
+        if (startPollIfBusy && shouldContinuePolling(view.uiStatus)) {
+          this.startRagPoll();
+        }
+      },
+      error: (err) => {
+        this.ragStatusLoading.set(false);
+        this.ragError.set(this.errorText(err, 'Não foi possível carregar o status do Q&A'));
+      },
+    });
+  }
+
+  private startRagPoll() {
+    this.stopRagPoll();
+    if (!this.bookId) return;
+    this.ragPollSub = this.rag.pollStatus(this.bookId, 2000).subscribe({
+      next: (view) => this.ragStatus.set(view),
+      error: (err) => {
+        this.ragError.set(this.errorText(err, 'Falha ao acompanhar a indexação'));
+      },
+    });
+  }
+
+  private stopRagPoll() {
+    this.ragPollSub?.unsubscribe();
+    this.ragPollSub = null;
+  }
+
+  activateRag() {
+    if (!this.bookId) return;
+    this.ragError.set(null);
+    this.rag.activate(this.bookId).subscribe({
+      next: () => {
+        this.notify.success('Indexação Q&A enfileirada');
+        this.startRagPoll();
+      },
+      error: (err) => {
+        this.ragError.set(this.errorText(err, 'Não foi possível ativar o Q&A'));
+        this.notify.error(this.ragError()!);
+      },
+    });
+  }
+
+  reprocessRag() {
+    if (!this.bookId) return;
+    this.ragError.set(null);
+    this.rag.reprocess(this.bookId).subscribe({
+      next: () => {
+        this.notify.success('Reindexação Q&A enfileirada');
+        this.ragAnswer.set('');
+        this.ragSources.set([]);
+        this.startRagPoll();
+      },
+      error: (err) => {
+        this.ragError.set(this.errorText(err, 'Não foi possível reprocessar o Q&A'));
+        this.notify.error(this.ragError()!);
+      },
+    });
+  }
+
+  askRag() {
+    if (!this.bookId || !this.ragCanQuery() || this.ragBusy()) return;
+    const question = this.ragQuestion().trim();
+    if (!question) return;
+    this.ragBusy.set(true);
+    this.ragError.set(null);
+    this.ragAnswer.set('');
+    this.ragSources.set([]);
+    this.ragLastQuestion.set(question);
+    this.rag.query(this.bookId, { question, top_k: 5 }).subscribe({
+      next: (res: RagQueryResponse) => {
+        this.ragAnswer.set(res.answer);
+        this.ragSources.set(res.sources ?? []);
+        this.ragBusy.set(false);
+      },
+      error: (err) => {
+        this.ragBusy.set(false);
+        this.ragError.set(this.errorText(err, 'Não foi possível obter a resposta'));
+      },
+    });
+  }
+
+  onRagQuestionInput(value: string) {
+    this.ragQuestion.set(value);
+  }
+
+  jumpToRagSource(source: RagSource) {
+    const page = sourcePageTarget(source.page_start, source.page_end);
+    if (page != null) this.goToPage(page, false);
+  }
+
+  formatRagSourcePages(source: RagSource): string {
+    return formatSourcePages(source.page_start, source.page_end);
+  }
+
   // --- Page translation (pt-BR) --------------------------------------------
   toggleTranslate() {
     const open = !this.translateOpen();
     this.translateOpen.set(open);
     if (open) {
       this.panelOpen.set(false);
+    this.ragOpen.set(false);
       this.diagramsOpen.set(false);
       this.notesOpen.set(false);
       this.closeSketchesPanel();
@@ -2024,6 +2211,7 @@ export class Reader implements OnInit, OnDestroy {
     this.tocOpen.set(open);
     if (open) {
       this.panelOpen.set(false);
+    this.ragOpen.set(false);
       this.diagramsOpen.set(false);
       this.notesOpen.set(false);
       this.closeSketchesPanel();
@@ -2218,6 +2406,7 @@ export class Reader implements OnInit, OnDestroy {
     this.contentTreeOpen.set(open);
     if (open) {
       this.panelOpen.set(false);
+    this.ragOpen.set(false);
       this.diagramsOpen.set(false);
       this.notesOpen.set(false);
       this.closeSketchesPanel();
@@ -2340,6 +2529,7 @@ export class Reader implements OnInit, OnDestroy {
     this.diagramsOpen.set(open);
     if (open) {
       this.panelOpen.set(false);
+    this.ragOpen.set(false);
       this.notesOpen.set(false);
       this.closeSketchesPanel();
       this.closeLatexPanel();
@@ -2503,6 +2693,7 @@ export class Reader implements OnInit, OnDestroy {
 
     this.sketchesOpen.set(true);
     this.panelOpen.set(false);
+    this.ragOpen.set(false);
     this.diagramsOpen.set(false);
     this.notesOpen.set(false);
     this.tocOpen.set(false);
@@ -2862,6 +3053,7 @@ export class Reader implements OnInit, OnDestroy {
 
     this.latexOpen.set(true);
     this.panelOpen.set(false);
+    this.ragOpen.set(false);
     this.diagramsOpen.set(false);
     this.notesOpen.set(false);
     this.closeSketchesPanel();
@@ -3221,6 +3413,7 @@ export class Reader implements OnInit, OnDestroy {
 
     this.wordOpen.set(true);
     this.panelOpen.set(false);
+    this.ragOpen.set(false);
     this.diagramsOpen.set(false);
     this.notesOpen.set(false);
     this.closeSketchesPanel();
@@ -3476,6 +3669,7 @@ export class Reader implements OnInit, OnDestroy {
   private openExercisesPanel() {
     this.exercisesOpen.set(true);
     this.panelOpen.set(false);
+    this.ragOpen.set(false);
     this.diagramsOpen.set(false);
     this.notesOpen.set(false);
     this.closeSketchesPanel();
@@ -4234,6 +4428,7 @@ export class Reader implements OnInit, OnDestroy {
     this.notesOpen.set(open);
     if (open) {
       this.panelOpen.set(false);
+    this.ragOpen.set(false);
       this.diagramsOpen.set(false);
       this.closeSketchesPanel();
       this.closeLatexPanel();
