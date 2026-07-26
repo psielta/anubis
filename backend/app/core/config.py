@@ -58,7 +58,8 @@ class Settings(BaseSettings):
 
     # Book RAG (Gemini embeddings + LLM over pgvector)
     # GEMINI_API_KEY is shared with the study assistant (never hardcode secrets).
-    GEMINI_EMBEDDING_MODEL: str = "text-embedding-004"
+    # text-embedding-004 was retired from v1beta embedContent; use gemini-embedding-*.
+    GEMINI_EMBEDDING_MODEL: str = "gemini-embedding-001"
     RAG_CHUNK_MAX_CHARS: int = 2000
     RAG_CHUNK_OVERLAP_CHARS: int = 200
     RAG_EMBED_BATCH_SIZE: int = 32
