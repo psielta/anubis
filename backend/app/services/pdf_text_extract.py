@@ -45,8 +45,13 @@ def extract_pages(pdf_bytes: bytes) -> ExtractedDocument:
         for i in range(doc.page_count):
             page = doc.load_page(i)
             raw = page.get_text("text") or ""
-            # Normalize line endings; keep paragraph structure.
-            text = raw.replace("\r\n", "\n").replace("\r", "\n").strip()
+            # Normalize line endings; strip NULs (Postgres UTF-8 rejects 0x00).
+            text = (
+                raw.replace("\x00", "")
+                .replace("\r\n", "\n")
+                .replace("\r", "\n")
+                .strip()
+            )
             page_num = i + 1
             pages.append(PageText(page_number=page_num, text=text))
             if text:

@@ -134,6 +134,13 @@ async def delete_chunks_for_document(
     await db.flush()
 
 
+def _pg_safe_text(value: str | None) -> str:
+    """Postgres UTF-8 text rejects NUL (0x00) common in some PDF extractions."""
+    if not value:
+        return ""
+    return value.replace("\x00", "")
+
+
 async def insert_chunks(
     db: AsyncSession,
     *,
@@ -153,8 +160,8 @@ async def insert_chunks(
                 document_id=document_id,
                 book_id=book_id,
                 chunk_index=row["chunk_index"],
-                title=row.get("title") or "",
-                content=row["content"],
+                title=_pg_safe_text(row.get("title") or ""),
+                content=_pg_safe_text(row["content"]),
                 page_start=row.get("page_start"),
                 page_end=row.get("page_end"),
                 embedding=emb,
