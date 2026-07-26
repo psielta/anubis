@@ -56,6 +56,16 @@ class Settings(BaseSettings):
     PDF_CONVERSION_OUTBOX_LEASE_SECONDS: int = 300
     PDF_CONVERSION_OUTBOX_POLL_SECONDS: float = 2.0
 
+    # Book RAG (Gemini embeddings + LLM over pgvector)
+    # GEMINI_API_KEY is shared with the study assistant (never hardcode secrets).
+    GEMINI_EMBEDDING_MODEL: str = "text-embedding-004"
+    RAG_CHUNK_MAX_CHARS: int = 2000
+    RAG_CHUNK_OVERLAP_CHARS: int = 200
+    RAG_EMBED_BATCH_SIZE: int = 32
+    RAG_TOP_K_DEFAULT: int = 5
+    RAG_OUTBOX_MAX_ATTEMPTS: int = 5
+    RAG_OUTBOX_LEASE_SECONDS: int = 600
+
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     @classmethod
     def _split_cors(cls, v: object) -> object:

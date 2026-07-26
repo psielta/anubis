@@ -10,6 +10,7 @@ from app.models.exercise_resolution import (
 )
 from app.models.latex_notebook import LatexNotebook, LatexNotebookGroup
 from app.models.note import Note
+from app.models.rag import RagChunk, RagDocument
 from app.models.sketch import Sketch, SketchGroup
 from app.models.study import StudyMessage
 from app.models.translation import PageTranslation
@@ -30,6 +31,8 @@ __all__ = [
     "PageTranslation",
     "PdfConversionChunk",
     "PdfConversionJob",
+    "RagChunk",
+    "RagDocument",
     "Sketch",
     "SketchGroup",
     "StudyMessage",

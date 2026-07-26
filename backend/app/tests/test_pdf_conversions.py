@@ -171,10 +171,20 @@ async def test_upload_rejects_non_pdf(client):
 @pytest.mark.asyncio
 async def test_outbox_skip_locked_two_workers():
     await engine.dispose()
+    conversion_types = [
+        OutboxEventType.PDF_CONVERSION_REQUESTED,
+        OutboxEventType.PDF_CONVERSION_RETRY_REQUESTED,
+        OutboxEventType.PDF_CONVERSION_CANCEL_REQUESTED,
+    ]
     async with AsyncSessionLocal() as db:
+        # Drain any leftover outbox rows (other modules share the table).
         await db.execute(
             update(OutboxEvent)
-            .where(OutboxEvent.status == OutboxStatus.PENDING.value)
+            .where(
+                OutboxEvent.status.in_(
+                    [OutboxStatus.PENDING.value, OutboxStatus.PROCESSING.value]
+                )
+            )
             .values(status=OutboxStatus.DONE.value, processed_at=datetime.now(UTC))
         )
         job = await job_crud.create_job(
@@ -194,7 +204,11 @@ async def test_outbox_skip_locked_two_workers():
 
     async def try_claim() -> OutboxEvent | None:
         async with AsyncSessionLocal() as session:
-            ev = await outbox_crud.claim_next(session, worker_id=uuid.uuid4().hex)
+            ev = await outbox_crud.claim_next(
+                session,
+                worker_id=uuid.uuid4().hex,
+                event_types=conversion_types,
+            )
             if ev:
                 await session.commit()
             return ev
@@ -508,7 +522,7 @@ async def test_worker_timeout_on_slow_convert():
         await db.commit()
         event_id = event.id
 
-    def slow_convert(_page):
+    def slow_convert(*_args, **_kwargs):
         import time
 
         time.sleep(2)
@@ -520,8 +534,8 @@ async def test_worker_timeout_on_slow_convert():
         assert event is not None and job is not None
         with (
             patch(
-                "app.workers.pdf_conversion_worker.settings.PDF_CONVERSION_TIMEOUT_SECONDS",
-                0.1,
+                "app.workers.pdf_conversion_worker._timeout_seconds",
+                return_value=0.1,
             ),
             patch(
                 "app.workers.pdf_conversion_worker.markitdown_service.convert_page",

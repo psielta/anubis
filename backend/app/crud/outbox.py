@@ -7,6 +7,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.models.outbox import OutboxEvent, OutboxEventType, OutboxStatus
 
+_RAG_EVENT_VALUES = {
+    OutboxEventType.RAG_INDEX_REQUESTED.value,
+    OutboxEventType.RAG_REINDEX_REQUESTED.value,
+}
+
+
+def lease_seconds_for_event_type(event_type: str) -> int:
+    """Longer lease for RAG (large PDFs); conversion keeps its own lease."""
+    if event_type in _RAG_EVENT_VALUES:
+        return settings.RAG_OUTBOX_LEASE_SECONDS
+    return settings.PDF_CONVERSION_OUTBOX_LEASE_SECONDS
+
 
 async def enqueue(
     db: AsyncSession,
@@ -16,11 +28,16 @@ async def enqueue(
     payload: dict | None = None,
     max_attempts: int | None = None,
 ) -> OutboxEvent:
+    default_max = (
+        settings.RAG_OUTBOX_MAX_ATTEMPTS
+        if event_type.value in _RAG_EVENT_VALUES
+        else settings.PDF_CONVERSION_OUTBOX_MAX_ATTEMPTS
+    )
     event = OutboxEvent(
         aggregate_id=aggregate_id,
         event_type=event_type.value,
         payload_json=payload or {},
-        max_attempts=max_attempts or settings.PDF_CONVERSION_OUTBOX_MAX_ATTEMPTS,
+        max_attempts=max_attempts if max_attempts is not None else default_max,
     )
     db.add(event)
     await db.flush()
@@ -35,7 +52,6 @@ async def claim_next(
 ) -> OutboxEvent | None:
     """Claim one pending outbox row with FOR UPDATE SKIP LOCKED."""
     now = datetime.now(UTC)
-    lease = timedelta(seconds=settings.PDF_CONVERSION_OUTBOX_LEASE_SECONDS)
 
     pending_ready = and_(
         OutboxEvent.status == OutboxStatus.PENDING.value,
@@ -66,6 +82,7 @@ async def claim_next(
     if event is None:
         return None
 
+    lease = timedelta(seconds=lease_seconds_for_event_type(event.event_type))
     event.status = OutboxStatus.PROCESSING.value
     event.locked_by = worker_id
     event.locked_until = now + lease

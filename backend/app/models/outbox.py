@@ -20,6 +20,8 @@ class OutboxEventType(str, enum.Enum):
     PDF_CONVERSION_REQUESTED = "PdfConversionRequested"
     PDF_CONVERSION_RETRY_REQUESTED = "PdfConversionRetryRequested"
     PDF_CONVERSION_CANCEL_REQUESTED = "PdfConversionCancelRequested"
+    RAG_INDEX_REQUESTED = "RagIndexRequested"
+    RAG_REINDEX_REQUESTED = "RagReindexRequested"
 
 
 class OutboxEvent(Base):
